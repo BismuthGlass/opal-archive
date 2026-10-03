@@ -689,8 +689,14 @@ button.primary {
 
 .add-field {
   position: relative;
-  margin: -6px 0 12px -4px;
+  /* Clear of the tag field above it, as fields are of each other. */
+  margin: 10px 0 0 -4px;
   font-size: 13px;
+}
+
+/* Straight after the details, whose own margin is space enough. */
+.facts + .add-field {
+  margin-top: -4px;
 }
 
 .add-field .suggestions {
