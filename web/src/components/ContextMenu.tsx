@@ -33,7 +33,10 @@ export default function ContextMenu() {
 
 function Menu(props: { at: Opened }) {
   let menu!: HTMLUListElement;
+  // Read once, here: after the menu closes, what it was opened with can no
+  // longer be asked for.
   const ids = [...selected()];
+  const clicked = props.at.item;
   const [position, setPosition] = createSignal({ left: props.at.x, top: props.at.y });
   // Whether everything selected is in the trash, which the items on other
   // pages may or may not be.
@@ -56,7 +59,7 @@ function Menu(props: { at: Opened }) {
   const download = () => {
     close();
     // One file downloads as itself; anything else as a zip.
-    if (ids.length === 1 && props.at.item.kind === "file") {
+    if (ids.length === 1 && clicked.kind === "file") {
       location.href = api.contentUrl(ids[0], true);
     } else {
       api.exportZip(ids);
