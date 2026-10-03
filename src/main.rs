@@ -3,6 +3,7 @@ mod api_tests;
 mod book;
 mod collections;
 mod db;
+mod downloads;
 mod entities;
 mod error;
 mod export;
@@ -38,6 +39,12 @@ struct AppState {
     /// Uploads in progress. On the same filesystem as `storage` so a
     /// finished upload can be renamed into place.
     tmp: PathBuf,
+    /// The downloaders: one folder each, with a manifest and a script.
+    downloaders: PathBuf,
+    /// Logins saved for downloaders, one cookie file each.
+    cookies: PathBuf,
+    /// The downloads running, or last run, by tab.
+    downloads: downloads::Jobs,
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -51,6 +58,7 @@ fn api() -> Router<AppState> {
         .route("/stats", get(stats))
         .merge(settings::router())
         .merge(tabs::router())
+        .merge(downloads::router())
         .merge(tags::router())
         .merge(files::router())
         .merge(search::router())
@@ -81,6 +89,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         storage,
         thumbnails,
         tmp,
+        downloaders: PathBuf::from(env_or("TAGUTILS_DOWNLOADERS", "downloaders")),
+        cookies: data_dir.join("cookies"),
+        downloads: Default::default(),
     };
 
     // Anything outside /api is the SPA; unknown paths get index.html so

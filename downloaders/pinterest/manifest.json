@@ -1,0 +1,21 @@
+{
+  "title": "Pinterest",
+  "source": "pinterest",
+  "command": ["uv", "run", "--quiet", "--script", "pinterest.py"],
+  "url_hint": "A pin, board, board section or profile URL",
+  "cookies": {
+    "browsers": ["chrome", "firefox", "safari", "brave", "edge", "chromium", "opera", "vivaldi"]
+  },
+  "options": [
+    {
+      "key": "recursive",
+      "label": "Go into what is inside: a board's sections, a profile's boards",
+      "default": true
+    },
+    {
+      "key": "video",
+      "label": "Download videos",
+      "default": true
+    }
+  ]
+}

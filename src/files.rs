@@ -22,8 +22,8 @@ use tower_http::services::ServeFile;
 use crate::{AppState, error::ApiError, media};
 
 #[derive(Serialize)]
-struct FileEntity {
-    id: i64,
+pub struct FileEntity {
+    pub id: i64,
     date_added: String,
     hash: String,
     extension: String,
@@ -210,17 +210,45 @@ fn insert(conn: &mut Connection, new: &NewFile) -> rusqlite::Result<FileEntity> 
     Ok(file)
 }
 
-/// Lists a file under an upload tab. Does nothing if the tab is gone (it may
-/// have been closed mid-upload) or is not an upload tab.
+/// Lists a file under an upload or download tab. Does nothing if the tab is
+/// gone (it may have been closed meanwhile) or is of another kind.
 fn record(conn: &Connection, tab: Option<i64>, file: &FileEntity) -> rusqlite::Result<()> {
     if let Some(tab) = tab {
         conn.execute(
             "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
-             SELECT id, ?2 FROM tab WHERE id = ?1 AND kind = 'upload'",
+             SELECT id, ?2 FROM tab WHERE id = ?1 AND kind IN ('upload', 'download')",
             (tab, file.id),
         )?;
     }
     Ok(())
+}
+
+/// The SHA-256 and size of a file on disk.
+pub async fn hash_file(path: &Path) -> Result<(String, u64), ApiError> {
+    let path = path.to_path_buf();
+    let hashed = tokio::task::spawn_blocking(move || -> std::io::Result<(String, u64)> {
+        let mut file = std::fs::File::open(path)?;
+        let mut hasher = Sha256::new();
+        let mut buffer = vec![0; 1 << 16];
+        let mut size = 0;
+        loop {
+            let read = std::io::Read::read(&mut file, &mut buffer)?;
+            if read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..read]);
+            size += read as u64;
+        }
+        let hash = hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        Ok((hash, size))
+    })
+    .await
+    .map_err(|err| ApiError::Internal(err.to_string()))?;
+    Ok(hashed?)
 }
 
 /// Takes the file as the raw request body. Answers 201 with the new file, or
@@ -232,29 +260,51 @@ async fn upload(
 ) -> Result<(StatusCode, Json<FileEntity>), ApiError> {
     let temp = TempFile::new(&state.tmp);
     let (hash, size) = receive(body, &temp.0).await?;
-    if size == 0 {
-        return Err(ApiError::bad_request("empty upload"));
-    }
+    let name = params.name.as_deref();
+    let (file, created) = ingest(&state, &temp.0, &hash, size, name, params.tab).await?;
+    let status = if created {
+        StatusCode::CREATED
+    } else {
+        StatusCode::OK
+    };
+    Ok((status, Json(file)))
+}
 
+/// Takes a file into the library: `temp`, somewhere under the server's own
+/// temporary directory, with the hash and size it was found to have. If
+/// the same content is already in the library the file there is kept and
+/// `temp` is left for the caller to delete. Either way the file is listed
+/// under `tab`. Returns the file, and whether it is new.
+pub async fn ingest(
+    state: &AppState,
+    temp: &Path,
+    hash: &str,
+    size: u64,
+    name: Option<&str>,
+    tab: Option<i64>,
+) -> Result<(FileEntity, bool), ApiError> {
+    if size == 0 {
+        return Err(ApiError::bad_request("empty file"));
+    }
     {
         let conn = state.db.lock().unwrap();
-        if let Some(existing) = file_by_hash(&conn, &hash)? {
-            // Uploading a file again takes it back out of the trash. Nothing
+        if let Some(existing) = file_by_hash(&conn, hash)? {
+            // A file that arrives again comes back out of the trash. Nothing
             // else about the existing file changes.
             conn.execute("UPDATE entity SET trashed = 0 WHERE id = ?1", [existing.id])?;
-            record(&conn, params.tab, &existing)?;
-            return Ok((StatusCode::OK, Json(existing)));
+            record(&conn, tab, &existing)?;
+            return Ok((existing, false));
         }
     }
 
-    let original_name = params.name.as_deref().and_then(base_name);
+    let original_name = name.and_then(base_name);
     let extension = original_name.map(extension_of).unwrap_or_default();
-    let stored = state.storage.join(stored_name(&hash, &extension));
-    fs::rename(&temp.0, &stored).await?;
+    let stored = state.storage.join(stored_name(hash, &extension));
+    fs::rename(temp, &stored).await?;
 
     let media_type = media::media_type(&stored, &extension).await;
     let attributes = media::probe(&stored, media_type, &extension).await;
-    let thumbnail = state.thumbnails.join(thumbnail_name(&hash));
+    let thumbnail = state.thumbnails.join(thumbnail_name(hash));
     let has_thumbnail = media::thumbnail(
         &stored,
         media_type,
@@ -265,7 +315,7 @@ async fn upload(
     .await;
 
     let new = NewFile {
-        hash: &hash,
+        hash,
         extension: &extension,
         media_type,
         size,
@@ -276,13 +326,13 @@ async fn upload(
     let mut conn = state.db.lock().unwrap();
     match insert(&mut conn, &new) {
         Ok(file) => {
-            record(&conn, params.tab, &file)?;
-            Ok((StatusCode::CREATED, Json(file)))
+            record(&conn, tab, &file)?;
+            Ok((file, true))
         }
         Err(err) => {
-            // The same content may have been uploaded concurrently; if so the
-            // other upload won and ours is the duplicate.
-            let winner = file_by_hash(&conn, &hash)?;
+            // The same content may have arrived concurrently; if so the
+            // other one won and ours is the duplicate.
+            let winner = file_by_hash(&conn, hash)?;
             let kept = winner
                 .as_ref()
                 .map(|file| state.storage.join(stored_name(&file.hash, &file.extension)));
@@ -291,8 +341,8 @@ async fn upload(
             }
             match winner {
                 Some(file) => {
-                    record(&conn, params.tab, &file)?;
-                    Ok((StatusCode::OK, Json(file)))
+                    record(&conn, tab, &file)?;
+                    Ok((file, false))
                 }
                 None => {
                     let _ = std::fs::remove_file(&thumbnail);

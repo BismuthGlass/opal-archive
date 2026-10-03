@@ -53,8 +53,8 @@ pub fn router() -> Router<AppState> {
         .route("/search/ids", get(search_ids))
 }
 
-/// Compiles `source`, narrowed to what `tab` holds if it is an upload or a
-/// collection tab. An ordered collection is shown in its own order unless
+/// Compiles `source`, narrowed to what `tab` holds if it is an upload, a
+/// download or a collection tab. An ordered collection is shown in its own order unless
 /// the query asks for another.
 fn compile(
     conn: &Connection,
@@ -76,7 +76,7 @@ fn compile(
         )
         .optional()?;
     match scope {
-        Some((kind, _, _)) if kind == "upload" => {
+        Some((kind, _, _)) if kind == "upload" || kind == "download" => {
             compiled.filter = format!(
                 "({}) AND e0.id IN (SELECT entity_id FROM tab_upload WHERE tab_id = ?)",
                 compiled.filter

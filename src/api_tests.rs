@@ -47,6 +47,9 @@ impl Api {
             storage: dir.join("storage"),
             thumbnails: dir.join("thumbnails"),
             tmp: dir.join("tmp"),
+            downloaders: dir.join("downloaders"),
+            cookies: dir.join("cookies"),
+            downloads: Default::default(),
         };
         for path in [&state.storage, &state.thumbnails, &state.tmp] {
             std::fs::create_dir_all(path).unwrap();
@@ -792,4 +795,190 @@ async fn a_bad_query_says_where() {
     assert_eq!(page["total"], 1);
     assert_eq!(page["items"][0]["id"], a);
     assert_eq!(page["items"][0]["trashed"], false);
+}
+
+/// A downloader that fetches from nowhere: two things, the second of two
+/// files, and a complaint.
+const FAKE_DOWNLOADER: &str = r#"
+[ "$1" = download ] || exit 2
+input=$(cat)
+out=$(printf '%s' "$input" | sed 's/.*"out":"\([^"]*\)".*/\1/')
+echo '{"event":"log","message":"Looking"}'
+echo '{"event":"found","total":2}'
+echo 'not an event'
+for n in 1 2; do
+  key="https://example.test/item/$n"
+  case "$input" in
+    *"\"$key\""*) echo "{\"event\":\"skipped\",\"key\":\"$key\"}"; continue ;;
+  esac
+  files="\"$out/$n-a.txt\""
+  printf 'file %s a' "$n" > "$out/$n-a.txt"
+  if [ "$n" = 2 ]; then
+    printf 'file %s b' "$n" > "$out/$n-b.txt"
+    files="$files,\"$out/$n-b.txt\""
+  fi
+  echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":\"$key\",\"files\":[$files]}"
+done
+echo '{"event":"error","message":"one thing could not be had"}'
+"#;
+
+impl Api {
+    fn fake_downloader(&self) {
+        let folder = self.state.downloaders.join("fake");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("fake.sh"), FAKE_DOWNLOADER).unwrap();
+        let manifest = json!({
+            "title": "Fake",
+            "source": "fakesite",
+            "command": ["sh", "fake.sh"],
+            "options": [{ "key": "deep", "label": "Go deep", "default": true }],
+        });
+        std::fs::write(folder.join("manifest.json"), manifest.to_string()).unwrap();
+    }
+
+    /// Runs a download in the tab to its end, and returns how it went.
+    async fn download(&self, tab: i64, url: &str) -> Value {
+        let path = format!("/tabs/{tab}/download");
+        self.post(&format!("{path}/start"), json!({ "url": url }))
+            .await;
+        for _ in 0..200 {
+            let job = self.get(&path).await["job"].clone();
+            if job["running"] == false {
+                return job;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        panic!("the download never ended");
+    }
+
+    async fn in_tab(&self, tab: i64) -> Vec<i64> {
+        let answer = self
+            .get(&format!("/search/ids?q=sort%3Did&tab={tab}"))
+            .await;
+        serde_json::from_value(answer["ids"].clone()).unwrap()
+    }
+}
+
+#[tokio::test]
+async fn a_download_tab_fetches_tags_and_remembers() {
+    let api = Api::new();
+    api.fake_downloader();
+    assert_eq!(api.get("/downloaders").await[0]["name"], "fake");
+    api.refused(
+        "/tabs",
+        json!({ "kind": "download", "downloader": "nothing" }),
+    )
+    .await;
+    api.refused("/tabs", json!({ "kind": "download" })).await;
+    let tab = api
+        .post("/tabs", json!({ "kind": "download", "downloader": "fake" }))
+        .await["id"]
+        .as_i64()
+        .unwrap();
+    let path = format!("/tabs/{tab}/download");
+
+    let (status, _) = api
+        .call(
+            "PATCH",
+            &path,
+            Some(json!({ "tags": { "tags": [" wall : paper ", "wall:paper"], "creator": ["Someone"] } })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let before = api.get(&path).await;
+    assert_eq!(before["options"], json!({ "deep": true }));
+    assert_eq!(
+        before["tags"],
+        json!({ "creator": ["Someone"], "tags": ["wall:paper"] })
+    );
+    assert_eq!(before["job"], Value::Null);
+    for bad in [
+        json!({ "options": { "shallow": true } }),
+        json!({ "tags": { "tags": ["@x"] } }),
+    ] {
+        assert_eq!(
+            api.call("PATCH", &path, Some(bad)).await.0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    api.refused(&format!("{path}/start"), json!({ "url": "not an address" }))
+        .await;
+
+    // Everything comes in, with where it is from and the tab's tags.
+    let job = api.download(tab, "https://example.test/board").await;
+    assert_eq!(job["outcome"], "done");
+    assert_eq!(job["message"], "Looking");
+    let counts = |job: &Value| {
+        [
+            "found",
+            "downloaded",
+            "added",
+            "existing",
+            "skipped",
+            "failed",
+        ]
+        .map(|key| job[key].as_u64().unwrap())
+    };
+    assert_eq!(counts(&job), [2, 2, 3, 0, 0, 1]);
+    assert_eq!(job["errors"], json!(["one thing could not be had"]));
+    let files = api.in_tab(tab).await;
+    assert_eq!(files.len(), 3);
+    let all = api.metadata(&files).await;
+    assert_eq!(carried(&all, "source"), [tag("fakesite", 3)]);
+    assert_eq!(carried(&all, "tags"), [tag("wall:paper", 3)]);
+    assert_eq!(carried(&all, "creator"), [tag("Someone", 3)]);
+    assert_eq!(
+        carried(&all, "source_urls"),
+        [
+            tag("https://example.test/item/1", 1),
+            tag("https://example.test/item/2", 2)
+        ]
+    );
+
+    // The thing of two files is also a set, in order, tagged like them.
+    let sets = api.found("type=set").await;
+    assert_eq!(sets.len(), 1);
+    assert_eq!(
+        api.members(sets[0]),
+        [(files[1], Some(0)), (files[2], Some(1))]
+    );
+    let set = api.metadata(&sets).await;
+    assert_eq!(carried(&set, "source"), [tag("fakesite", 1)]);
+    assert_eq!(
+        carried(&set, "source_urls"),
+        [tag("https://example.test/item/2", 1)]
+    );
+
+    // What was seen is passed over the next time.
+    let seen = api.get(&format!("{path}/seen")).await;
+    assert_eq!(seen.as_array().unwrap().len(), 2);
+    let again = api.download(tab, "https://example.test/board").await;
+    assert_eq!(counts(&again), [2, 0, 0, 0, 2, 1]);
+
+    // Forgotten, a thing is fetched again; the library already has its
+    // files, and makes no second set of them.
+    let forgotten = api
+        .post(
+            &format!("{path}/seen/forget"),
+            json!({ "keys": ["https://example.test/item/2"] }),
+        )
+        .await;
+    assert_eq!(forgotten["forgotten"], 1);
+    let third = api.download(tab, "https://example.test/board").await;
+    assert_eq!(counts(&third), [2, 1, 0, 2, 1, 1]);
+    assert_eq!(api.in_tab(tab).await, files);
+    assert_eq!(api.found("type=set").await, sets);
+    assert_eq!(api.get(&path).await["seen"], 2);
+    assert_eq!(
+        api.post(&format!("{path}/seen/forget"), json!({})).await["forgotten"],
+        2
+    );
+
+    // Nothing is left behind in the temporary directory.
+    assert_eq!(std::fs::read_dir(&api.state.tmp).unwrap().count(), 0);
+
+    // The files outlive the tab.
+    api.ok("DELETE", &format!("/tabs/{tab}"), None).await;
+    assert_eq!(api.call("GET", &path, None).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(api.found("kind=file").await, files);
 }

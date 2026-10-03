@@ -87,13 +87,13 @@ fn to_json(value: SqlValue) -> Value {
     }
 }
 
-fn ids_json(ids: &[i64]) -> String {
+pub fn ids_json(ids: &[i64]) -> String {
     serde_json::to_string(ids).expect("integers serialize")
 }
 
 /// A table of plain values per entity, and the column the value is in.
-type List = (&'static str, &'static str);
-const SOURCE_URLS: List = ("source_url", "url");
+pub type List = (&'static str, &'static str);
+pub const SOURCE_URLS: List = ("source_url", "url");
 const IDENTIFIERS: List = ("identifier", "value");
 
 /// An entity's values in a list.
@@ -507,7 +507,7 @@ fn number_members(conn: &Connection, ids: &str) -> rusqlite::Result<()> {
 }
 
 /// Puts a tag on the entities, creating it if it is new.
-fn attach_tag(conn: &Connection, ids: &str, field: &str, value: &str) -> rusqlite::Result<()> {
+pub fn attach_tag(conn: &Connection, ids: &str, field: &str, value: &str) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO tag (field, value) VALUES (?1, ?2) ON CONFLICT (field, value) DO NOTHING",
         [field, value],
@@ -534,7 +534,7 @@ fn detach_tag(conn: &Connection, ids: &str, field: &str, value: &str) -> rusqlit
     Ok(())
 }
 
-fn add_to_list(conn: &Connection, ids: &str, list: List, value: &str) -> rusqlite::Result<()> {
+pub fn add_to_list(conn: &Connection, ids: &str, list: List, value: &str) -> rusqlite::Result<()> {
     let (table, column) = list;
     conn.execute(
         &format!(

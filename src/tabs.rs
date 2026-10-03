@@ -7,14 +7,15 @@ use axum::{
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
 
-use crate::{AppState, error::ApiError};
+use crate::{AppState, downloads, error::ApiError};
 
 #[derive(Serialize)]
 struct Tab {
     id: i64,
     position: i64,
     /// `gallery`, a search of the library; `upload`, the files uploaded
-    /// through the tab; or `collection`, the members of one collection.
+    /// through the tab; `download`, the files a downloader fetched for it;
+    /// or `collection`, the members of one collection.
     kind: String,
     /// What the tab searches for; in an upload or collection tab, a filter
     /// on what it holds.
@@ -23,6 +24,8 @@ struct Tab {
     name: String,
     /// The collection a collection tab shows.
     collection: Option<TabCollection>,
+    /// The downloader a download tab uses.
+    downloader: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -40,6 +43,8 @@ struct NewTab {
     query: String,
     /// For a collection tab, the collection.
     collection: Option<i64>,
+    /// For a download tab, the downloader.
+    downloader: Option<String>,
 }
 
 fn default_kind() -> String {
@@ -79,7 +84,8 @@ pub fn router() -> Router<AppState> {
 }
 
 const SELECT_TAB: &str = "
-    SELECT t.id, t.position, t.kind, t.query, t.name, t.collection_id, e.title, c.ordered
+    SELECT t.id, t.position, t.kind, t.query, t.name, t.collection_id, e.title, c.ordered,
+           t.downloader
     FROM tab t
     LEFT JOIN entity e ON e.id = t.collection_id
     LEFT JOIN collection c ON c.entity_id = t.collection_id";
@@ -100,6 +106,7 @@ fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
         query: row.get(3)?,
         name: row.get(4)?,
         collection,
+        downloader: row.get(8)?,
     })
 }
 
@@ -159,10 +166,13 @@ async fn create(
             return Err(ApiError::bad_request("no such collection"));
         }
     }
+    if let Some(name) = &input.downloader {
+        downloads::manifest(&state, name)?;
+    }
     conn.execute(
-        "INSERT INTO tab (position, kind, query, collection_id)
-         VALUES ((SELECT coalesce(max(position), -1) + 1 FROM tab), ?1, ?2, ?3)",
-        params![input.kind, input.query, input.collection],
+        "INSERT INTO tab (position, kind, query, collection_id, downloader)
+         VALUES ((SELECT coalesce(max(position), -1) + 1 FROM tab), ?1, ?2, ?3, ?4)",
+        params![input.kind, input.query, input.collection, input.downloader],
     )?;
     let tab = one(&conn, conn.last_insert_rowid())?;
     Ok((StatusCode::CREATED, Json(tab)))
@@ -185,6 +195,8 @@ async fn remove(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
+    // A download still running for the tab has nowhere to put its files.
+    downloads::cancel(&state, id);
     let conn = state.db.lock().unwrap();
     match conn.execute("DELETE FROM tab WHERE id = ?1", [id])? {
         0 => Err(ApiError::NotFound),

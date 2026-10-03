@@ -56,7 +56,7 @@ fn is_ordered(conn: &Connection, id: i64) -> Result<bool, ApiError> {
 
 /// Adds members in the order given, skipping ones already present. In an
 /// ordered collection they are appended after the current last position.
-fn add_members(conn: &Connection, collection: i64, members: &[i64]) -> Result<(), ApiError> {
+pub fn add_members(conn: &Connection, collection: i64, members: &[i64]) -> Result<(), ApiError> {
     // A collection may not contain itself, directly or through any chain of
     // collections: reject if it is among the new members or their descendants.
     let ids = serde_json::to_string(members).expect("integers serialize");
