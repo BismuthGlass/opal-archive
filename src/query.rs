@@ -634,24 +634,7 @@ impl Parser<'_> {
             Field::Choice(table, column, choices) => {
                 allow(EQUALITY)?;
                 let column = self.column(table, column);
-                for value in &values {
-                    let lower = value.text.to_ascii_lowercase();
-                    if !choices.contains(&lower.as_str()) {
-                        return error(
-                            format!(
-                                "`{}` is not a valid value for `{name}` (expected {})",
-                                value.text,
-                                choices.join(", ")
-                            ),
-                            value.pos,
-                        );
-                    }
-                    self.params.push(Value::Text(lower));
-                }
-                format!(
-                    "({column} IS NOT NULL AND {column} IN ({}))",
-                    placeholders(values.len())
-                )
+                self.choice_term(name, &column, choices, &values)?
             }
             Field::Number(table, column, unit) => {
                 allow(ORDERED)?;
@@ -679,16 +662,7 @@ impl Parser<'_> {
             Field::Bool(table, column) => {
                 allow(EQUALITY)?;
                 let column = self.column(table, column);
-                let [value] = &values[..] else {
-                    return error(format!("`{name}` takes `true` or `false`"), start);
-                };
-                let flag = match value.text.to_ascii_lowercase().as_str() {
-                    "true" => 1,
-                    "false" => 0,
-                    _ => return error(format!("`{name}` takes `true` or `false`"), value.pos),
-                };
-                self.params.push(Value::Integer(flag));
-                format!("({column} IS NOT NULL AND {column} = ?)")
+                self.bool_term(name, &column, &values, start)?
             }
             Field::Has => {
                 allow(EQUALITY)?;
@@ -705,59 +679,112 @@ impl Parser<'_> {
             }
             Field::In | Field::Contains => {
                 allow(EQUALITY)?;
-                let is_in = matches!(field, Field::In);
-                if is_in
-                    && self.restricted == 0
-                    && op == Op::Eq
-                    && values.len() == 1
-                    && let Ok(id) = values[0].text.parse()
-                {
-                    self.top_level_in.push(id);
-                }
-                let ids = self.id_list(name, &values)?;
-                let (near, far) = if is_in {
-                    ("member_id", "collection_id")
-                } else {
-                    ("collection_id", "member_id")
-                };
-                format!(
-                    "(EXISTS (SELECT 1 FROM membership m WHERE m.{near} = {} AND m.{far} IN ({ids})))",
-                    self.column('e', "id")
-                )
+                self.membership_term(name, matches!(field, Field::In), op, &values)?
             }
             Field::Sort => {
                 if op != Op::Eq {
                     return error("write sorting as `sort=key` or `sort=-key`", start);
                 }
-                if self.restricted > 0 {
-                    return error(
-                        "`sort=` is only allowed at the top level of the query",
-                        start,
-                    );
-                }
-                for value in &values {
-                    let (descending, key) = match value.text.strip_prefix('-') {
-                        Some(key) => (true, key),
-                        None => (false, value.text.as_str()),
-                    };
-                    let lower = key.to_ascii_lowercase();
-                    let Some(key) = SORT_KEYS.iter().find(|known| **known == lower) else {
-                        return error(
-                            format!("cannot sort by `{key}` (expected {})", SORT_KEYS.join(", ")),
-                            value.pos,
-                        );
-                    };
-                    self.sorts.push(Sort {
-                        key,
-                        descending,
-                        pos: value.pos,
-                    });
-                }
+                self.sort_term(&values, start)?;
                 // Not a filter; `parse_and` drops it.
                 return Ok(String::new());
             }
         };
         Ok(negate_if(op == Op::Ne, sql))
+    }
+
+    /// A field that takes one of a fixed set of words.
+    fn choice_term(
+        &mut self,
+        name: &str,
+        column: &str,
+        choices: &[&str],
+        values: &[Val],
+    ) -> Res<String> {
+        for value in values {
+            let lower = value.text.to_ascii_lowercase();
+            if !choices.contains(&lower.as_str()) {
+                return error(
+                    format!(
+                        "`{}` is not a valid value for `{name}` (expected {})",
+                        value.text,
+                        choices.join(", ")
+                    ),
+                    value.pos,
+                );
+            }
+            self.params.push(Value::Text(lower));
+        }
+        Ok(format!(
+            "({column} IS NOT NULL AND {column} IN ({}))",
+            placeholders(values.len())
+        ))
+    }
+
+    fn bool_term(&mut self, name: &str, column: &str, values: &[Val], start: usize) -> Res<String> {
+        let [value] = values else {
+            return error(format!("`{name}` takes `true` or `false`"), start);
+        };
+        let flag = match value.text.to_ascii_lowercase().as_str() {
+            "true" => 1,
+            "false" => 0,
+            _ => return error(format!("`{name}` takes `true` or `false`"), value.pos),
+        };
+        self.params.push(Value::Integer(flag));
+        Ok(format!("({column} IS NOT NULL AND {column} = ?)"))
+    }
+
+    /// `in=<ids>`: members of those collections; `contains=<ids>`:
+    /// collections holding those entities.
+    fn membership_term(&mut self, name: &str, is_in: bool, op: Op, values: &[Val]) -> Res<String> {
+        // Remembered for `sort=position`, which needs to know the collection.
+        if is_in
+            && self.restricted == 0
+            && op == Op::Eq
+            && values.len() == 1
+            && let Ok(id) = values[0].text.parse()
+        {
+            self.top_level_in.push(id);
+        }
+        let ids = self.id_list(name, values)?;
+        let (near, far) = if is_in {
+            ("member_id", "collection_id")
+        } else {
+            ("collection_id", "member_id")
+        };
+        Ok(format!(
+            "(EXISTS (SELECT 1 FROM membership m WHERE m.{near} = {} AND m.{far} IN ({ids})))",
+            self.column('e', "id")
+        ))
+    }
+
+    /// Records the keys of a `sort=` term.
+    fn sort_term(&mut self, values: &[Val], start: usize) -> Res<()> {
+        if self.restricted > 0 {
+            return error(
+                "`sort=` is only allowed at the top level of the query",
+                start,
+            );
+        }
+        for value in values {
+            let (descending, key) = match value.text.strip_prefix('-') {
+                Some(key) => (true, key),
+                None => (false, value.text.as_str()),
+            };
+            let lower = key.to_ascii_lowercase();
+            let Some(key) = SORT_KEYS.iter().find(|known| **known == lower) else {
+                return error(
+                    format!("cannot sort by `{key}` (expected {})", SORT_KEYS.join(", ")),
+                    value.pos,
+                );
+            };
+            self.sorts.push(Sort {
+                key,
+                descending,
+                pos: value.pos,
+            });
+        }
+        Ok(())
     }
 
     /// `(pattern OR pattern …)` over `column`, one alternative per value.
@@ -1264,6 +1291,18 @@ mod tests {
         assert!(fails("score>many"));
         assert!(fails("media=film"));
         assert!(fails("nosuchfield=1"));
+        assert_eq!(found(&conn, "media=image,video"), [1, 2]);
+        // The negation of `=`: what has no media type is not an image either.
+        assert_eq!(found(&conn, "media!=image"), [2, 4, 5]);
+        assert_eq!(found(&conn, "id=1,5"), [1, 5]);
+        assert_eq!(found(&conn, "looping=true"), [] as [i64; 0]);
+        assert!(fails("looping=maybe"));
+        assert!(fails("looping=true,false"));
+        assert!(fails("media>image"));
+        assert!(fails("in=(sort=id)"));
+        assert!(fails("sort>id"));
+        assert_eq!(found(&conn, "in!=4"), [4, 5]);
+        assert_eq!(found(&conn, "contains=1,2"), [4]);
     }
 
     #[test]
