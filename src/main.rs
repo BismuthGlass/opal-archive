@@ -97,10 +97,16 @@ async fn health(State(state): State<AppState>) -> Result<Json<Value>, ApiError> 
 
 async fn stats(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let conn = state.db.lock().unwrap();
-    let count = |kind: &str| {
-        conn.query_row("SELECT count(*) FROM entity WHERE kind = ?1", [kind], |row| {
-            row.get::<_, i64>(0)
-        })
+    let count = |condition: &str| {
+        conn.query_row(
+            &format!("SELECT count(*) FROM entity WHERE {condition}"),
+            [],
+            |row| row.get::<_, i64>(0),
+        )
     };
-    Ok(Json(json!({ "files": count("file")?, "collections": count("collection")? })))
+    Ok(Json(json!({
+        "files": count("kind = 'file' AND trashed = 0")?,
+        "collections": count("kind = 'collection' AND trashed = 0")?,
+        "trashed": count("trashed = 1")?,
+    })))
 }

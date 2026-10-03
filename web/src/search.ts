@@ -56,7 +56,7 @@ export const itemAt = (index: number): Item | undefined =>
 async function loadCustomPage(page: number, ids: number[]): Promise<api.SearchPage> {
   const slice = ids.slice(page * PAGE, (page + 1) * PAGE);
   if (slice.some((id) => !known.has(id))) {
-    const result = await api.search(`id=${slice.join(",")}`, 0, PAGE, 0);
+    const result = await api.search(`id=${slice.join(",")}`, 0, PAGE, 0, null, true);
     for (const item of result.items) known.set(item.id, item);
   }
   const items = slice.flatMap((id) => known.get(id) ?? []);

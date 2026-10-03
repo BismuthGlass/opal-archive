@@ -11,7 +11,8 @@ export type Tab = {
   collection: { id: number; title: string | null; ordered: boolean } | null;
 };
 
-export type Stats = { files: number; collections: number };
+/** Files and collections not in the trash, and how many entities are in it. */
+export type Stats = { files: number; collections: number; trashed: number };
 
 export type MediaType = "image" | "video" | "audio" | "book" | "other";
 
@@ -42,6 +43,8 @@ export type Item = {
   /** File whose thumbnail stands for this entry, if any. */
   thumbnail: number | null;
   member_count: number | null;
+  /** In the trash: deleted once, not yet for good. */
+  trashed: boolean;
 };
 
 export type SearchPage = { total: number; offset: number; items: Item[] };
@@ -61,6 +64,8 @@ export type Metadata = {
   count: number;
   files: number;
   collections: number;
+  /** How many of them are in the trash. */
+  trashed: number;
   scalars: Record<string, Scalar>;
   collection_type: { value: string | null; mixed: boolean };
   /** Whether the selected collections keep their members in order. */
@@ -142,7 +147,13 @@ export const search = (
   limit: number,
   seed: number,
   tab: number | null = null,
-) => request<SearchPage>("GET", `/search?${params({ q, offset, limit, seed, ...scoped(tab) })}`);
+  /** Without this, trashed entities only match a query with `is=trashed`. */
+  withTrashed = false,
+) =>
+  request<SearchPage>(
+    "GET",
+    `/search?${params({ q, offset, limit, seed, ...scoped(tab), ...(withTrashed ? { trashed: 1 } : {}) })}`,
+  );
 export const searchIds = (q: string, seed: number, tab: number | null) =>
   request<{ ids: number[] }>("GET", `/search/ids?${params({ q, seed, ...scoped(tab) })}`).then(
     (r) => r.ids,
@@ -153,6 +164,12 @@ export const getMetadata = (ids: number[]) =>
   request<Metadata>("POST", "/entities/metadata", { ids });
 export const edit = (ids: number[], changes: Changes) =>
   request<{ updated: number }>("POST", "/entities/edit", { ids, ...changes });
+/** Moves entities to the trash: out of searches, but not yet gone. */
+export const trashEntities = (ids: number[]) =>
+  request<{ changed: number }>("POST", "/entities/trash", { ids });
+export const restoreEntities = (ids: number[]) =>
+  request<{ changed: number }>("POST", "/entities/restore", { ids });
+/** Deletes trashed entities for good; any not in the trash are left alone. */
 export const deleteEntities = (ids: number[]) =>
   request<{ deleted: number }>("POST", "/entities/delete", { ids });
 /** A tag, or a namespace (ending in a colon) to look further into. */

@@ -3,6 +3,9 @@
 
 use rusqlite::types::Value;
 
+/// States an entity can be in, for `is=`.
+pub const STATES: &[&str] = &["trashed"];
+
 pub const TAG_FIELDS: &[&str] = &[
     "creator",
     "medium",
@@ -109,6 +112,7 @@ enum Field {
     Date { added: bool },
     Bool(char, &'static str),
     Has,
+    Is,
     Id,
     In,
     Contains,
@@ -142,6 +146,7 @@ fn lookup(name: &str) -> Option<Field> {
         "added" => Field::Date { added: true },
         "looping" => Field::Bool('f', "looping"),
         "has" => Field::Has,
+        "is" => Field::Is,
         "id" => Field::Id,
         "in" => Field::In,
         "contains" => Field::Contains,
@@ -297,6 +302,8 @@ struct Parser<'a> {
     sorts: Vec<Sort>,
     /// Collections named by top-level `in=<id>` terms, for `sort=position`.
     top_level_in: Vec<i64>,
+    /// Whether the query itself has an `is=` term.
+    asks_trashed: bool,
 }
 
 impl Parser<'_> {
@@ -612,6 +619,29 @@ impl Parser<'_> {
                     alternatives.push(self.presence(value)?);
                 }
                 format!("({})", alternatives.join(" OR "))
+            }
+            Field::Is => {
+                allow(EQUALITY)?;
+                for value in &values {
+                    let state = value.text.to_ascii_lowercase();
+                    if !STATES.contains(&state.as_str()) {
+                        return error(
+                            format!(
+                                "`{}` is not a state (expected {})",
+                                value.text,
+                                STATES.join(", ")
+                            ),
+                            value.pos,
+                        );
+                    }
+                }
+                // Asking about the trash is what lets trashed entities
+                // through; see `compile`.
+                if self.depth == 0 {
+                    self.asks_trashed = true;
+                }
+                // `trashed` is the only state so far.
+                format!("({} = 1)", self.column('e', "trashed"))
             }
             Field::Id => {
                 allow(EQUALITY)?;
@@ -940,7 +970,15 @@ fn placeholders(count: usize) -> String {
 
 /// Compiles a query. `seed` fixes the order of `sort=random` so that pages
 /// of one search agree with each other.
-pub fn compile(source: &str, seed: i64, aliases: &Aliases) -> Res<Compiled> {
+///
+/// Trashed entities are left out unless the query has an `is=` term or
+/// `include_trashed` is set.
+pub fn compile(
+    source: &str,
+    seed: i64,
+    aliases: &Aliases,
+    include_trashed: bool,
+) -> Res<Compiled> {
     let mut parser = Parser {
         aliases,
         chars: source.chars().collect(),
@@ -950,6 +988,7 @@ pub fn compile(source: &str, seed: i64, aliases: &Aliases) -> Res<Compiled> {
         params: Vec::new(),
         sorts: Vec::new(),
         top_level_in: Vec::new(),
+        asks_trashed: false,
     };
     parser.skip_whitespace();
     let filter = if parser.at_end() {
@@ -960,6 +999,14 @@ pub fn compile(source: &str, seed: i64, aliases: &Aliases) -> Res<Compiled> {
             return error("unexpected `)`", parser.pos);
         }
         sql
+    };
+
+    // Trashed entities stay out of every search that does not ask about
+    // the trash with `is=trashed` (or its negation).
+    let filter = if parser.asks_trashed || include_trashed {
+        filter
+    } else {
+        format!("({filter}) AND e0.trashed = 0")
     };
 
     let sorted = !parser.sorts.is_empty();

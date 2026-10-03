@@ -25,6 +25,8 @@ struct SearchParams {
     /// Tab to search within: an upload tab's files, or a collection tab's
     /// members.
     tab: Option<i64>,
+    /// Present to have trashed entities included without `is=trashed`.
+    trashed: Option<String>,
 }
 
 /// What the results grid needs to draw one entity.
@@ -40,7 +42,9 @@ struct Item {
     /// ID of the file whose thumbnail represents this entity: the file
     /// itself, or a collection's first member that has one.
     thumbnail: Option<i64>,
+    /// Members not in the trash.
     member_count: Option<i64>,
+    trashed: bool,
 }
 
 pub fn router() -> Router<AppState> {
@@ -57,8 +61,9 @@ fn compile(
     source: &str,
     seed: i64,
     tab: Option<i64>,
+    include_trashed: bool,
 ) -> Result<query::Compiled, ApiError> {
-    let mut compiled = query::compile(source, seed, &tags::aliases(conn)?)?;
+    let mut compiled = query::compile(source, seed, &tags::aliases(conn)?, include_trashed)?;
     let Some(tab) = tab else {
         return Ok(compiled);
     };
@@ -102,8 +107,9 @@ pub fn matching_ids(
     source: &str,
     seed: i64,
     tab: Option<i64>,
+    include_trashed: bool,
 ) -> Result<Vec<i64>, ApiError> {
-    let compiled = compile(conn, source, seed, tab)?;
+    let compiled = compile(conn, source, seed, tab, include_trashed)?;
     let sql = format!(
         "SELECT e0.id FROM {} WHERE {} ORDER BY {}",
         query::FROM,
@@ -125,7 +131,8 @@ async fn search(
     let limit = params.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let offset = params.offset.max(0);
     let conn = state.db.lock().unwrap();
-    let compiled = compile(&conn, &params.q, params.seed, params.tab)?;
+    let include_trashed = params.trashed.is_some();
+    let compiled = compile(&conn, &params.q, params.seed, params.tab, include_trashed)?;
 
     let total: i64 = conn.query_row(
         &format!(
@@ -145,12 +152,17 @@ async fn search(
                     WHEN c0.entity_id IS NOT NULL THEN (
                         SELECT m.member_id FROM membership m
                         JOIN file mf ON mf.entity_id = m.member_id
+                        JOIN entity me ON me.id = m.member_id
                         WHERE m.collection_id = e0.id AND mf.has_thumbnail = 1
+                          AND me.trashed = 0
                         ORDER BY m.position IS NULL, m.position, m.member_id LIMIT 1)
                 END,
                 CASE WHEN c0.entity_id IS NOT NULL THEN
-                    (SELECT count(*) FROM membership m WHERE m.collection_id = e0.id)
-                END
+                    (SELECT count(*) FROM membership m
+                     JOIN entity me ON me.id = m.member_id
+                     WHERE m.collection_id = e0.id AND me.trashed = 0)
+                END,
+                e0.trashed
          FROM {} WHERE {} ORDER BY {} LIMIT ? OFFSET ?",
         query::FROM,
         compiled.filter,
@@ -175,6 +187,7 @@ async fn search(
                 collection_type: row.get(6)?,
                 thumbnail: row.get(7)?,
                 member_count: row.get(8)?,
+                trashed: row.get(9)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -187,6 +200,12 @@ async fn search_ids(
     Query(params): Query<SearchParams>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let conn = state.db.lock().unwrap();
-    let ids = matching_ids(&conn, &params.q, params.seed, params.tab)?;
+    let ids = matching_ids(
+        &conn,
+        &params.q,
+        params.seed,
+        params.tab,
+        params.trashed.is_some(),
+    )?;
     Ok(Json(json!({ "ids": ids })))
 }

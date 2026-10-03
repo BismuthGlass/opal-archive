@@ -76,12 +76,14 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `POST /files?name=<filename>`    | Upload; the file is the raw body. 201 if new, 200 if a duplicate. `tab=<id>` lists it under that upload tab |
 | `GET /files/{id}/content`        | The file. `?download=1` to save rather than display            |
 | `GET /files/{id}/thumbnail`      | JPEG thumbnail, 404 if the file has none                       |
-| `GET /search?q=&offset=&limit=`  | One page of results and the total. `seed` fixes `sort=random`; `tab=<id>` searches only what that upload or collection tab holds |
+| `GET /search?q=&offset=&limit=`  | One page of results and the total. `seed` fixes `sort=random`; `tab=<id>` searches only what that upload or collection tab holds. Trashed entities only match with `is=trashed` in the query, or with `trashed=1` |
 | `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed` and `tab` too      |
 | `GET /entities/{id}`             | Everything about one file or collection                        |
 | `POST /entities/metadata`        | `{ids}` → what those entities have in common                   |
 | `POST /entities/edit`            | `{ids, set, add, remove}` → the same edit applied to all. `set` takes `ordered` (true or false) for collections |
-| `POST /entities/delete`          | `{ids}` → delete; files leave storage                          |
+| `POST /entities/trash`           | `{ids}` → move to the trash: hidden from searches, nothing removed |
+| `POST /entities/restore`         | `{ids}` → take back out of the trash                           |
+| `POST /entities/delete`          | `{ids}` → delete for good those that are in the trash; files leave storage |
 | `GET /tags?field=&q=`            | Completions for a tag field, one namespace level at a time     |
 | `GET /tags/all?field=`           | Every tag of a field with its aliases, and how many alias uses await updating |
 | `POST /tags/rename`              | `{field, from, to}` → rename a tag, merging it into `to` if that exists. With `namespace: true`, rename a namespace on every tag under it; an empty `to` removes it |
@@ -94,7 +96,7 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, collection}` → new tab, `kind` being `gallery`, `upload` or `collection` |
 | `PATCH /tabs/{id}`, `DELETE …`   | `{query, name}`, either or both → change a tab; close a tab     |
 | `PUT /tabs/order`                | `{ids}` → put the tabs in that order                           |
-| `GET /stats`, `GET /health`      | Library counts; liveness and schema version                    |
+| `GET /stats`, `GET /health`      | Library counts, with how many entities are trashed; liveness and schema version |
 
 Uploading from a shell:
 

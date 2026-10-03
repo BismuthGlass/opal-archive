@@ -24,7 +24,7 @@ import {
   selected,
 } from "./search";
 import { refreshStats, stats } from "./stats";
-import { activeTab, error, load, refresh } from "./tabs";
+import { activeTab, error, load, open, refresh } from "./tabs";
 
 export default function App() {
   /** Result index shown in the viewer, if it is open. */
@@ -158,6 +158,16 @@ export default function App() {
             <span class="library">
               {plural(counts().files, "file")}, {plural(counts().collections, "collection")} in the
               library
+              <Show when={counts().trashed > 0}>
+                {", "}
+                <button
+                  class="link"
+                  title="Show what is in the trash"
+                  onClick={() => open("gallery", "is=trashed")}
+                >
+                  {counts().trashed} in the trash
+                </button>
+              </Show>
             </span>
           )}
         </Show>

@@ -58,6 +58,8 @@ pub fn router() -> Router<AppState> {
         .route("/entities/{id}", get(entity))
         .route("/entities/metadata", post(metadata))
         .route("/entities/edit", post(edit))
+        .route("/entities/trash", post(trash))
+        .route("/entities/restore", post(restore))
         .route("/entities/delete", post(delete))
 }
 
@@ -219,6 +221,12 @@ async fn metadata(
         },
     )?;
 
+    let trashed: i64 = conn.query_row(
+        &format!("SELECT count(*) FROM entity WHERE trashed = 1 AND id {IN_IDS}"),
+        [&ids],
+        |row| row.get(0),
+    )?;
+
     let ordered = conn.query_row(
         &format!(
             "SELECT count(DISTINCT ordered), min(ordered)
@@ -266,6 +274,7 @@ async fn metadata(
         "count": count,
         "files": files,
         "collections": count - files,
+        "trashed": trashed,
         "scalars": scalars,
         "collection_type": collection_type,
         "ordered": ordered,
@@ -461,6 +470,34 @@ async fn edit(
 
 /// Deletes entities. Files leave internal storage; deleting a collection
 /// leaves its members in place.
+/// Moves entities to the trash, or back out of it.
+fn set_trashed(state: &AppState, ids: &[i64], trashed: bool) -> Result<Json<Value>, ApiError> {
+    let conn = state.db.lock().unwrap();
+    let changed = conn.execute(
+        &format!("UPDATE entity SET trashed = ?2 WHERE trashed <> ?2 AND id {IN_IDS}"),
+        params![ids_json(ids), trashed],
+    )?;
+    Ok(Json(json!({ "changed": changed })))
+}
+
+/// The first step of deleting: trashed entities drop out of searches but
+/// keep their file and metadata.
+async fn trash(
+    State(state): State<AppState>,
+    Json(input): Json<Ids>,
+) -> Result<Json<Value>, ApiError> {
+    set_trashed(&state, &input.ids, true)
+}
+
+async fn restore(
+    State(state): State<AppState>,
+    Json(input): Json<Ids>,
+) -> Result<Json<Value>, ApiError> {
+    set_trashed(&state, &input.ids, false)
+}
+
+/// The second step: deletes for good those of the entities that are in the
+/// trash. Any that are not are left alone.
 async fn delete(
     State(state): State<AppState>,
     Json(input): Json<Ids>,
@@ -470,12 +507,16 @@ async fn delete(
     let tx = conn.transaction()?;
     let stored = {
         let mut stmt = tx.prepare(&format!(
-            "SELECT hash, extension FROM file WHERE entity_id {IN_IDS}"
+            "SELECT f.hash, f.extension FROM file f JOIN entity e ON e.id = f.entity_id
+             WHERE e.trashed = 1 AND f.entity_id {IN_IDS}"
         ))?;
         stmt.query_map([&ids], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<rusqlite::Result<Vec<(String, String)>>>()?
     };
-    let deleted = tx.execute(&format!("DELETE FROM entity WHERE id {IN_IDS}"), [&ids])?;
+    let deleted = tx.execute(
+        &format!("DELETE FROM entity WHERE trashed = 1 AND id {IN_IDS}"),
+        [&ids],
+    )?;
     prune_tags(&tx)?;
     tx.commit()?;
 

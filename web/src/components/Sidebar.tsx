@@ -112,18 +112,27 @@ export default function Sidebar(props: { onGroup: () => void }) {
   const set = (field: string) => (value: string | number | null) =>
     apply({ set: { [field]: value } });
 
-  const remove = async () => {
-    const count = ids().length;
-    if (!confirm(`Delete ${plural(count, "item")}? Deleted files leave the library for good.`)) {
-      return;
-    }
+  /** Whether everything selected is already in the trash. */
+  const allTrashed = () => meta() !== undefined && meta()!.trashed === meta()!.count;
+
+  /** Runs a change that takes the selection out of the view. */
+  const dispose = async (action: (ids: number[]) => Promise<unknown>) => {
     try {
-      await api.deleteEntities(ids());
+      await action(ids());
       clearSelection();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
     changed();
+  };
+  // Deleting is two steps: to the trash, and from there for good.
+  const trash = () => dispose(api.trashEntities);
+  const restore = () => dispose(api.restoreEntities);
+  const remove = () => {
+    const count = ids().length;
+    if (confirm(`Delete ${plural(count, "item")} for good? This cannot be undone.`)) {
+      dispose(api.deleteEntities);
+    }
   };
 
   const download = () => {
@@ -156,10 +165,24 @@ export default function Sidebar(props: { onGroup: () => void }) {
           <Icon name="create-new-folder-outline" />
           Collect…
         </button>
-        <button class="danger" onClick={remove}>
-          <Icon name="delete-outline" />
-          Delete
-        </button>
+        <Show
+          when={allTrashed()}
+          fallback={
+            <button class="danger" title="Move to the trash" onClick={trash}>
+              <Icon name="delete-outline" />
+              Trash
+            </button>
+          }
+        >
+          <button title="Take out of the trash" onClick={restore}>
+            <Icon name="restore-from-trash-outline" />
+            Restore
+          </button>
+          <button class="danger" title="Delete for good" onClick={remove}>
+            <Icon name="delete-forever-outline" />
+            Delete
+          </button>
+        </Show>
       </div>
       <Show when={error()}>
         <p class="form-error dismissible" role="alert">

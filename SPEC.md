@@ -46,6 +46,12 @@ Collections should behave as their own entities that may also be categorized and
 
 There is no need to support injesting existing sidecar files on file upload for now. We will also support exporting sidecar files, but that's in the future.
 
+## Deleting
+
+Deleting is two steps. The first moves a file or collection to the trash: it keeps its file and all its metadata, but no longer shows up in searches. From the trash it can be restored, or deleted for good, which removes the file from storage. Uploading a trashed file again restores it.
+
+Being trashed is a state, not a tag. States are searched with `is=`: `is=trashed` lists the trash. It is the only state for now.
+
 ## Authentication
 
 The application doesn't need to support authentication for now.

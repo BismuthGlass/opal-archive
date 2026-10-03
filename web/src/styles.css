@@ -455,6 +455,23 @@ button.primary {
   color: var(--muted);
 }
 
+/* In the trash: faded, with a mark. */
+.tile.trashed .thumb img,
+.tile.trashed .placeholder {
+  opacity: 0.45;
+}
+
+.trash-mark {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 1px;
+  line-height: 0;
+  color: #fff;
+  background: rgb(0 0 0 / 0.65);
+  border-radius: 4px;
+}
+
 .badge {
   position: absolute;
   top: 4px;

@@ -183,6 +183,20 @@ fields, has at least one value). Any field above except `kind`, `media`,
 `added`, `hash`, `ext` and `size` can be used. `-has=creator` finds entities
 with no creator.
 
+### States
+
+`is=<state>` matches entities in that state. The only state so far is
+`trashed`: deleted once, and not yet for good.
+
+```
+is=trashed                  what is in the trash
+is=trashed media=video      trashed videos
+cat (is=trashed or -is=trashed)   cats, trashed or not
+```
+
+Trashed entities are left out of every search that has no `is=` term, so
+plain searches never show them.
+
 ### Relations
 
 | Term            | Matches                                                   |

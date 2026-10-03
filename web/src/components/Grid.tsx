@@ -16,6 +16,7 @@ import {
 } from "../search";
 import { stats } from "../stats";
 import { openCollection } from "../tabs";
+import Icon from "./Icon";
 
 // Layout constants, in pixels. Every tile has the same size, which is what
 // lets the grid work out what is on screen without measuring anything.
@@ -236,6 +237,7 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                 classList={{
                   selected: item() !== undefined && selected().has(item()!.id),
                   collection: item()?.kind === "collection",
+                  trashed: item()?.trashed ?? false,
                   moving: item() !== undefined && (drag()?.ids.includes(item()!.id) ?? false),
                 }}
                 style={{
@@ -268,6 +270,11 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                             decoding="async"
                             draggable={false}
                           />
+                        </Show>
+                        <Show when={current().trashed}>
+                          <span class="trash-mark" title="In the trash">
+                            <Icon name="delete-outline" />
+                          </span>
                         </Show>
                         <Show when={badge(current())}>
                           {(text) => <span class="badge">{text()}</span>}
