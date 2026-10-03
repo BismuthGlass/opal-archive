@@ -36,6 +36,8 @@ Uploaded files should be brought into internal storage, with their hash for a fi
 
 Thumbnails should also be stored for each file (in a separate dir).
 
+Uploading a file that is already in the library changes nothing about the existing file: not its metadata, and not whether it is in the trash. It is still listed in the upload tab it was uploaded through, like any other upload. Upload tabs show trashed files too, marked as such, so such a file can be seen and restored from there.
+
 ## The schema
 
 The metastasis v1.0 format describes a system using sidecar files. This should not be the case in our application. Instead the metadata should be stored in the SQLite database. Fields should be appropriately constrained to possible values, and no custom fields are allowed.
@@ -48,7 +50,7 @@ There is no need to support injesting existing sidecar files on file upload for 
 
 ## Deleting
 
-Deleting is two steps. The first moves a file or collection to the trash: it keeps its file and all its metadata, but no longer shows up in searches. From the trash it can be restored, or deleted for good, which removes the file from storage. Uploading a trashed file again restores it.
+Deleting is two steps. The first moves a file or collection to the trash: it keeps its file and all its metadata, but no longer shows up in searches. From the trash it can be restored, or deleted for good, which removes the file from storage.
 
 Being trashed is a state, not a tag. States are searched with `is=`: `is=trashed` lists the trash. It is the only state for now.
 

@@ -55,7 +55,7 @@ pub fn router() -> Router<AppState> {
 
 /// Compiles `source`, narrowed to what `tab` holds if it is an upload or a
 /// collection tab. An ordered collection is shown in its own order unless
-/// the query asks for another.
+/// the query asks for another. An upload tab shows trashed files as well.
 fn compile(
     conn: &Connection,
     source: &str,
@@ -63,18 +63,30 @@ fn compile(
     tab: Option<i64>,
     include_trashed: bool,
 ) -> Result<query::Compiled, ApiError> {
-    let mut compiled = query::compile(source, seed, &tags::aliases(conn)?, include_trashed)?;
+    let scope: Option<(String, Option<i64>, Option<bool>)> = match tab {
+        Some(tab) => conn
+            .query_row(
+                "SELECT t.kind, t.collection_id, c.ordered FROM tab t
+                 LEFT JOIN collection c ON c.entity_id = t.collection_id WHERE t.id = ?1",
+                [tab],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?,
+        None => None,
+    };
+    // An upload tab lists everything uploaded through it, the trashed too:
+    // uploading a file that is in the trash must not look like nothing
+    // happened.
+    let uploads = matches!(&scope, Some((kind, _, _)) if kind == "upload");
+    let mut compiled = query::compile(
+        source,
+        seed,
+        &tags::aliases(conn)?,
+        include_trashed || uploads,
+    )?;
     let Some(tab) = tab else {
         return Ok(compiled);
     };
-    let scope: Option<(String, Option<i64>, Option<bool>)> = conn
-        .query_row(
-            "SELECT t.kind, t.collection_id, c.ordered FROM tab t
-             LEFT JOIN collection c ON c.entity_id = t.collection_id WHERE t.id = ?1",
-            [tab],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .optional()?;
     match scope {
         Some((kind, _, _)) if kind == "upload" => {
             compiled.filter = format!(
