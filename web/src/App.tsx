@@ -1,6 +1,8 @@
 import { createEffect, createSignal, on, onCleanup, onMount, Show } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import CollectionDialog from "./components/CollectionDialog";
 import ContextMenu, { contextMenuOpen } from "./components/ContextMenu";
+import { panelFor } from "./downloaders";
 import Grid from "./components/Grid";
 import { modalOpen } from "./components/Modal";
 import Icon from "./components/Icon";
@@ -242,6 +244,15 @@ export default function App() {
         <main class="content">
           <Show when={activeTab()?.kind === "upload"}>
             <UploadBox />
+          </Show>
+          {/* Keyed by the tab: each download tab has a panel of its own. */}
+          <Show when={activeTab()?.kind === "download" && activeTab()?.id} keyed>
+            {(id) => (
+              <Dynamic
+                component={panelFor(activeTab()?.downloader ?? "")}
+                tab={id}
+              />
+            )}
           </Show>
           <Toolbar />
           <Grid onOpen={setViewing} />

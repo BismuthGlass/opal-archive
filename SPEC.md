@@ -52,7 +52,23 @@ There is no need to support injesting existing sidecar files on file upload for 
 
 What a view lists is decided when its search is calculated, and stays put after that: it is a snapshot, saved with its tab, so it is the same after switching tabs or reloading the page. The order results were dragged into and any that were taken out of the view are part of it. Editing, tagging, rating or trashing a file changes how it is shown, but it does not drop out of the view, and files that start matching do not appear. A Refresh button calculates the search again.
 
-The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab, a collection created inside the collection a tab shows).
+The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab or downloaded into a download tab, a collection created inside the collection a tab shows).
+
+## Downloaders
+
+A downloader fetches files from a website straight into the library, in a tab of its own kind. Each downloader is for one site; the first is for Pinterest. They are made to be added to: a downloader is a folder with a manifest and a script, and the server and the interface need no change for a new one unless it wants a panel of its own. `downloaders/README.md` describes how they are written.
+
+- A download tab belongs to one downloader. At its top is a box to paste an address into; under it, what was downloaded through the tab, as in an upload tab.
+- What an address can be is up to the downloader. For Pinterest: a pin, a board, a section of a board, or a profile.
+- A downloader has options, set per tab. Pinterest has two: whether to go into what is inside (a board's sections, a profile's boards) or take only what sits directly in the board, and whether to download videos.
+- Everything downloaded gets the address it came from as a source URL (for Pinterest, the pin's), and a `source` tag naming the site. A tab can also be given tags of its own, of any type, which everything it downloads gets as well.
+- Something that is several files (a Pinterest pin with several images) also becomes a `set` holding them in order. The set is not listed in the tab; its files are.
+- Boards and sections do not become collections: what is downloaded is flat.
+- Nothing else is taken from the site: titles and descriptions are left empty.
+- A file the library already has is not stored twice. It comes out of the trash if it was there, is listed in the tab, and is given the source URL and the tags like the rest.
+- A tab remembers what it has downloaded, by address, and skips it when it is met again, without fetching it. Downloading the same board a second time in the same tab therefore fetches only what is new, and something deleted from the library does not come back. The list can be read, and entries forgotten, one or all. It belongs to the tab: another tab of the same downloader starts with none.
+- Some sites show more to someone logged in. A downloader can read the site's login from a browser when asked to, and the server keeps it for later downloads, for every tab of that downloader, until told to forget it. It is kept in a file under the data directory that only the user can read; it is not encrypted.
+- A download runs on the server, one per tab, and goes on while another tab is looked at or the page is reloaded. It can be cancelled. Closing its tab stops it.
 
 ## Deleting
 

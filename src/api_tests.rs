@@ -824,9 +824,14 @@ echo '{"event":"error","message":"one thing could not be had"}'
 
 impl Api {
     fn fake_downloader(&self) {
-        let folder = self.state.downloaders.join("fake");
+        self.downloader("fake", FAKE_DOWNLOADER);
+    }
+
+    /// Makes a downloader of a shell script.
+    fn downloader(&self, name: &str, script: &str) {
+        let folder = self.state.downloaders.join(name);
         std::fs::create_dir_all(&folder).unwrap();
-        std::fs::write(folder.join("fake.sh"), FAKE_DOWNLOADER).unwrap();
+        std::fs::write(folder.join("fake.sh"), script).unwrap();
         let manifest = json!({
             "title": "Fake",
             "source": "fakesite",
@@ -904,6 +909,10 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     api.refused(&format!("{path}/start"), json!({ "url": "not an address" }))
         .await;
 
+    let stale = json!({ "query": "", "ids": [], "custom": false });
+    api.ok("PUT", &format!("/tabs/{tab}/view"), Some(stale))
+        .await;
+
     // Everything comes in, with where it is from and the tab's tags.
     let job = api.download(tab, "https://example.test/board").await;
     assert_eq!(job["outcome"], "done");
@@ -923,6 +932,8 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     assert_eq!(job["errors"], json!(["one thing could not be had"]));
     let files = api.in_tab(tab).await;
     assert_eq!(files.len(), 3);
+    // A view saved before the files came does not outlast them.
+    assert_eq!(api.get(&format!("/tabs/{tab}/view")).await, Value::Null);
     let all = api.metadata(&files).await;
     assert_eq!(carried(&all, "source"), [tag("fakesite", 3)]);
     assert_eq!(carried(&all, "tags"), [tag("wall:paper", 3)]);
@@ -981,4 +992,53 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     api.ok("DELETE", &format!("/tabs/{tab}"), None).await;
     assert_eq!(api.call("GET", &path, None).await.0, StatusCode::NOT_FOUND);
     assert_eq!(api.found("kind=file").await, files);
+}
+
+#[tokio::test]
+async fn a_download_can_be_cancelled_and_can_fail() {
+    let api = Api::new();
+    api.downloader(
+        "slow",
+        "cat > /dev/null; echo '{\"event\":\"found\",\"total\":9}'; sleep 30",
+    );
+    api.downloader(
+        "broken",
+        "cat > /dev/null; echo 'the site said no' >&2; exit 3",
+    );
+    let new = async |name: &str| {
+        let tab = json!({ "kind": "download", "downloader": name });
+        api.post("/tabs", tab).await["id"].as_i64().unwrap()
+    };
+    let job = async |tab: i64| api.get(&format!("/tabs/{tab}/download")).await["job"].clone();
+    let ended = async |tab: i64| {
+        for _ in 0..200 {
+            let job = job(tab).await;
+            if job["running"] == false {
+                return job;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        panic!("the download never ended");
+    };
+    let start = json!({ "url": "https://example.test/" });
+
+    let slow = new("slow").await;
+    api.post(&format!("/tabs/{slow}/download/start"), start.clone())
+        .await;
+    // One at a time per tab.
+    api.refused(&format!("/tabs/{slow}/download/start"), start.clone())
+        .await;
+    while job(slow).await["found"] != 9 {
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    api.post(&format!("/tabs/{slow}/download/cancel"), json!({}))
+        .await;
+    assert_eq!(ended(slow).await["outcome"], "cancelled");
+
+    // A script that fails says why on its last line.
+    let broken = new("broken").await;
+    api.post(&format!("/tabs/{broken}/download/start"), start)
+        .await;
+    assert_eq!(ended(broken).await["outcome"], "the site said no");
+    assert_eq!(std::fs::read_dir(&api.state.tmp).unwrap().count(), 0);
 }

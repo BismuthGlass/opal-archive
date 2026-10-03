@@ -2090,3 +2090,176 @@ kbd {
   font-family: var(--mono);
   overflow-wrap: anywhere;
 }
+
+/* The panel at the top of a download tab. */
+
+.download-panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 12px 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.download-panel p {
+  margin: 0;
+}
+
+.download-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.download-panel input[type="text"],
+.download-panel select {
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.download-url {
+  flex: 1;
+  min-width: 0;
+}
+
+.download-panel button:not(.primary, .link, .chip-remove) {
+  padding: 4px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.download-panel button.primary {
+  padding: 5px 14px;
+}
+
+.download-panel button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.download-panel .icon-button {
+  align-self: auto;
+  margin: 0;
+  padding: 3px 5px;
+}
+
+.download-panel .icon-button[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.download-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.download-progress progress {
+  width: 100%;
+  height: 6px;
+}
+
+.download-progress summary {
+  color: var(--danger-text);
+  cursor: pointer;
+}
+
+.download-errors {
+  max-height: 120px;
+  margin: 4px 0 0;
+  padding-left: 18px;
+  overflow-y: auto;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.download-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.download-option {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.download-line .label {
+  margin-bottom: 3px;
+}
+
+.download-line .chips {
+  align-items: center;
+}
+
+.download-line .chip.tinted .chip-label:hover {
+  text-decoration: none;
+}
+
+.download-line .chip.tinted .chip-label:only-child {
+  padding-right: 8px;
+}
+
+.download-panel input.download-tag {
+  width: 22ch;
+  padding: 1px 8px;
+  border-radius: 12px;
+}
+
+.download-login {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+}
+
+/* What a download tab has seen, in its modal. */
+
+.seen-list {
+  flex: 1;
+  min-height: 0;
+  margin: 8px 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.seen-list > li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 3px 8px;
+}
+
+.seen-list > li + li {
+  border-top: 1px solid var(--border);
+}
+
+.seen-list a {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seen-date {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

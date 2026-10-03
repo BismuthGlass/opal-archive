@@ -52,10 +52,14 @@ export const load = () =>
   });
 
 /** Opens a tab and switches to it. Resolves to the tab, if it was created. */
-export async function open(kind: TabKind, query = ""): Promise<Tab | undefined> {
+export async function open(
+  kind: TabKind,
+  query = "",
+  downloader?: string,
+): Promise<Tab | undefined> {
   let tab: Tab | undefined;
   await guard(async () => {
-    tab = await api.createTab(kind, query);
+    tab = await api.createTab(kind, query, undefined, downloader);
     setTabs(tabs.length, tab);
     select(tab.id);
   });

@@ -1,17 +1,20 @@
-import { createSignal, For, Show } from "solid-js";
+import { createResource, createSignal, For, Show } from "solid-js";
+import * as api from "../api";
 import type { Tab, TabKind } from "../api";
+import { fieldLabel } from "../format";
 import { activeId, close, move, open, rename, saveOrder, select, tabs } from "../tabs";
 
 const ICONS: Record<TabKind, IconName> = {
   gallery: "photo-library-outline",
   upload: "upload",
   collection: "folder-outline",
+  download: "download",
 };
 import type { IconName } from "./Icon";
 import Icon from "./Icon";
 
-/** The kinds of tab the + button offers. A collection tab is opened from
-    its collection instead. */
+/** The kinds of tab the + button offers, before one for each downloader.
+    A collection tab is opened from its collection instead. */
 const KINDS: { kind: TabKind; label: string }[] = [
   { kind: "gallery", label: "Gallery" },
   { kind: "upload", label: "Upload" },
@@ -21,13 +24,20 @@ const KINDS: { kind: TabKind; label: string }[] = [
 function described(tab: Tab) {
   if (tab.kind === "gallery") return tab.query || "Gallery";
   const what =
-    tab.kind === "upload" ? "Upload" : tab.collection?.title || `Collection #${tab.collection?.id}`;
+    tab.kind === "upload"
+      ? "Upload"
+      : tab.kind === "download"
+        ? fieldLabel(tab.downloader ?? "download")
+        : tab.collection?.title || `Collection #${tab.collection?.id}`;
   return tab.query ? `${what}: ${tab.query}` : what;
 }
 
 /** The + button, and the menu of tab kinds it opens. */
 function NewTab() {
   const [menu, setMenu] = createSignal(false);
+  // Read each time the menu opens: a downloader is a folder on the server,
+  // and one may have been added.
+  const [downloaders] = createResource(menu, (open) => (open ? api.listDownloaders() : []));
   return (
     <div
       class="tab-new"
@@ -67,6 +77,26 @@ function NewTab() {
                 >
                   <Icon name={ICONS[entry.kind]} />
                   {entry.label}
+                </button>
+              </li>
+            )}
+          </For>
+          <Show when={(downloaders.latest ?? []).length > 0}>
+            <li class="menu-divider" role="separator" />
+          </Show>
+          <For each={downloaders.latest ?? []}>
+            {(downloader) => (
+              <li role="none">
+                <button
+                  role="menuitem"
+                  title={`Download from ${downloader.title} into a tab`}
+                  onClick={() => {
+                    setMenu(false);
+                    open("download", "", downloader.name);
+                  }}
+                >
+                  <Icon name={ICONS.download} />
+                  {downloader.title}
                 </button>
               </li>
             )}

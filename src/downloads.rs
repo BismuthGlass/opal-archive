@@ -535,7 +535,7 @@ async fn start(
         status.running = false;
         status.outcome = Some(outcome);
     });
-    Ok(StatusCode::ACCEPTED)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn stop(State(state): State<AppState>, Path(tab): Path<i64>) -> StatusCode {
@@ -712,6 +712,11 @@ impl Download {
              SELECT id, ?2 FROM tab WHERE id = ?1",
             params![self.tab, key],
         )?;
+        if !ids.is_empty() {
+            // The view saved for the tab is of what it held before; without
+            // it, the tab shows what it holds now when next opened.
+            tx.execute("DELETE FROM tab_view WHERE tab_id = ?1", [self.tab])?;
+        }
         tx.commit()?;
         Ok((added, existing))
     }

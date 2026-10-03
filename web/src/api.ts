@@ -1,4 +1,4 @@
-export type TabKind = "gallery" | "upload" | "collection";
+export type TabKind = "gallery" | "upload" | "collection" | "download";
 
 export type Tab = {
   id: number;
@@ -9,6 +9,52 @@ export type Tab = {
   name: string;
   /** The collection a collection tab shows. */
   collection: { id: number; title: string | null; ordered: boolean } | null;
+  /** The downloader a download tab uses, by name. */
+  downloader: string | null;
+};
+
+/** A downloader, as its manifest describes it. */
+export type Downloader = {
+  name: string;
+  title: string;
+  /** The `source` tag given to everything it downloads. */
+  source: string;
+  url_hint: string;
+  /** Present if it can use a login read from one of these browsers. */
+  cookies: { browsers: string[] } | null;
+  /** Switches set per tab. */
+  options: { key: string; label: string; default: boolean }[];
+  /** When its login was saved, in seconds since 1970; `null` if none is. */
+  login_saved: number | null;
+};
+
+/** How a download is going, or went. */
+export type DownloadJob = {
+  running: boolean;
+  url: string;
+  /** Things found to download; then how many were fetched, skipped, failed. */
+  found: number;
+  downloaded: number;
+  skipped: number;
+  failed: number;
+  /** Files new to the library, and files it already had. */
+  added: number;
+  existing: number;
+  message: string;
+  errors: string[];
+  /** Once ended: `done`, `cancelled`, or what stopped it. */
+  outcome: string | null;
+};
+
+/** Everything a download tab's panel shows. */
+export type DownloadState = {
+  downloader: Downloader;
+  options: Record<string, boolean>;
+  /** Tags given to everything downloaded: tag field to values. */
+  tags: Record<string, string[]>;
+  /** How many things the tab has downloaded before, and will skip. */
+  seen: number;
+  job: DownloadJob | null;
 };
 
 /** Files and collections not in the trash, and how many entities are in it. */
@@ -142,8 +188,35 @@ export const changeSettings = (changes: Record<string, unknown>) =>
 export const getStats = () => request<Stats>("GET", "/stats");
 
 export const listTabs = () => request<Tab[]>("GET", "/tabs");
-export const createTab = (kind: TabKind, query: string, collection?: number) =>
-  request<Tab>("POST", "/tabs", { kind, query, collection });
+export const createTab = (
+  kind: TabKind,
+  query: string,
+  collection?: number,
+  downloader?: string,
+) => request<Tab>("POST", "/tabs", { kind, query, collection, downloader });
+
+export const listDownloaders = () => request<Downloader[]>("GET", "/downloaders");
+/** Reads the downloader's login from a browser and keeps it. */
+export const takeLogin = (name: string, browser: string) =>
+  request<Downloader>("POST", `/downloaders/${name}/cookies`, { browser });
+export const forgetLogin = (name: string) =>
+  request<Downloader>("DELETE", `/downloaders/${name}/cookies`);
+export const getDownload = (tab: number) =>
+  request<DownloadState>("GET", `/tabs/${tab}/download`);
+export const configureDownload = (
+  tab: number,
+  changes: { options?: Record<string, boolean>; tags?: Record<string, string[]> },
+) => request<void>("PATCH", `/tabs/${tab}/download`, changes);
+export const startDownload = (tab: number, url: string) =>
+  request<void>("POST", `/tabs/${tab}/download/start`, { url });
+export const cancelDownload = (tab: number) =>
+  request<void>("POST", `/tabs/${tab}/download/cancel`);
+/** What the tab has downloaded before, newest first. */
+export const seenDownloads = (tab: number) =>
+  request<{ key: string; date: string }[]>("GET", `/tabs/${tab}/download/seen`);
+/** Forgets the given keys, or all of them, so they are downloaded again. */
+export const forgetSeen = (tab: number, keys?: string[]) =>
+  request<{ forgotten: number }>("POST", `/tabs/${tab}/download/seen/forget`, { keys });
 export const updateTab = (id: number, changes: { query?: string; name?: string }) =>
   request<Tab>("PATCH", `/tabs/${id}`, changes);
 /** The snapshot of its search that a tab shows. */

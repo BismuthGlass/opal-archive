@@ -16,6 +16,9 @@ the search language.
     length, video thumbnails and audio cover art
   - poppler (`pdfinfo` and `pdftoppm`), for PDF page counts and thumbnails
 
+- For the downloaders, `uv` (which runs their Python scripts, fetching what
+  they need the first time) and `ffmpeg` for some videos
+
 If one of these is missing, uploads still succeed; the attributes or thumbnail
 it would have provided are left out and a line is logged.
 
@@ -33,11 +36,15 @@ SQLite is compiled into the server, so no system install is needed.
 - `src/` – the Rust server and API
 - `migrations/` – database schema, applied in order on startup
 - `web/` – the SolidJS frontend
+- `downloaders/` – one folder per downloader: a manifest and a script that
+  fetches files from a website. See `downloaders/README.md` for how to add one
 - `data/` – created at runtime:
   - `tagutils.db` – the database
   - `storage/` – uploaded files, named `<sha256>.<extension>`
   - `thumbnails/` – one `<sha256>.jpg` per file that has a thumbnail
-  - `tmp/` – uploads in progress
+  - `tmp/` – uploads and downloads in progress
+  - `cookies/` – logins saved for downloaders, one cookie file each,
+    readable only by the user. They are not encrypted
 
 ## Running
 
@@ -66,6 +73,7 @@ query language, and `src/api_tests.rs` the API, through its router.
 | `TAGUTILS_ADDR` | `127.0.0.1:7878` | Address the server listens on    |
 | `TAGUTILS_DATA` | `data`           | Database and internal storage    |
 | `TAGUTILS_WEB`  | `web/dist`       | Built frontend to serve          |
+| `TAGUTILS_DOWNLOADERS` | `downloaders` | The folder of downloaders     |
 
 There is no authentication, so the server listens on localhost only by
 default.
@@ -106,10 +114,15 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `POST /collections/{id}/members` | `{add, remove}` → change membership                            |
 | `PUT /collections/{id}/order`    | `{ids}` → set member positions; members left out follow        |
 | `POST /export`                   | Form field `ids=1,2,3` → zip of those files                    |
-| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, collection}` → new tab, `kind` being `gallery`, `upload` or `collection` |
+| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, collection, downloader}` → new tab, `kind` being `gallery`, `upload`, `collection` or `download` |
 | `PATCH /tabs/{id}`, `DELETE …`   | `{query, name}`, either or both → change a tab; close a tab     |
 | `PUT /tabs/order`                | `{ids}` → put the tabs in that order                           |
 | `GET /tabs/{id}/view`, `PUT …`   | The snapshot a tab shows: `{query, ids, custom}`, or `null` if none is saved |
+| `GET /downloaders`               | The downloaders, as their manifests describe them, with when each one's login was saved |
+| `POST /downloaders/{name}/cookies`, `DELETE …` | `{browser}` → read the site's login from that browser and keep it; forget it |
+| `GET /tabs/{id}/download`, `PATCH …` | A download tab's downloader, options, base tags, count of things seen and its download's progress; `{options, tags}`, either or both → set them |
+| `POST /tabs/{id}/download/start`, `…/cancel` | `{url}` → start downloading it into the tab; stop the download running |
+| `GET /tabs/{id}/download/seen`, `POST …/seen/forget` | What the tab has downloaded before; `{keys}` → forget those, or all with no `keys` |
 | `GET /settings`, `PATCH /settings` | Application settings as one JSON object; PATCH sets the keys given, `null` removing one |
 | `GET /stats`, `GET /health`      | Library counts, with how many entities are trashed; liveness and schema version |
 
