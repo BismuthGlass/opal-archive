@@ -160,7 +160,7 @@ export default function CollectionDialog(props: {
             Title
             <input
               type="text"
-              placeholder="Leave empty to name it after its members"
+              placeholder="Leave empty to name it after its type"
               value={title()}
               onInput={(e) => setTitle(e.currentTarget.value)}
             />

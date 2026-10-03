@@ -92,7 +92,7 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `POST /tags/rename`              | `{field, from, to}` → rename a tag, merging it into `to` if that exists. With `namespace: true`, rename a namespace on every tag under it; an empty `to` removes it |
 | `POST /tags/alias`               | `{field, alias, target}` → make `alias` stand for `target`; an empty `target` removes the alias |
 | `POST /tags/aliases/apply`       | Replace aliases still on entities with the tags they stand for |
-| `POST /collections`              | `{collection_type, title, members, ordered, parent}` → new collection, put inside `parent` if given. Without a title it is named after its members |
+| `POST /collections`              | `{collection_type, title, members, ordered, parent}` → new collection, put inside `parent` if given. Without a title it is named after its type (`Sequence`, `User Collection`…) |
 | `POST /collections/{id}/members` | `{add, remove}` → change membership                            |
 | `PUT /collections/{id}/order`    | `{ids}` → set member positions; members left out follow        |
 | `POST /export`                   | Form field `ids=1,2,3` → zip of those files                    |
