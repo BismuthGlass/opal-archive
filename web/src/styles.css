@@ -1,0 +1,936 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f4f4f6;
+  --surface: #ffffff;
+  --border: #d8d8de;
+  --text: #1b1b1f;
+  --muted: #6b6b76;
+  --accent: #3b5bdb;
+  --on-accent: #ffffff;
+  --danger-bg: #ffe3e3;
+  --danger-text: #a61e1e;
+  --star: #e8a400;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131315;
+    --surface: #1c1c20;
+    --border: #2f2f36;
+    --text: #e8e8ec;
+    --muted: #9a9aa6;
+    --accent: #8098f9;
+    --on-accent: #10101a;
+    --danger-bg: #4a1c1c;
+    --danger-text: #ffc9c9;
+    --star: #f5c542;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: var(--accent);
+}
+
+.icon {
+  flex: none;
+  /* Clicks land on the button around the icon, never on the drawing. */
+  pointer-events: none;
+  width: 1.4em;
+  height: 1.4em;
+  vertical-align: -0.35em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+/* Top bar: brand and the tab strip. */
+
+.topbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 6px 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  padding-bottom: 7px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.tabs {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  display: flex;
+  flex: 0 1 200px;
+  min-width: 90px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: var(--muted);
+}
+
+.tab:hover {
+  background: var(--surface);
+}
+
+.tab.active {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  /* Cover the top bar's bottom border so the tab joins the query bar. */
+  margin-bottom: -1px;
+  padding-bottom: 1px;
+}
+
+.tab button,
+.tab-new {
+  border: none;
+  background: none;
+}
+
+.tab-label {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 4px 6px 10px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close {
+  padding: 0 6px;
+  color: var(--muted);
+  border-radius: 4px;
+}
+
+.tab-close:hover,
+.tab-new:hover {
+  color: var(--text);
+}
+
+.tab-new {
+  flex: none;
+  padding: 4px 8px;
+  color: var(--muted);
+}
+
+button.primary {
+  padding: 6px 14px;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  border-radius: 6px;
+}
+
+.banner {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+/* Workspace: results grid, with the side panel beside it. */
+
+.workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.results {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.empty {
+  position: absolute;
+  inset: 20vh 0 auto;
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+}
+
+.grid {
+  position: relative;
+}
+
+.tile {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 6px;
+  cursor: default;
+  user-select: none;
+}
+
+.thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.thumb img {
+  /* Positioned rather than sized by percentage: a percentage height does not
+     resolve inside the auto-sized grid row, which let tall images overflow
+     and get clipped. */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.placeholder {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 0 5px;
+  font-size: 11px;
+  color: #fff;
+  background: rgb(0 0 0 / 0.65);
+  border-radius: 4px;
+}
+
+/* A second outline suggests a stack of items. */
+.tile.collection .thumb {
+  box-shadow:
+    3px 3px 0 var(--bg),
+    4px 4px 0 var(--border);
+}
+
+.tile.selected .thumb {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.tile-title {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 12px 6px 3px;
+  overflow: hidden;
+  font-size: 12px;
+  color: #fff;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: linear-gradient(transparent, rgb(0 0 0 / 0.7));
+}
+
+/* Side panel: a column of modules to the left of the results. */
+
+.panel {
+  flex: none;
+  width: 340px;
+  overflow-y: auto;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.module {
+  border-bottom: 1px solid var(--border);
+}
+
+.module > header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 12px;
+}
+
+.module-toggle {
+  flex: 1;
+  padding: 8px 12px;
+  font-weight: 600;
+  text-align: left;
+  background: none;
+  border: none;
+}
+
+.chevron {
+  display: inline-block;
+  margin: 0 2px 0 -6px;
+  color: var(--muted);
+  transition: transform 0.1s;
+}
+
+.module.open .chevron {
+  transform: rotate(90deg);
+}
+
+.module-body {
+  padding: 0 12px 12px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Search module. */
+
+.query {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.query textarea {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  overflow: hidden;
+  font-family: var(--mono);
+  resize: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.query .form-error {
+  width: 100%;
+  margin: 0;
+}
+
+/* Selection module. */
+
+/* Score. */
+
+.stars {
+  display: flex;
+  align-items: center;
+  margin: 0 0 8px -3px;
+}
+
+.stars button {
+  padding: 0 1px;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: none;
+}
+
+.stars button.filled {
+  color: var(--star);
+}
+
+.stars-note {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.module .actions button {
+  padding: 4px 10px 4px 6px;
+}
+
+.actions button,
+.dialog button:not(.primary),
+.upload-button,
+.panel-toggle {
+  padding: 4px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.actions .danger {
+  color: var(--danger-text);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 10px;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* An editable row: its value is a button that turns into an input. */
+.detail {
+  display: flex;
+}
+
+.detail-value {
+  flex: 1;
+  min-width: 0;
+  margin: -1px -5px;
+  padding: 1px 5px;
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: pre-wrap;
+  cursor: text;
+  background: none;
+  border: none;
+  border-radius: 4px;
+}
+
+.detail-value:hover {
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.detail-value.unset {
+  color: var(--muted);
+}
+
+/* "Add field" and its menu. */
+
+.add-field {
+  position: relative;
+  margin: -6px 0 12px -4px;
+  font-size: 13px;
+}
+
+.add-field .suggestions {
+  right: auto;
+  min-width: 160px;
+}
+
+.add-field .suggestions li {
+  display: block;
+  padding: 0;
+}
+
+.add-field .suggestions button {
+  width: 100%;
+  padding: 3px 8px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+}
+
+.detail input,
+.detail select,
+.detail textarea {
+  width: 100%;
+  padding: 1px 6px;
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+}
+
+.detail textarea {
+  display: block;
+  resize: vertical;
+}
+
+.field {
+  display: block;
+  margin-top: 10px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.field input[type="text"],
+.field select,
+.field textarea,
+.dialog input[type="text"],
+.dialog select {
+  width: 100%;
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.field textarea {
+  display: block;
+  resize: vertical;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+/* The input sits above its chips, so it stays put as values come and go. */
+.suggest + .chips {
+  margin-top: 6px;
+}
+
+/* A chip has three parts in three colours: the value, how many of the
+   selection carry it, and the buttons. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.chip.partial {
+  border-style: dashed;
+}
+
+.chip button {
+  background: none;
+  border: none;
+}
+
+.chip-label {
+  min-width: 0;
+  padding: 1px 4px 1px 8px;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip-label:hover {
+  text-decoration: underline;
+}
+
+.chip-count {
+  padding-right: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.chip-actions {
+  display: inline-flex;
+  flex: none;
+  margin-left: 2px;
+  border-left: 1px solid var(--border);
+}
+
+.chip-actions button {
+  padding: 1px 3px;
+  line-height: 1;
+}
+
+.chip-actions button:last-child {
+  border-radius: 0 12px 12px 0;
+}
+
+.chip-add {
+  color: var(--accent);
+}
+
+.chip-remove {
+  color: var(--muted);
+}
+
+.chip-add:hover {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.chip-remove:hover {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+/* Suggestions under a tag input. */
+
+.suggest {
+  position: relative;
+}
+
+.suggestions {
+  position: absolute;
+  inset: calc(100% + 2px) 0 auto;
+  z-index: 2;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+}
+
+.suggestions li {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 3px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.suggestions li:hover,
+.suggestions li.active {
+  background: var(--bg);
+}
+
+.suggestions li.active {
+  outline: 1px solid var(--accent);
+}
+
+.suggestion-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.none {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.form-error {
+  margin: 8px 0;
+  padding: 6px 8px;
+  font-size: 12px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border-radius: 6px;
+}
+
+.form-error.dismissible {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.form-error button {
+  flex: none;
+  padding: 0;
+  line-height: 1;
+  color: inherit;
+  background: none;
+  border: none;
+}
+
+.link {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  /* Too narrow for a column: the panel slides over the grid instead. */
+  .workspace {
+    position: relative;
+  }
+
+  .panel {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 3;
+    width: min(340px, 88vw);
+    box-shadow: 4px 0 16px rgb(0 0 0 / 0.15);
+  }
+}
+
+/* Status bar. */
+
+.statusbar {
+  display: flex;
+  gap: 16px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+}
+
+.statusbar .library {
+  margin-left: auto;
+}
+
+/* Viewer. */
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  color: #eee;
+  background: rgb(0 0 0 / 0.92);
+}
+
+.viewer header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.viewer-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-count {
+  color: #aaa;
+}
+
+.viewer a {
+  color: #b8c5ff;
+}
+
+.viewer button {
+  color: inherit;
+  background: none;
+  border: none;
+}
+
+.viewer header button {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.viewer-body {
+  display: grid;
+  /* One cell with a definite size, so the media's percentage limits resolve
+     against it and tall images shrink to fit instead of overflowing. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  flex: 1;
+  place-items: center;
+  min-height: 0;
+  padding: 0 48px 16px;
+}
+
+.viewer-body img,
+.viewer-body video {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.viewer-body iframe {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  border: none;
+}
+
+.viewer-note {
+  color: #ccc;
+}
+
+.viewer-step {
+  position: absolute;
+  top: 50%;
+  width: 44px;
+  height: 88px;
+  margin-top: -44px;
+  font-size: 32px;
+}
+
+.viewer-step.previous {
+  left: 0;
+}
+
+.viewer-step.next {
+  right: 0;
+}
+
+/* Dialog. */
+
+.dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 16px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.4);
+}
+
+.dialog h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.dialog form > * + * {
+  margin-top: 10px;
+}
+
+.segmented {
+  display: flex;
+  gap: 16px;
+}
+
+.stacked {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.stacked input,
+.stacked select {
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Upload. */
+
+.upload-button,
+.panel-toggle {
+  align-self: center;
+  margin-bottom: 4px;
+}
+
+.topbar .panel-toggle {
+  padding: 3px 5px;
+}
+
+.drop-overlay {
+  position: fixed;
+  inset: 8px;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  /* Lets drag events reach the window underneath, so the overlay does not
+     itself trigger enter/leave. */
+  pointer-events: none;
+}
+
+.upload-panel {
+  position: fixed;
+  right: 12px;
+  bottom: 36px;
+  z-index: 5;
+  width: min(340px, calc(100vw - 24px));
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+}
+
+.upload-panel header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.upload-panel progress {
+  width: 100%;
+  margin-top: 6px;
+  accent-color: var(--accent);
+}
+
+.upload-panel p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.upload-failures {
+  max-height: 140px;
+  margin: 6px 0 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  font-size: 12px;
+  color: var(--danger-text);
+}
+
+.upload-failures .name {
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}

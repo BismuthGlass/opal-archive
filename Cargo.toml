@@ -1,0 +1,18 @@
+[package]
+name = "tagutils"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.9"
+bytes = "1.12.1"
+futures-core = "0.3.34"
+http-body-util = "0.1.5"
+rusqlite = { version = "0.40.2", features = ["bundled", "functions"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "0.11.0"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "net", "fs", "io-util", "process", "sync"] }
+tower = { version = "0.5.3", features = ["util"] }
+tower-http = { version = "0.7.1", features = ["fs"] }
+zip = { version = "8.6.0", default-features = false }
