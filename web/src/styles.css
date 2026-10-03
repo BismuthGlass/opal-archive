@@ -849,7 +849,10 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
   border-color: currentColor;
 }
 
+/* Everything in the pill takes the type's text colour, whether its label
+   is a button or, as in the quick tagger, plain text. */
 .chip.tinted button,
+.chip.tinted .chip-label,
 .chip.tinted .chip-count {
   color: inherit;
 }
