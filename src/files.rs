@@ -237,7 +237,12 @@ async fn upload(
     {
         let conn = state.db.lock().unwrap();
         if let Some(existing) = file_by_hash(&conn, &hash)? {
-            // The existing file is left exactly as it is, trashed or not.
+            // Uploading a file again takes it back out of the trash. Nothing
+            // else about the existing file changes.
+            conn.execute(
+                "UPDATE entity SET trashed = 0 WHERE id = ?1",
+                [existing.id],
+            )?;
             record(&conn, params.tab, &existing)?;
             return Ok((StatusCode::OK, Json(existing)));
         }
