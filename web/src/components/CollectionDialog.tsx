@@ -25,6 +25,14 @@ export default function CollectionDialog(props: {
   const [target, setTarget] = createSignal<number | null>(null);
   const [error, setError] = createSignal<string | null>(null);
 
+  // The collections some of the selection is in already: the likeliest
+  // ones to want the rest of it.
+  const [related] = createResource(
+    () => (mode() === "existing" ? props.ids : null),
+    async (ids) => (await api.getMetadata(ids)).memberships,
+  );
+  const relatedIds = () => new Set((related() ?? []).map((collection) => collection.id));
+
   const [existing] = createResource(
     () => (mode() === "existing" ? filter() : null),
     async (text) => {
@@ -83,32 +91,79 @@ export default function CollectionDialog(props: {
           when={mode() === "new"}
           fallback={
             <>
+              <Show when={(related() ?? []).length > 0}>
+                <span class="stacked">
+                  {props.ids.length === 1 ? "Already in" : "Already holding some of these"}
+                </span>
+                <ul class="pick-list" role="listbox" aria-label="Collections of the selection">
+                  <For each={related()}>
+                    {(collection) => (
+                      <li>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={target() === collection.id}
+                          // Nothing to add to one that has them all.
+                          disabled={collection.count === props.ids.length}
+                          onClick={() => setTarget(collection.id)}
+                        >
+                          <span class="pick-name">
+                            {collection.title || `#${collection.id}`}
+                          </span>
+                          <span class="pick-note">
+                            {collection.collection_type},{" "}
+                            {collection.count === props.ids.length
+                              ? props.ids.length === 1
+                                ? "already in it"
+                                : "has them all"
+                              : `has ${collection.count} of ${props.ids.length}`}
+                          </span>
+                        </button>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+                <span class="stacked">Other collections</span>
+              </Show>
               <input
                 type="text"
                 placeholder="Filter by title"
                 value={filter()}
                 onInput={(e) => setFilter(e.currentTarget.value)}
               />
-              <select
-                size={8}
-                aria-label="Collection"
-                onChange={(e) => setTarget(Number(e.currentTarget.value))}
-              >
-                <For each={existing()}>
+              <ul class="pick-list tall" role="listbox" aria-label="Other collections">
+                <For
+                  each={(existing() ?? []).filter((item) => !relatedIds().has(item.id))}
+                  fallback={<li class="hint">No other collections{filter().trim() ? " match" : ""}.</li>}
+                >
                   {(item) => (
-                    <option value={item.id}>
-                      {item.title || `#${item.id}`} ({item.collection_type},{" "}
-                      {plural(item.member_count ?? 0, "item")})
-                    </option>
+                    <li>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={target() === item.id}
+                        onClick={() => setTarget(item.id)}
+                      >
+                        <span class="pick-name">{item.title || `#${item.id}`}</span>
+                        <span class="pick-note">
+                          {item.collection_type}, {plural(item.member_count ?? 0, "item")}
+                        </span>
+                      </button>
+                    </li>
                   )}
                 </For>
-              </select>
+              </ul>
             </>
           }
         >
           <label class="stacked">
             Title
-            <input type="text" value={title()} onInput={(e) => setTitle(e.currentTarget.value)} />
+            <input
+              type="text"
+              placeholder="Leave empty to name it after its members"
+              value={title()}
+              onInput={(e) => setTitle(e.currentTarget.value)}
+            />
           </label>
           <label class="stacked">
             Type

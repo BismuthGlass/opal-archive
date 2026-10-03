@@ -95,6 +95,61 @@ fn add_members(conn: &Connection, collection: i64, members: &[i64]) -> Result<()
     Ok(())
 }
 
+/// What a member goes by: its title, or for a file without one its
+/// filename less the extension.
+fn member_name(conn: &Connection, id: i64) -> rusqlite::Result<Option<String>> {
+    let name: Option<(Option<String>, Option<String>)> = conn
+        .query_row(
+            "SELECT e.title, f.original_name FROM entity e
+             LEFT JOIN file f ON f.entity_id = e.id WHERE e.id = ?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    Ok(name.and_then(|(title, file)| {
+        title.or_else(|| {
+            file.map(|file| match file.rsplit_once('.') {
+                Some((stem, _)) if !stem.is_empty() => stem.to_string(),
+                _ => file,
+            })
+        })
+    }))
+}
+
+/// A name for a collection that was given none, from what it holds: what
+/// its members' names have in common at the start (`holiday_01`,
+/// `holiday_02` make `holiday`), or failing that the first member's name.
+fn default_title(conn: &Connection, members: &[i64]) -> rusqlite::Result<Option<String>> {
+    let mut names = Vec::new();
+    for member in members {
+        names.extend(member_name(conn, *member)?);
+    }
+    let Some(first) = names.first() else {
+        return Ok(None);
+    };
+    let mut shared = first.chars().count();
+    for name in &names[1..] {
+        let same = first
+            .chars()
+            .zip(name.chars())
+            .take_while(|(a, b)| a.to_lowercase().eq(b.to_lowercase()))
+            .count();
+        shared = shared.min(same);
+    }
+    // Numbering and the punctuation around it are what tells the members
+    // apart, not part of what they share.
+    let prefix: String = first.chars().take(shared).collect();
+    let prefix = prefix.trim_end_matches(|c: char| {
+        c.is_ascii_digit() || c.is_whitespace() || "-_.#([{".contains(c)
+    });
+    let title = if names.len() > 1 && prefix.chars().count() >= 3 {
+        prefix
+    } else {
+        first.trim()
+    };
+    Ok((!title.is_empty()).then(|| title.to_string()))
+}
+
 async fn create(
     State(state): State<AppState>,
     Json(input): Json<NewCollection>,
@@ -118,6 +173,16 @@ async fn create(
         [title],
     )?;
     let id = tx.last_insert_rowid();
+    if title.is_none() {
+        // No collection goes unnamed: one given no title takes it from its
+        // members, or from its type and number if they have no names.
+        let named = default_title(&tx, &input.members)?
+            .unwrap_or_else(|| format!("{} {id}", input.collection_type));
+        tx.execute(
+            "UPDATE entity SET title = ?2 WHERE id = ?1",
+            params![id, named],
+        )?;
+    }
     let ordered = input.ordered.unwrap_or(input.collection_type == "sequence");
     tx.execute(
         "INSERT INTO collection (entity_id, collection_type, ordered) VALUES (?1, ?2, ?3)",

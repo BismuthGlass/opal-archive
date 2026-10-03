@@ -1947,6 +1947,61 @@ kbd {
   margin-top: 10px;
 }
 
+/* A list to pick one thing from, as in the collection dialog. */
+.pick-list {
+  max-height: 120px;
+  margin: 4px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.pick-list.tall {
+  height: 180px;
+  max-height: none;
+}
+
+.pick-list li.hint {
+  padding: 8px 10px;
+}
+
+.dialog .pick-list button:not(.primary) {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  width: 100%;
+  padding: 4px 10px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+
+.dialog .pick-list button:hover:not(:disabled) {
+  background: var(--bg);
+}
+
+.dialog .pick-list button[aria-selected="true"] {
+  background: var(--bg);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.pick-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pick-note {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .segmented {
   display: flex;
   gap: 16px;
