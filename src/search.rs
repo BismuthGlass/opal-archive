@@ -3,7 +3,7 @@ use axum::{
     extract::{Query, State},
     routing::get,
 };
-use rusqlite::{Connection, params_from_iter, types::Value};
+use rusqlite::{Connection, OptionalExtension, params_from_iter, types::Value};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -22,7 +22,8 @@ struct SearchParams {
     /// Fixes the order of `sort=random` across pages.
     #[serde(default)]
     seed: i64,
-    /// Upload tab to search within: only files uploaded through it match.
+    /// Tab to search within: an upload tab's files, or a collection tab's
+    /// members.
     tab: Option<i64>,
 }
 
@@ -48,7 +49,9 @@ pub fn router() -> Router<AppState> {
         .route("/search/ids", get(search_ids))
 }
 
-/// Compiles `source`, narrowed to the uploads of `tab` if one is given.
+/// Compiles `source`, narrowed to what `tab` holds if it is an upload or a
+/// collection tab. An ordered collection is shown in its own order unless
+/// the query asks for another.
 fn compile(
     conn: &Connection,
     source: &str,
@@ -56,12 +59,39 @@ fn compile(
     tab: Option<i64>,
 ) -> Result<query::Compiled, ApiError> {
     let mut compiled = query::compile(source, seed, &tags::aliases(conn)?)?;
-    if let Some(tab) = tab {
-        compiled.filter = format!(
-            "({}) AND e0.id IN (SELECT entity_id FROM tab_upload WHERE tab_id = ?)",
-            compiled.filter
-        );
-        compiled.filter_params.push(Value::Integer(tab));
+    let Some(tab) = tab else {
+        return Ok(compiled);
+    };
+    let scope: Option<(String, Option<i64>, Option<bool>)> = conn
+        .query_row(
+            "SELECT t.kind, t.collection_id, c.ordered FROM tab t
+             LEFT JOIN collection c ON c.entity_id = t.collection_id WHERE t.id = ?1",
+            [tab],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?;
+    match scope {
+        Some((kind, _, _)) if kind == "upload" => {
+            compiled.filter = format!(
+                "({}) AND e0.id IN (SELECT entity_id FROM tab_upload WHERE tab_id = ?)",
+                compiled.filter
+            );
+            compiled.filter_params.push(Value::Integer(tab));
+        }
+        Some((_, Some(collection), ordered)) => {
+            compiled.filter = format!(
+                "({}) AND e0.id IN (SELECT member_id FROM membership WHERE collection_id = ?)",
+                compiled.filter
+            );
+            compiled.filter_params.push(Value::Integer(collection));
+            if ordered == Some(true) && !compiled.sorted {
+                let position = "(SELECT position FROM membership
+                                 WHERE collection_id = ? AND member_id = e0.id)";
+                compiled.order = format!("{position} IS NULL, {position}, e0.id");
+                compiled.order_params = vec![Value::Integer(collection); 2];
+            }
+        }
+        _ => {}
     }
     Ok(compiled)
 }

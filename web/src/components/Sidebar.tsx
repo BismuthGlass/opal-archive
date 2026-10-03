@@ -14,7 +14,7 @@ import { AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS, FLAT_TAG_FIELDS, TAG_FIE
 import type { Changes, Metadata, Scalar } from "../api";
 import { duration, fieldLabel, fileSize, plural, tagQuery } from "../format";
 import { changed, clearSelection, dataVersion, selected } from "../search";
-import { open as openTab } from "../tabs";
+import { open as openTab, openCollection } from "../tabs";
 import Icon from "./Icon";
 
 const SCORES = [1, 2, 3, 4, 5, 6, 7];
@@ -209,6 +209,16 @@ export default function Sidebar(props: { onGroup: () => void }) {
                   required
                   onCommit={set("collection_type")}
                 />
+                <Detail
+                  label="Ordered"
+                  scalar={{
+                    value: data().ordered.value === null ? null : data().ordered.value ? "yes" : "no",
+                    mixed: data().ordered.mixed,
+                  }}
+                  options={["yes", "no"]}
+                  required
+                  onCommit={(value) => apply({ set: { ordered: value === "yes" } })}
+                />
               </Show>
 
               <Show when={single()}>
@@ -251,7 +261,7 @@ export default function Sidebar(props: { onGroup: () => void }) {
                           <dd>
                             <button
                               class="link"
-                              onClick={() => openTab("gallery", `in=${current().id} sort=position`)}
+                              onClick={() => openCollection(current().id)}
                             >
                               {plural(collection().member_count, "item")}, open
                             </button>
@@ -290,7 +300,7 @@ export default function Sidebar(props: { onGroup: () => void }) {
                       <button
                         class="chip-label"
                         title="Open this collection"
-                        onClick={() => openTab("gallery", `in=${membership.id} sort=position`)}
+                        onClick={() => openCollection(membership.id)}
                       >
                         {membership.title || `#${membership.id}`}
                       </button>

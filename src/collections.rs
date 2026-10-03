@@ -16,6 +16,10 @@ struct NewCollection {
     title: Option<String>,
     #[serde(default)]
     members: Vec<i64>,
+    /// Whether members keep a chosen order. Defaults to yes for a sequence.
+    ordered: Option<bool>,
+    /// A collection to put the new one into.
+    parent: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -38,9 +42,11 @@ pub fn router() -> Router<AppState> {
         .route("/collections/{id}/order", put(set_order))
 }
 
-fn collection_type(conn: &Connection, id: i64) -> Result<String, ApiError> {
+/// Whether the collection keeps its members in order; 404 if there is no
+/// such collection.
+fn is_ordered(conn: &Connection, id: i64) -> Result<bool, ApiError> {
     conn.query_row(
-        "SELECT collection_type FROM collection WHERE entity_id = ?1",
+        "SELECT ordered FROM collection WHERE entity_id = ?1",
         [id],
         |row| row.get(0),
     )
@@ -48,8 +54,8 @@ fn collection_type(conn: &Connection, id: i64) -> Result<String, ApiError> {
     .ok_or(ApiError::NotFound)
 }
 
-/// Adds members in the order given, skipping ones already present. In a
-/// sequence they are appended after the current last position.
+/// Adds members in the order given, skipping ones already present. In an
+/// ordered collection they are appended after the current last position.
 fn add_members(conn: &Connection, collection: i64, members: &[i64]) -> Result<(), ApiError> {
     // A collection may not contain itself, directly or through any chain of
     // collections: reject if it is among the new members or their descendants.
@@ -70,7 +76,7 @@ fn add_members(conn: &Connection, collection: i64, members: &[i64]) -> Result<()
         ));
     }
 
-    let ordered = collection_type(conn, collection)? == "sequence";
+    let ordered = is_ordered(conn, collection)?;
     let mut next: i64 = conn.query_row(
         "SELECT coalesce(max(position), -1) + 1 FROM membership WHERE collection_id = ?1",
         [collection],
@@ -112,11 +118,15 @@ async fn create(
         [title],
     )?;
     let id = tx.last_insert_rowid();
+    let ordered = input.ordered.unwrap_or(input.collection_type == "sequence");
     tx.execute(
-        "INSERT INTO collection (entity_id, collection_type) VALUES (?1, ?2)",
-        params![id, input.collection_type],
+        "INSERT INTO collection (entity_id, collection_type, ordered) VALUES (?1, ?2, ?3)",
+        params![id, input.collection_type, ordered],
     )?;
     add_members(&tx, id, &input.members)?;
+    if let Some(parent) = input.parent {
+        add_members(&tx, parent, &[id])?;
+    }
     tx.commit()?;
     Ok((StatusCode::CREATED, Json(json!({ "id": id }))))
 }
@@ -128,7 +138,7 @@ async fn change_members(
 ) -> Result<Json<Value>, ApiError> {
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
-    collection_type(&tx, id)?;
+    is_ordered(&tx, id)?;
     for member in &input.remove {
         tx.execute(
             "DELETE FROM membership WHERE collection_id = ?1 AND member_id = ?2",
@@ -145,8 +155,8 @@ async fn change_members(
     Ok(Json(json!({ "member_count": count })))
 }
 
-/// Sets member positions to the order of `ids`. Members left out keep the
-/// position they had.
+/// Sets member positions to the order of `ids`. Members left out follow
+/// them, in the order they had.
 async fn set_order(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -154,8 +164,21 @@ async fn set_order(
 ) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
-    collection_type(&tx, id)?;
-    for (position, member) in input.ids.iter().enumerate() {
+    is_ordered(&tx, id)?;
+    let rest = {
+        let mut stmt = tx.prepare(
+            "SELECT member_id FROM membership WHERE collection_id = ?1
+             ORDER BY position IS NULL, position, member_id",
+        )?;
+        stmt.query_map([id], |row| row.get::<_, i64>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    let listed: std::collections::HashSet<i64> = input.ids.iter().copied().collect();
+    let order = input
+        .ids
+        .iter()
+        .chain(rest.iter().filter(|member| !listed.contains(member)));
+    for (position, member) in order.enumerate() {
         tx.execute(
             "UPDATE membership SET position = ?1 WHERE collection_id = ?2 AND member_id = ?3",
             params![position as i64, id, member],

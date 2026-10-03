@@ -137,13 +137,14 @@ async fn entity(
     let collection = conn
         .query_row(
             "SELECT collection_type,
-                    (SELECT count(*) FROM membership WHERE collection_id = ?1)
+                    (SELECT count(*) FROM membership WHERE collection_id = ?1), ordered
              FROM collection WHERE entity_id = ?1",
             [id],
             |row| {
                 Ok(json!({
                     "collection_type": row.get::<_, String>(0)?,
                     "member_count": row.get::<_, i64>(1)?,
+                    "ordered": row.get::<_, bool>(2)?,
                 }))
             },
         )
@@ -218,6 +219,19 @@ async fn metadata(
         },
     )?;
 
+    let ordered = conn.query_row(
+        &format!(
+            "SELECT count(DISTINCT ordered), min(ordered)
+             FROM collection WHERE entity_id {IN_IDS}"
+        ),
+        [&ids],
+        |row| {
+            let distinct: i64 = row.get(0)?;
+            let value: Option<bool> = row.get(1)?;
+            Ok(json!({ "value": if distinct > 1 { None } else { value }, "mixed": distinct > 1 }))
+        },
+    )?;
+
     let mut tags: BTreeMap<String, Vec<Value>> = BTreeMap::new();
     let mut stmt = conn.prepare(&format!(
         "SELECT t.field, t.value, count(*) FROM entity_tag et JOIN tag t ON t.id = et.tag_id
@@ -254,6 +268,7 @@ async fn metadata(
         "collections": count - files,
         "scalars": scalars,
         "collection_type": collection_type,
+        "ordered": ordered,
         "tags": tags,
         "memberships": memberships,
     })))
@@ -267,6 +282,12 @@ fn scalar_value(field: &str, value: &Value) -> Result<SqlValue, ApiError> {
             "`{field}` must be {expected}"
         )))
     };
+    if field == "ordered" {
+        return match value {
+            Value::Bool(ordered) => Ok(SqlValue::Integer(*ordered as i64)),
+            _ => invalid("true or false"),
+        };
+    }
     let text = match value {
         Value::Null => return Ok(SqlValue::Null),
         Value::String(text) if text.trim().is_empty() => return Ok(SqlValue::Null),
@@ -346,6 +367,7 @@ async fn edit(
         }
         if !SCALARS.contains(&field.as_str())
             && field != "collection_type"
+            && field != "ordered"
             && field != "original_name"
         {
             return Err(ApiError::BadRequest(format!(
@@ -366,14 +388,41 @@ async fn edit(
         .map(|(field, value)| Ok((field, tags::resolve(&tx, field, value)?)))
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for (field, value) in updates {
-        let sql = if field == "collection_type" {
-            format!("UPDATE collection SET collection_type = ?2 WHERE entity_id {IN_IDS}")
+        let sql = if field == "collection_type" || field == "ordered" {
+            format!("UPDATE collection SET {field} = ?2 WHERE entity_id {IN_IDS}")
         } else if field == "original_name" {
             format!("UPDATE file SET original_name = ?2 WHERE entity_id {IN_IDS}")
         } else {
             format!("UPDATE entity SET {field} = ?2 WHERE id {IN_IDS}")
         };
         tx.execute(&sql, params![ids, value])?;
+        if field == "ordered" {
+            // Members of a collection that has just become ordered get
+            // positions, after any that already have one.
+            tx.execute(
+                &format!(
+                    "WITH numbered AS (
+                         SELECT m.collection_id, m.member_id,
+                                (SELECT coalesce(max(position), -1) FROM membership x
+                                 WHERE x.collection_id = m.collection_id)
+                                + row_number() OVER (
+                                    PARTITION BY m.collection_id ORDER BY m.member_id
+                                ) AS position
+                         FROM membership m JOIN collection c ON c.entity_id = m.collection_id
+                         WHERE m.position IS NULL AND c.ordered = 1 AND m.collection_id {IN_IDS}
+                     )
+                     UPDATE membership SET position = (
+                         SELECT n.position FROM numbered n
+                         WHERE n.collection_id = membership.collection_id
+                           AND n.member_id = membership.member_id
+                     )
+                     WHERE (collection_id, member_id) IN (
+                         SELECT collection_id, member_id FROM numbered
+                     )"
+                ),
+                [&ids],
+            )?;
+        }
     }
     for (field, value) in &added {
         tx.execute(

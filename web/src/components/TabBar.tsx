@@ -1,21 +1,28 @@
 import { createSignal, For, Show } from "solid-js";
 import type { Tab, TabKind } from "../api";
 import { activeId, close, move, open, rename, saveOrder, select, tabs } from "../tabs";
+
+const ICONS: Record<TabKind, IconName> = {
+  gallery: "photo-library-outline",
+  upload: "upload",
+  collection: "folder-outline",
+};
 import type { IconName } from "./Icon";
 import Icon from "./Icon";
 
-/** The kinds of tab on offer; add new ones here. */
-const KINDS: { kind: TabKind; label: string; icon: IconName }[] = [
-  { kind: "gallery", label: "Gallery", icon: "photo-library-outline" },
-  { kind: "upload", label: "Upload", icon: "upload" },
+/** The kinds of tab the + button offers. A collection tab is opened from
+    its collection instead. */
+const KINDS: { kind: TabKind; label: string }[] = [
+  { kind: "gallery", label: "Gallery" },
+  { kind: "upload", label: "Upload" },
 ];
-
-const iconOf = (kind: TabKind) => KINDS.find((entry) => entry.kind === kind)!.icon;
 
 /** What a tab is called when it has not been given a name. */
 function described(tab: Tab) {
-  if (tab.kind === "upload") return tab.query ? `Upload: ${tab.query}` : "Upload";
-  return tab.query || "Gallery";
+  if (tab.kind === "gallery") return tab.query || "Gallery";
+  const what =
+    tab.kind === "upload" ? "Upload" : tab.collection?.title || `Collection #${tab.collection?.id}`;
+  return tab.query ? `${what}: ${tab.query}` : what;
 }
 
 /** The + button, and the menu of tab kinds it opens. */
@@ -58,7 +65,7 @@ function NewTab() {
                     open(entry.kind);
                   }}
                 >
-                  <Icon name={entry.icon} />
+                  <Icon name={ICONS[entry.kind]} />
                   {entry.label}
                 </button>
               </li>
@@ -134,7 +141,7 @@ export default function TabBar() {
                     onClick={() => select(tab.id)}
                     onDblClick={() => setRenaming(tab.id)}
                   >
-                    <Icon name={iconOf(tab.kind)} />
+                    <Icon name={ICONS[tab.kind]} />
                     {tab.name || described(tab)}
                   </button>
                 }

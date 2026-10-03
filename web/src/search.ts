@@ -15,6 +15,8 @@ const [search, setSearch] = createStore({
   scope: null as number | null,
   /** The page of results on show, counted from 0. */
   page: 0,
+  /** Whether the results have been dragged into an order of their own. */
+  custom: false,
   total: 0,
   /** False until the first page of the current query has arrived. */
   ready: false,
@@ -34,20 +36,44 @@ let generation = 0;
 let seed = 0;
 let requested = new Set<number>();
 let allIds: Promise<number[]> | null = null;
+/**
+ * Every result ID in the order the user dragged them into, if they have.
+ * It is kept per view while the page is open, so switching tabs and coming
+ * back does not lose it; reloading the page does.
+ */
+let order: number[] | null = null;
+let viewKey = "";
+const customOrders = new Map<string, number[]>();
+/** Items seen in this view, so a reorder can redraw without asking again. */
+const known = new Map<number, Item>();
 /** Index the next shift-click extends from. */
 let anchor: number | null = null;
 
 export const itemAt = (index: number): Item | undefined =>
   pages[Math.floor(index / PAGE)]?.[index % PAGE];
 
+/** A page of the custom order, which the server is asked for by ID. */
+async function loadCustomPage(page: number, ids: number[]): Promise<api.SearchPage> {
+  const slice = ids.slice(page * PAGE, (page + 1) * PAGE);
+  if (slice.some((id) => !known.has(id))) {
+    const result = await api.search(`id=${slice.join(",")}`, 0, PAGE, 0);
+    for (const item of result.items) known.set(item.id, item);
+  }
+  const items = slice.flatMap((id) => known.get(id) ?? []);
+  return { total: ids.length, offset: page * PAGE, items };
+}
+
 function loadPage(page: number) {
   if (requested.has(page)) return;
   requested.add(page);
   const current = generation;
-  api
-    .search(search.query, page * PAGE, PAGE, seed, search.scope)
+  const loading = order
+    ? loadCustomPage(page, order)
+    : api.search(search.query, page * PAGE, PAGE, seed, search.scope);
+  loading
     .then((result) => {
       if (current !== generation) return;
+      for (const item of result.items) known.set(item.id, item);
       setPages(page, result.items);
       setSearch({ total: result.total, ready: true, error: null });
       // Results may have gone away under the page on show.
@@ -74,18 +100,68 @@ export function ensureRange(first: number, last: number) {
   }
 }
 
-/** Starts a new search, discarding results and selection. */
-export function runSearch(query: string, scope: number | null = null) {
+/**
+ * Brings a custom order in line with what the query finds now: results
+ * that are gone drop out, new ones go at the end.
+ */
+async function reconcileOrder() {
+  const current = generation;
+  const ids = await api.searchIds(search.query, seed, search.scope);
+  if (current !== generation || !order) return;
+  const found = new Set(ids);
+  const kept = order.filter((id) => found.delete(id));
+  order = [...kept, ...ids.filter((id) => found.has(id))];
+  customOrders.set(viewKey, order);
+}
+
+/** Loads the first page, of the custom order if the view has one. */
+function start() {
+  if (!order) return loadPage(0);
+  const current = generation;
+  reconcileOrder()
+    .catch(() => {
+      // The query no longer runs; let the plain search report why.
+      if (current === generation) dropOrder();
+    })
+    .then(() => {
+      if (current !== generation) return;
+      loadPage(0);
+      setDataVersion((n) => n + 1);
+    });
+}
+
+function dropOrder() {
+  order = null;
+  customOrders.delete(viewKey);
+  setSearch("custom", false);
+}
+
+/**
+ * Starts a new search, discarding results and selection. `key` names the
+ * view, which gets back the order its results were last dragged into.
+ */
+export function runSearch(query: string, scope: number | null = null, key = "") {
   generation += 1;
   seed = Math.floor(Math.random() * 2 ** 31);
   requested = new Set();
   allIds = null;
   anchor = null;
+  viewKey = key;
+  order = customOrders.get(key) ?? null;
+  known.clear();
   setPages(reconcile({}));
-  setSearch({ query, scope, page: 0, total: 0, ready: false, error: null });
+  setSearch({
+    query,
+    scope,
+    page: 0,
+    custom: order !== null,
+    total: 0,
+    ready: false,
+    error: null,
+  });
   setSelected(new Set<number>());
   setSearchCount((n) => n + 1);
-  loadPage(0);
+  start();
 }
 
 /**
@@ -96,12 +172,54 @@ export function changed() {
   generation += 1;
   requested = new Set();
   allIds = null;
+  known.clear();
   setDataVersion((n) => n + 1);
-  loadPage(0);
+  start();
   refreshStats();
 }
 
-const resultIds = () => (allIds ??= api.searchIds(search.query, seed, search.scope));
+/** Every result ID, in the order on show. */
+export const resultIds = (): Promise<number[]> =>
+  order
+    ? Promise.resolve(order)
+    : (allIds ??= api.searchIds(search.query, seed, search.scope));
+
+/**
+ * Moves results to sit before the result at `before` (an index into all
+ * results, or their number to move to the end). From then on the view
+ * keeps this order instead of the query's, until `resetOrder`.
+ */
+export async function moveItems(ids: number[], before: number) {
+  const current = await resultIds();
+  const moving = new Set(ids);
+  // The moved items land before the first unmoved one at or after the drop.
+  let target = before;
+  while (target < current.length && moving.has(current[target])) target += 1;
+  const rest = current.filter((id) => !moving.has(id));
+  const at = target >= current.length ? rest.length : rest.indexOf(current[target]);
+  const next = [
+    ...rest.slice(0, at),
+    ...current.filter((id) => moving.has(id)),
+    ...rest.slice(at),
+  ];
+  if (next.every((id, index) => id === current[index])) return;
+
+  order = next;
+  customOrders.set(viewKey, next);
+  generation += 1;
+  requested = new Set();
+  anchor = null;
+  setSearch({ custom: true, total: next.length });
+  setDataVersion((n) => n + 1);
+  loadPage(search.page);
+}
+
+/** Goes back to the order the query gives. */
+export function resetOrder() {
+  if (!order) return;
+  dropOrder();
+  changed();
+}
 
 export async function clickSelect(
   index: number,

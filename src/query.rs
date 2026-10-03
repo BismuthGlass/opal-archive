@@ -52,6 +52,8 @@ pub struct Compiled {
     /// Contents of an ORDER BY clause.
     pub order: String,
     pub order_params: Vec<Value>,
+    /// Whether the query names an order itself, with `sort=`.
+    pub sorted: bool,
 }
 
 type Res<T> = Result<T, QueryError>;
@@ -960,6 +962,7 @@ pub fn compile(source: &str, seed: i64, aliases: &Aliases) -> Res<Compiled> {
         sql
     };
 
+    let sorted = !parser.sorts.is_empty();
     if parser.sorts.is_empty() {
         parser.sorts.push(Sort {
             key: "added",
@@ -1013,5 +1016,6 @@ pub fn compile(source: &str, seed: i64, aliases: &Aliases) -> Res<Compiled> {
         filter_params: parser.params,
         order: clauses.join(", "),
         order_params,
+        sorted,
     })
 }

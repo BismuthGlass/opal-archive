@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
     routing::{get, patch, put},
 };
-use rusqlite::{Connection, Row};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
 
 use crate::{AppState, error::ApiError};
@@ -13,13 +13,23 @@ use crate::{AppState, error::ApiError};
 struct Tab {
     id: i64,
     position: i64,
-    /// `gallery`, a search of the library, or `upload`, the files uploaded
-    /// through the tab.
+    /// `gallery`, a search of the library; `upload`, the files uploaded
+    /// through the tab; or `collection`, the members of one collection.
     kind: String,
-    /// What the tab searches for; in an upload tab, a filter on its files.
+    /// What the tab searches for; in an upload or collection tab, a filter
+    /// on what it holds.
     query: String,
     /// Chosen by the user; empty if the tab goes by its query.
     name: String,
+    /// The collection a collection tab shows.
+    collection: Option<TabCollection>,
+}
+
+#[derive(Serialize)]
+struct TabCollection {
+    id: i64,
+    title: Option<String>,
+    ordered: bool,
 }
 
 #[derive(Deserialize)]
@@ -28,6 +38,8 @@ struct NewTab {
     kind: String,
     #[serde(default)]
     query: String,
+    /// For a collection tab, the collection.
+    collection: Option<i64>,
 }
 
 fn default_kind() -> String {
@@ -53,20 +65,40 @@ pub fn router() -> Router<AppState> {
         .route("/tabs/{id}", patch(update).delete(remove))
 }
 
+const SELECT_TAB: &str = "
+    SELECT t.id, t.position, t.kind, t.query, t.name, t.collection_id, e.title, c.ordered
+    FROM tab t
+    LEFT JOIN entity e ON e.id = t.collection_id
+    LEFT JOIN collection c ON c.entity_id = t.collection_id";
+
 fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
+    let collection = match row.get::<_, Option<i64>>(5)? {
+        Some(id) => Some(TabCollection {
+            id,
+            title: row.get(6)?,
+            ordered: row.get(7)?,
+        }),
+        None => None,
+    };
     Ok(Tab {
         id: row.get(0)?,
         position: row.get(1)?,
         kind: row.get(2)?,
         query: row.get(3)?,
         name: row.get(4)?,
+        collection,
     })
 }
 
 fn all(conn: &Connection) -> rusqlite::Result<Vec<Tab>> {
-    let mut stmt =
-        conn.prepare("SELECT id, position, kind, query, name FROM tab ORDER BY position, id")?;
+    let mut stmt = conn.prepare(&format!("{SELECT_TAB} ORDER BY t.position, t.id"))?;
     stmt.query_map([], tab_from_row)?.collect()
+}
+
+fn one(conn: &Connection, id: i64) -> Result<Tab, ApiError> {
+    conn.query_row(&format!("{SELECT_TAB} WHERE t.id = ?1"), [id], tab_from_row)
+        .optional()?
+        .ok_or(ApiError::NotFound)
 }
 
 async fn list(State(state): State<AppState>) -> Result<Json<Vec<Tab>>, ApiError> {
@@ -104,13 +136,22 @@ async fn create(
     Json(input): Json<NewTab>,
 ) -> Result<(StatusCode, Json<Tab>), ApiError> {
     let conn = state.db.lock().unwrap();
-    let tab = conn.query_row(
-        "INSERT INTO tab (position, kind, query)
-         VALUES ((SELECT coalesce(max(position), -1) + 1 FROM tab), ?1, ?2)
-         RETURNING id, position, kind, query, name",
-        [&input.kind, &input.query],
-        tab_from_row,
+    if let Some(collection) = input.collection {
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS (SELECT 1 FROM collection WHERE entity_id = ?1)",
+            [collection],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            return Err(ApiError::bad_request("no such collection"));
+        }
+    }
+    conn.execute(
+        "INSERT INTO tab (position, kind, query, collection_id)
+         VALUES ((SELECT coalesce(max(position), -1) + 1 FROM tab), ?1, ?2, ?3)",
+        params![input.kind, input.query, input.collection],
     )?;
+    let tab = one(&conn, conn.last_insert_rowid())?;
     Ok((StatusCode::CREATED, Json(tab)))
 }
 
@@ -120,13 +161,11 @@ async fn update(
     Json(input): Json<TabInput>,
 ) -> Result<Json<Tab>, ApiError> {
     let conn = state.db.lock().unwrap();
-    let tab = conn.query_row(
-        "UPDATE tab SET query = coalesce(?1, query), name = coalesce(?2, name)
-         WHERE id = ?3 RETURNING id, position, kind, query, name",
-        (&input.query, input.name.as_deref().map(str::trim), id),
-        tab_from_row,
+    conn.execute(
+        "UPDATE tab SET query = coalesce(?1, query), name = coalesce(?2, name) WHERE id = ?3",
+        params![input.query, input.name.as_deref().map(str::trim), id],
     )?;
-    Ok(Json(tab))
+    Ok(Json(one(&conn, id)?))
 }
 
 async fn remove(

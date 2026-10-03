@@ -78,6 +78,32 @@ export const setQuery = (id: number, query: string) =>
     setTabs((t) => t.id === id, "query", tab.query);
   });
 
+/** Shows a collection in its own tab, going to the one it has if any. */
+export async function openCollection(id: number) {
+  const existing = tabs.find((tab) => tab.collection?.id === id);
+  if (existing) return select(existing.id);
+  await guard(async () => {
+    const tab = await api.createTab("collection", "", id);
+    setTabs(tabs.length, tab);
+    select(tab.id);
+  });
+}
+
+/**
+ * Re-reads the tabs, after library changes: a collection tab follows its
+ * collection's title, and goes when the collection is deleted.
+ */
+export const refresh = () =>
+  guard(async () => {
+    let list = await api.listTabs();
+    if (list.length === 0) list = [await api.createTab("gallery", "")];
+    const index = tabs.findIndex((tab) => tab.id === activeId());
+    setTabs(reconcile(list, { key: "id" }));
+    if (!list.some((tab) => tab.id === activeId())) {
+      select(list[Math.max(0, Math.min(index, list.length - 1))].id);
+    }
+  });
+
 /** Names a tab; an empty name puts it back to showing its query. */
 export const rename = (id: number, name: string) =>
   guard(async () => {

@@ -1,13 +1,42 @@
 import { Show } from "solid-js";
 import { plural } from "../format";
-import { PAGE, clearSelection, goToPage, pageCount, search, selectAll, selected } from "../search";
+import * as api from "../api";
+import {
+  PAGE,
+  changed,
+  clearSelection,
+  goToPage,
+  pageCount,
+  resetOrder,
+  resultIds,
+  search,
+  selectAll,
+  selected,
+} from "../search";
+import { activeTab } from "../tabs";
 import Icon from "./Icon";
 
-/** Above the grid: selection of the whole result, and the pages of it. */
+/**
+ * Above the grid: selection of the whole result, the order it has been
+ * dragged into, and the pages of it.
+ */
 export default function Toolbar() {
   const from = () => search.page * PAGE + 1;
   const to = () => Math.min(search.total, (search.page + 1) * PAGE);
   const allSelected = () => search.total > 0 && selected().size >= search.total;
+  /** The ordered collection this tab shows, whose order can be saved. */
+  const ordered = () => {
+    const collection = activeTab()?.collection;
+    return collection?.ordered ? collection : null;
+  };
+  const filtered = () => search.query.trim() !== "";
+
+  const saveOrder = async (id: number) => {
+    await api.setOrder(id, await resultIds());
+    // The collection's own order is now the one on show.
+    resetOrder();
+    changed();
+  };
 
   return (
     <Show when={search.total > 0}>
@@ -24,6 +53,30 @@ export default function Toolbar() {
           <span class="toolbar-note">{plural(selected().size, "item")} selected</span>
           <button class="link" onClick={clearSelection}>
             Clear
+          </button>
+        </Show>
+        <Show when={ordered()}>
+          {(collection) => (
+            <button
+              class="primary"
+              disabled={!search.custom || filtered()}
+              title={
+                filtered()
+                  ? "Clear the filter to save the order of the whole collection"
+                  : search.custom
+                    ? "Save this order as the collection's order"
+                    : "Drag items to reorder them, then save the order here"
+              }
+              onClick={() => saveOrder(collection().id)}
+            >
+              Update order
+            </button>
+          )}
+        </Show>
+        <Show when={search.custom}>
+          <span class="toolbar-note">{ordered() ? "Order not saved" : "Custom order"}</span>
+          <button class="link" title="Go back to the order before dragging" onClick={resetOrder}>
+            Reset
           </button>
         </Show>
         <nav class="pager" aria-label="Pages">

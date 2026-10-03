@@ -1,4 +1,4 @@
-export type TabKind = "gallery" | "upload";
+export type TabKind = "gallery" | "upload" | "collection";
 
 export type Tab = {
   id: number;
@@ -7,6 +7,8 @@ export type Tab = {
   query: string;
   /** Chosen by the user; empty if the tab goes by its query. */
   name: string;
+  /** The collection a collection tab shows. */
+  collection: { id: number; title: string | null; ordered: boolean } | null;
 };
 
 export type Stats = { files: number; collections: number };
@@ -49,7 +51,7 @@ export type Entity = {
   kind: "file" | "collection";
   date_added: string;
   file: Omit<FileEntity, "id" | "date_added"> | null;
-  collection: { collection_type: string; member_count: number } | null;
+  collection: { collection_type: string; member_count: number; ordered: boolean } | null;
 };
 
 export type Scalar = { value: string | number | null; mixed: boolean };
@@ -61,12 +63,14 @@ export type Metadata = {
   collections: number;
   scalars: Record<string, Scalar>;
   collection_type: { value: string | null; mixed: boolean };
+  /** Whether the selected collections keep their members in order. */
+  ordered: { value: boolean | null; mixed: boolean };
   tags: Record<string, { value: string; count: number }[]>;
   memberships: { id: number; title: string | null; collection_type: string; count: number }[];
 };
 
 export type Changes = {
-  set?: Record<string, string | number | null>;
+  set?: Record<string, string | number | boolean | null>;
   add?: Record<string, string[]>;
   remove?: Record<string, string[]>;
 };
@@ -122,14 +126,14 @@ const params = (values: Record<string, string | number>) =>
 export const getStats = () => request<Stats>("GET", "/stats");
 
 export const listTabs = () => request<Tab[]>("GET", "/tabs");
-export const createTab = (kind: TabKind, query: string) =>
-  request<Tab>("POST", "/tabs", { kind, query });
+export const createTab = (kind: TabKind, query: string, collection?: number) =>
+  request<Tab>("POST", "/tabs", { kind, query, collection });
 export const updateTab = (id: number, changes: { query?: string; name?: string }) =>
   request<Tab>("PATCH", `/tabs/${id}`, changes);
 export const orderTabs = (ids: number[]) => request<Tab[]>("PUT", "/tabs/order", { ids });
 export const deleteTab = (id: number) => request<void>("DELETE", `/tabs/${id}`);
 
-/** `tab` narrows a search to the files uploaded through that upload tab. */
+/** `tab` narrows a search to what an upload or collection tab holds. */
 const scoped = (tab: number | null): Record<string, number> => (tab === null ? {} : { tab });
 
 export const search = (
@@ -186,8 +190,17 @@ export const setAlias = (field: string, alias: string, target: string) =>
 export const applyAliases = () =>
   request<{ updated: number }>("POST", "/tags/aliases/apply", {});
 
-export const createCollection = (collection_type: string, title: string, members: number[]) =>
-  request<{ id: number }>("POST", "/collections", { collection_type, title, members });
+export const createCollection = (
+  collection_type: string,
+  title: string,
+  members: number[],
+  /** `parent` is a collection to put the new one into. */
+  options: { ordered?: boolean; parent?: number } = {},
+) =>
+  request<{ id: number }>("POST", "/collections", { collection_type, title, members, ...options });
+/** Sets the order of an ordered collection's members. */
+export const setOrder = (id: number, ids: number[]) =>
+  request<void>("PUT", `/collections/${id}/order`, { ids });
 export const changeMembers = (id: number, changes: { add?: number[]; remove?: number[] }) =>
   request<{ member_count: number }>("POST", `/collections/${id}/members`, changes);
 

@@ -13,9 +13,18 @@ import Toolbar from "./components/Toolbar";
 import { DropTarget, UploadBox, UploadPanel } from "./components/Upload";
 import Viewer from "./components/Viewer";
 import { plural } from "./format";
-import { PAGE, clearSelection, goToPage, runSearch, search, selectAll, selected } from "./search";
+import {
+  PAGE,
+  clearSelection,
+  dataVersion,
+  goToPage,
+  runSearch,
+  search,
+  selectAll,
+  selected,
+} from "./search";
 import { refreshStats, stats } from "./stats";
-import { activeTab, error, load } from "./tabs";
+import { activeTab, error, load, refresh } from "./tabs";
 
 export default function App() {
   /** Result index shown in the viewer, if it is open. */
@@ -30,8 +39,9 @@ export default function App() {
     refreshStats();
   });
 
-  // Each tab shows a search, over the library or over the tab's own
-  // uploads: run it when the tab or its query changes.
+  // Each tab shows a search, over the library or over what the tab holds
+  // (its uploads, or a collection's members): run it when the tab or its
+  // query changes.
   createEffect(
     on(
       () => {
@@ -42,10 +52,14 @@ export default function App() {
         if (key === undefined) return;
         setViewing(null);
         const tab = activeTab()!;
-        runSearch(tab.query, tab.kind === "upload" ? tab.id : null);
+        runSearch(tab.query, tab.kind === "gallery" ? null : tab.id, key);
       },
     ),
   );
+
+  // Collection tabs follow their collection: its title, whether it is
+  // ordered, and its deletion.
+  createEffect(on(dataVersion, refresh, { defer: true }));
 
   const onKeyDown = (event: KeyboardEvent) => {
     const target = event.target as HTMLElement;
@@ -167,7 +181,11 @@ export default function App() {
         <SettingsModal onClose={() => setSettingsOpen(false)} />
       </Show>
       <Show when={grouping()}>
-        <CollectionDialog ids={[...selected()]} onClose={() => setGrouping(false)} />
+        <CollectionDialog
+          ids={[...selected()]}
+          parent={activeTab()?.collection ?? undefined}
+          onClose={() => setGrouping(false)}
+        />
       </Show>
     </>
   );

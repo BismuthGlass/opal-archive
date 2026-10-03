@@ -76,22 +76,22 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `POST /files?name=<filename>`    | Upload; the file is the raw body. 201 if new, 200 if a duplicate. `tab=<id>` lists it under that upload tab |
 | `GET /files/{id}/content`        | The file. `?download=1` to save rather than display            |
 | `GET /files/{id}/thumbnail`      | JPEG thumbnail, 404 if the file has none                       |
-| `GET /search?q=&offset=&limit=`  | One page of results and the total. `seed` fixes `sort=random`; `tab=<id>` searches only that upload tab's files |
+| `GET /search?q=&offset=&limit=`  | One page of results and the total. `seed` fixes `sort=random`; `tab=<id>` searches only what that upload or collection tab holds |
 | `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed` and `tab` too      |
 | `GET /entities/{id}`             | Everything about one file or collection                        |
 | `POST /entities/metadata`        | `{ids}` → what those entities have in common                   |
-| `POST /entities/edit`            | `{ids, set, add, remove}` → the same edit applied to all       |
+| `POST /entities/edit`            | `{ids, set, add, remove}` → the same edit applied to all. `set` takes `ordered` (true or false) for collections |
 | `POST /entities/delete`          | `{ids}` → delete; files leave storage                          |
 | `GET /tags?field=&q=`            | Completions for a tag field, one namespace level at a time     |
 | `GET /tags/all?field=`           | Every tag of a field with its aliases, and how many alias uses await updating |
 | `POST /tags/rename`              | `{field, from, to}` → rename a tag, merging it into `to` if that exists. With `namespace: true`, rename a namespace on every tag under it; an empty `to` removes it |
 | `POST /tags/alias`               | `{field, alias, target}` → make `alias` stand for `target`; an empty `target` removes the alias |
 | `POST /tags/aliases/apply`       | Replace aliases still on entities with the tags they stand for |
-| `POST /collections`              | `{collection_type, title, members}` → new collection           |
+| `POST /collections`              | `{collection_type, title, members, ordered, parent}` → new collection, put inside `parent` if given |
 | `POST /collections/{id}/members` | `{add, remove}` → change membership                            |
-| `PUT /collections/{id}/order`    | `{ids}` → set member positions                                 |
+| `PUT /collections/{id}/order`    | `{ids}` → set member positions; members left out follow        |
 | `POST /export`                   | Form field `ids=1,2,3` → zip of those files                    |
-| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query}` → new tab, `kind` being `gallery` or `upload` |
+| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, collection}` → new tab, `kind` being `gallery`, `upload` or `collection` |
 | `PATCH /tabs/{id}`, `DELETE …`   | `{query, name}`, either or both → change a tab; close a tab     |
 | `PUT /tabs/order`                | `{ids}` → put the tabs in that order                           |
 | `GET /stats`, `GET /health`      | Library counts; liveness and schema version                    |

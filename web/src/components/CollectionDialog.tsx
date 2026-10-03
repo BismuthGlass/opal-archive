@@ -5,11 +5,21 @@ import { plural, quoteValue } from "../format";
 import { changed } from "../search";
 import Modal from "./Modal";
 
-/** Puts the given entities into a new or an existing collection. */
-export default function CollectionDialog(props: { ids: number[]; onClose: () => void }) {
+/**
+ * Puts the given entities into a new or an existing collection. Opened
+ * from a collection's tab, a new collection can go inside that one.
+ */
+export default function CollectionDialog(props: {
+  ids: number[];
+  /** The collection whose tab this was opened from. */
+  parent?: { id: number; title: string | null };
+  onClose: () => void;
+}) {
   const [mode, setMode] = createSignal<"new" | "existing">("new");
   const [title, setTitle] = createSignal("");
   const [type, setType] = createSignal(COLLECTION_TYPES[0]);
+  const [ordered, setOrdered] = createSignal(false);
+  const [nested, setNested] = createSignal(true);
   const [filter, setFilter] = createSignal("");
   const [target, setTarget] = createSignal<number | null>(null);
   const [error, setError] = createSignal<string | null>(null);
@@ -26,7 +36,10 @@ export default function CollectionDialog(props: { ids: number[]; onClose: () => 
     event.preventDefault();
     try {
       if (mode() === "new") {
-        await api.createCollection(type(), title(), props.ids);
+        await api.createCollection(type(), title(), props.ids, {
+          ordered: ordered(),
+          parent: nested() ? props.parent?.id : undefined,
+        });
       } else if (target() !== null) {
         await api.changeMembers(target()!, { add: props.ids });
       } else {
@@ -94,7 +107,13 @@ export default function CollectionDialog(props: { ids: number[]; onClose: () => 
           </label>
           <label class="stacked">
             Type
-            <select onChange={(e) => setType(e.currentTarget.value)}>
+            <select
+              onChange={(e) => {
+                setType(e.currentTarget.value);
+                // A sequence is ordered by nature; the box can still be unticked.
+                setOrdered(e.currentTarget.value === "sequence");
+              }}
+            >
               <For each={COLLECTION_TYPES}>
                 {(option) => (
                   <option value={option} selected={option === type()}>
@@ -104,6 +123,26 @@ export default function CollectionDialog(props: { ids: number[]; onClose: () => 
               </For>
             </select>
           </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={ordered()}
+              onChange={(e) => setOrdered(e.currentTarget.checked)}
+            />
+            Ordered: members keep the order they are put in
+          </label>
+          <Show when={props.parent}>
+            {(parent) => (
+              <label class="check">
+                <input
+                  type="checkbox"
+                  checked={nested()}
+                  onChange={(e) => setNested(e.currentTarget.checked)}
+                />
+                Add it inside “{parent().title || `Collection #${parent().id}`}”
+              </label>
+            )}
+          </Show>
         </Show>
 
         <Show when={error()}>

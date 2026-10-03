@@ -280,6 +280,49 @@ button.primary {
   overflow-y: auto;
 }
 
+/* Dragging tiles to reorder them. */
+
+.tile {
+  user-select: none;
+}
+
+.tile.moving {
+  opacity: 0.4;
+}
+
+.results.reordering,
+.results.reordering .tile {
+  cursor: grabbing;
+}
+
+.drop-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.drag-chip {
+  position: fixed;
+  z-index: 30;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--on-accent);
+  background: var(--accent);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 /* Above the grid: select all, and the pager. */
 .toolbar {
   display: flex;
@@ -299,6 +342,13 @@ button.primary {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
+}
+
+.toolbar button.primary:not(.link) {
+  padding: 3px 10px;
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: transparent;
 }
 
 .toolbar button:disabled {

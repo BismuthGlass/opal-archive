@@ -49,7 +49,11 @@ export default function QueryBar() {
         rows={1}
         aria-label="Search query"
         placeholder={
-          activeTab()?.kind === "upload" ? "Filter these uploads" : "cat creator=someone score>=5"
+          activeTab()?.kind === "upload"
+            ? "Filter these uploads"
+            : activeTab()?.kind === "collection"
+              ? "Filter this collection"
+              : "cat creator=someone score>=5"
         }
         spellcheck={false}
         autocomplete="off"
