@@ -82,6 +82,15 @@ function Menu(props: { at: Opened }) {
       event.preventDefault();
       event.stopImmediatePropagation();
       close();
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      // The arrows walk the items, starting from the first or the last.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const items = [...menu.querySelectorAll("button")];
+      const at = items.indexOf(document.activeElement as HTMLButtonElement);
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next = at < 0 ? (step > 0 ? 0 : items.length - 1) : at + step;
+      items[(next + items.length) % items.length]?.focus();
     }
   };
   onMount(() => {
@@ -91,7 +100,8 @@ function Menu(props: { at: Opened }) {
       left: Math.max(4, Math.min(props.at.x, window.innerWidth - box.width - 4)),
       top: Math.max(4, Math.min(props.at.y, window.innerHeight - box.height - 4)),
     });
-    menu.querySelector("button")?.focus();
+    // The menu takes the keyboard without lighting up any one item.
+    menu.focus();
     window.addEventListener("pointerdown", onPointerDown, true);
     window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("wheel", close, { passive: true });
@@ -110,6 +120,7 @@ function Menu(props: { at: Opened }) {
     <ul
       class="context-menu"
       role="menu"
+      tabindex={-1}
       ref={menu}
       aria-label={`Actions on ${plural(ids.length, "item")}`}
       style={{ left: `${position().left}px`, top: `${position().top}px` }}

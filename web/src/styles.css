@@ -294,6 +294,10 @@ button.primary {
   box-shadow: 0 6px 24px rgb(0 0 0 / 0.25);
 }
 
+.context-menu:focus {
+  outline: none;
+}
+
 .context-menu-title {
   padding: 3px 8px 4px;
   font-size: 12px;
