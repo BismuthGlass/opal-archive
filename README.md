@@ -99,6 +99,7 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, collection}` → new tab, `kind` being `gallery`, `upload` or `collection` |
 | `PATCH /tabs/{id}`, `DELETE …`   | `{query, name}`, either or both → change a tab; close a tab     |
 | `PUT /tabs/order`                | `{ids}` → put the tabs in that order                           |
+| `GET /tabs/{id}/view`, `PUT …`   | The snapshot a tab shows: `{query, ids, custom}`, or `null` if none is saved |
 | `GET /settings`, `PATCH /settings` | Application settings as one JSON object; PATCH sets the keys given, `null` removing one |
 | `GET /stats`, `GET /health`      | Library counts, with how many entities are trashed; liveness and schema version |
 

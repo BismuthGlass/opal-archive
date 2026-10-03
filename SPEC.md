@@ -50,7 +50,7 @@ There is no need to support injesting existing sidecar files on file upload for 
 
 ## Gallery views
 
-What a view lists is decided when its search is calculated, and stays put after that. Editing, tagging, rating or trashing a file changes how it is shown, but it does not drop out of the view, and files that start matching do not appear. A Refresh button calculates the search again.
+What a view lists is decided when its search is calculated, and stays put after that: it is a snapshot, saved with its tab, so it is the same after switching tabs or reloading the page. The order results were dragged into and any that were taken out of the view are part of it. Editing, tagging, rating or trashing a file changes how it is shown, but it does not drop out of the view, and files that start matching do not appear. A Refresh button calculates the search again.
 
 The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab, a collection created inside the collection a tab shows).
 

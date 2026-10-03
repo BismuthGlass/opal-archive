@@ -68,7 +68,7 @@ export default function App() {
         if (key === undefined) return;
         setViewing(null);
         const tab = activeTab()!;
-        runSearch(tab.query, tab.kind === "gallery" ? null : tab.id, key);
+        runSearch(tab.query, tab.kind === "gallery" ? null : tab.id, key, tab.id);
       },
     ),
   );

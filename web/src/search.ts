@@ -39,19 +39,23 @@ let seed = 0;
 let requested = new Set<number>();
 /**
  * The view: every result ID, in order, as found when the search was last
- * calculated. It only changes when the user asks: by refreshing, or by
- * dragging results into another order. Edits, trashing included, change
- * how a result looks but not whether it is listed.
+ * calculated. It only changes when the user asks: by refreshing, by
+ * dragging results into another order, or by taking some out. Edits,
+ * trashing included, change how a result looks but not whether it is
+ * listed. It is saved with its tab, so reloading the page keeps it too.
  */
 let ids: number[] = [];
 /** Settles when the view has been calculated. */
 let calculated: Promise<void> = Promise.resolve();
 let viewKey = "";
+/** The tab the view belongs to, and is saved with. */
+let viewTab: number | null = null;
 /**
  * The views seen while the page is open, so that coming back to a tab
- * shows what it showed before. Reloading the page calculates afresh.
+ * shows what it showed before without asking the server again.
  */
 const views = new Map<string, { ids: number[]; custom: boolean }>();
+let saving = 0;
 /** Items already fetched, so a reorder can redraw without asking again. */
 const known = new Map<number, Item>();
 /** Index the next shift-click extends from. */
@@ -60,7 +64,19 @@ let anchor: number | null = null;
 export const itemAt = (index: number): Item | undefined =>
   pages[Math.floor(index / PAGE)]?.[index % PAGE];
 
-const remember = () => views.set(viewKey, { ids, custom: search.custom });
+/** Keeps the view as it now is, here and, shortly, with its tab. */
+function remember() {
+  views.set(viewKey, { ids, custom: search.custom });
+  const tab = viewTab;
+  if (tab === null) return;
+  const view = { query: search.query, ids, custom: search.custom };
+  // A drag or a run of removals saves once, when it settles.
+  clearTimeout(saving);
+  saving = window.setTimeout(() => {
+    saving = 0;
+    api.saveTabView(tab, view).catch(() => {});
+  }, 300);
+}
 
 /** A page of the view. Its items are asked for by ID, trashed or not. */
 async function fetchPage(page: number): Promise<Item[]> {
@@ -127,6 +143,8 @@ function reload() {
  */
 function calculate() {
   const current = (calculation += 1);
+  // What the tab was left with is asked for only when the view is opened;
+  // a refresh always runs the search.
   calculated = api.searchIds(search.query, seed, search.scope).then((found) => {
     if (current !== calculation) return;
     if (search.custom) {
@@ -151,12 +169,20 @@ function calculate() {
  * Shows a search, discarding results and selection. `key` names the view:
  * one already seen comes back as it was left, a new one is calculated.
  */
-export function runSearch(query: string, scope: number | null = null, key = "") {
+export function runSearch(
+  query: string,
+  scope: number | null = null,
+  key = "",
+  tab: number | null = null,
+) {
+  // The view being left is saved now, not after its delay.
+  flushSave();
   generation += 1;
   seed = Math.floor(Math.random() * 2 ** 31);
   requested = new Set();
   anchor = null;
   viewKey = key;
+  viewTab = tab;
   known.clear();
   const seen = views.get(key);
   ids = seen?.ids ?? [];
@@ -176,11 +202,43 @@ export function runSearch(query: string, scope: number | null = null, key = "") 
     // Voids a calculation still running for the view just left.
     calculation += 1;
     calculated = Promise.resolve();
-  } else {
+  } else if (tab === null) {
     calculate();
+  } else {
+    // A view saved with the tab, of this same query, is taken up as it
+    // was left; otherwise the search is run.
+    const current = (calculation += 1);
+    calculated = api
+      .getTabView(tab)
+      .catch(() => null)
+      .then((saved) => {
+        if (current !== calculation) return;
+        if (saved && saved.query === query) {
+          ids = saved.ids;
+          setSearch("custom", saved.custom);
+          views.set(viewKey, { ids, custom: saved.custom });
+        } else {
+          calculate();
+          return calculated;
+        }
+      });
+    calculated.catch(() => {});
   }
   loadPage(0);
 }
+
+/** Saves a view that is waiting to be saved, at once. */
+function flushSave() {
+  if (!saving) return;
+  clearTimeout(saving);
+  saving = 0;
+  if (viewTab !== null) {
+    const view = { query: search.query, ids, custom: search.custom };
+    api.saveTabView(viewTab, view).catch(() => {});
+  }
+}
+// Leaving the page should not lose the last change either.
+window.addEventListener("pagehide", flushSave);
 
 /** Calculates the current search again. */
 export function refresh() {
@@ -213,7 +271,13 @@ export function addedTo(tab: number) {
   for (const key of [...views.keys()]) {
     if (key.startsWith(`${tab}:`) && key !== viewKey) views.delete(key);
   }
-  if (viewKey.startsWith(`${tab}:`)) refresh();
+  if (viewKey.startsWith(`${tab}:`)) {
+    refresh();
+  } else {
+    // The view saved with that tab lacks what was just added: it is
+    // replaced by one of no query, so opening the tab runs its search.
+    api.saveTabView(tab, { query: "\u0000", ids: [], custom: false }).catch(() => {});
+  }
   refreshStats();
 }
 

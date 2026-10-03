@@ -111,6 +111,8 @@ export const AI_CONTENT = ["none", "partial", "full", "unknown"];
 export class ApiError extends Error {
   /** Character offset into the query, for query errors. */
   position?: number;
+  /** The HTTP status the server answered with. */
+  status?: number;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -123,6 +125,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     const detail = await res.json().catch(() => null);
     const error = new ApiError(detail?.error ?? `HTTP ${res.status}`);
     error.position = detail?.position;
+    error.status = res.status;
     throw error;
   }
   return res.status === 204 ? (undefined as T) : res.json();
@@ -143,6 +146,14 @@ export const createTab = (kind: TabKind, query: string, collection?: number) =>
   request<Tab>("POST", "/tabs", { kind, query, collection });
 export const updateTab = (id: number, changes: { query?: string; name?: string }) =>
   request<Tab>("PATCH", `/tabs/${id}`, changes);
+/** The snapshot of its search that a tab shows. */
+export type TabView = { query: string; ids: number[]; custom: boolean };
+
+/** The view a tab was left with, if one is saved. */
+export const getTabView = (id: number) => request<TabView | null>("GET", `/tabs/${id}/view`);
+export const saveTabView = (id: number, view: TabView) =>
+  request<void>("PUT", `/tabs/${id}/view`, view);
+
 export const orderTabs = (ids: number[]) => request<Tab[]>("PUT", "/tabs/order", { ids });
 export const deleteTab = (id: number) => request<void>("DELETE", `/tabs/${id}`);
 

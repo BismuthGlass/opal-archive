@@ -46,6 +46,18 @@ fn default_kind() -> String {
     "gallery".to_string()
 }
 
+/// The snapshot of its search that a tab shows.
+#[derive(Serialize, Deserialize)]
+struct View {
+    /// The query the snapshot is of.
+    query: String,
+    /// The results, in the order on show.
+    ids: Vec<i64>,
+    /// Whether that order is the user's own.
+    #[serde(default)]
+    custom: bool,
+}
+
 #[derive(Deserialize)]
 struct OrderInput {
     ids: Vec<i64>,
@@ -63,6 +75,7 @@ pub fn router() -> Router<AppState> {
         .route("/tabs", get(list).post(create))
         .route("/tabs/order", put(reorder))
         .route("/tabs/{id}", patch(update).delete(remove))
+        .route("/tabs/{id}/view", get(view).put(save_view))
 }
 
 const SELECT_TAB: &str = "
@@ -174,6 +187,53 @@ async fn remove(
 ) -> Result<StatusCode, ApiError> {
     let conn = state.db.lock().unwrap();
     match conn.execute("DELETE FROM tab WHERE id = ?1", [id])? {
+        0 => Err(ApiError::NotFound),
+        _ => Ok(StatusCode::NO_CONTENT),
+    }
+}
+
+/// The view a tab was last left with; `null` if it has none saved.
+async fn view(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<Option<View>>, ApiError> {
+    let conn = state.db.lock().unwrap();
+    let saved = conn
+        .query_row(
+            "SELECT query, ids, custom FROM tab_view WHERE tab_id = ?1",
+            [id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, bool>(2)?,
+                ))
+            },
+        )
+        .optional()?;
+    Ok(Json(saved.map(|(query, ids, custom)| View {
+        query,
+        // The table only accepts valid JSON.
+        ids: serde_json::from_str(&ids).unwrap_or_default(),
+        custom,
+    })))
+}
+
+async fn save_view(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(input): Json<View>,
+) -> Result<StatusCode, ApiError> {
+    let conn = state.db.lock().unwrap();
+    let ids = serde_json::to_string(&input.ids).expect("integers serialize");
+    let saved = conn.execute(
+        "INSERT INTO tab_view (tab_id, query, ids, custom)
+         SELECT id, ?2, ?3, ?4 FROM tab WHERE id = ?1
+         ON CONFLICT (tab_id) DO UPDATE
+         SET query = excluded.query, ids = excluded.ids, custom = excluded.custom",
+        params![id, input.query, ids, input.custom],
+    )?;
+    match saved {
         0 => Err(ApiError::NotFound),
         _ => Ok(StatusCode::NO_CONTENT),
     }
