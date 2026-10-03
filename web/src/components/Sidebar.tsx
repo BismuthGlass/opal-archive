@@ -16,6 +16,7 @@ import { dateTime, duration, fieldLabel, fileSize, plural, tagQuery } from "../f
 import { changed, clearSelection, dataVersion, selected } from "../search";
 import { open as openTab, openCollection } from "../tabs";
 import Icon from "./Icon";
+import { createStoredFlag } from "./Panel";
 
 const SCORES = [1, 2, 3, 4, 5, 6, 7];
 
@@ -186,10 +187,6 @@ export default function Sidebar(props: { onGroup: () => void }) {
           <Icon name="download" />
           Download
         </button>
-        <button onClick={props.onGroup}>
-          <Icon name="create-new-folder-outline" />
-          Collect…
-        </button>
         <Show
           when={allTrashed()}
           fallback={
@@ -209,6 +206,9 @@ export default function Sidebar(props: { onGroup: () => void }) {
           </button>
         </Show>
       </div>
+      <Show when={meta()}>
+        {(data) => <Collections data={data()} onAdd={props.onGroup} onLeave={leave} />}
+      </Show>
       <Show when={error()}>
         <p class="form-error dismissible" role="alert">
           {error()}
@@ -354,47 +354,83 @@ export default function Sidebar(props: { onGroup: () => void }) {
               ]}
               onPick={pick}
             />
-
-            <div class="field">
-              <span class="label">Collections</span>
-              <div class="chips">
-                <For each={data().memberships} fallback={<span class="none">None</span>}>
-                  {(membership) => (
-                    <span class="chip" classList={{ partial: membership.count < data().count }}>
-                      <button
-                        class="chip-label"
-                        title="Open this collection"
-                        onClick={() => openCollection(membership.id)}
-                      >
-                        {membership.title || `#${membership.id}`}
-                      </button>
-                      <Show when={membership.count < data().count}>
-                        <span
-                          class="chip-count"
-                          title={`${membership.count} of ${data().count} selected are in it`}
-                        >
-                          ({membership.count})
-                        </span>
-                      </Show>
-                      <span class="chip-actions">
-                        <button
-                          class="chip-remove"
-                          aria-label="Remove from collection"
-                          title="Remove from collection"
-                          onClick={() => leave(membership.id)}
-                        >
-                          <Icon name="close" />
-                        </button>
-                      </span>
-                    </span>
-                  )}
-                </For>
-              </div>
-            </div>
           </>
         )}
       </Show>
     </>
+  );
+}
+
+/**
+ * The collections the selection is in: a count that unfolds into the list,
+ * and a button to put the selection into another.
+ */
+function Collections(props: {
+  data: Metadata;
+  onAdd: () => void;
+  onLeave: (collection: number) => void;
+}) {
+  const [open, setOpen] = createStoredFlag("tagutils.collections", false);
+  const count = () => props.data.memberships.length;
+  return (
+    <div class="collections" classList={{ open: open() && count() > 0 }}>
+      <div class="collections-head">
+        <button
+          class="collections-toggle"
+          aria-expanded={open() && count() > 0}
+          disabled={count() === 0}
+          onClick={() => setOpen(!open())}
+        >
+          <span class="chevron">
+            <Icon name="chevron-right" />
+          </span>
+          Collections <span class="collections-count">({count()})</span>
+        </button>
+        <button
+          class="collections-add"
+          aria-label="Add to a collection"
+          title="Add to a collection, new or existing"
+          onClick={props.onAdd}
+        >
+          <Icon name="add" />
+        </button>
+      </div>
+      <Show when={open() && count() > 0}>
+        <div class="chips">
+          <For each={props.data.memberships}>
+            {(membership) => (
+              <span class="chip" classList={{ partial: membership.count < props.data.count }}>
+                <button
+                  class="chip-label"
+                  title="Open this collection"
+                  onClick={() => openCollection(membership.id)}
+                >
+                  {membership.title || `#${membership.id}`}
+                </button>
+                <Show when={membership.count < props.data.count}>
+                  <span
+                    class="chip-count"
+                    title={`${membership.count} of ${props.data.count} selected are in it`}
+                  >
+                    ({membership.count})
+                  </span>
+                </Show>
+                <span class="chip-actions">
+                  <button
+                    class="chip-remove"
+                    aria-label="Remove from collection"
+                    title="Remove from collection"
+                    onClick={() => props.onLeave(membership.id)}
+                  >
+                    <Icon name="close" />
+                  </button>
+                </span>
+              </span>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
   );
 }
 

@@ -685,6 +685,66 @@ button.primary {
   color: var(--muted);
 }
 
+/* Collections: a count that unfolds into the list, and a button to add. */
+
+.collections {
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.collections-head {
+  display: flex;
+  align-items: center;
+}
+
+.collections button:not(.chip button) {
+  background: none;
+  border: none;
+  border-radius: 4px;
+}
+
+.collections-toggle {
+  flex: 1;
+  padding: 2px 0;
+  text-align: left;
+}
+
+.collections-toggle:disabled {
+  color: inherit;
+  cursor: default;
+}
+
+.collections-toggle .chevron {
+  margin: 0 2px 0 -4px;
+}
+
+.collections-toggle:disabled .chevron {
+  visibility: hidden;
+}
+
+.collections.open .chevron {
+  transform: rotate(90deg);
+}
+
+.collections-count {
+  color: var(--muted);
+}
+
+.collections-add {
+  padding: 1px 3px;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.collections-add:hover {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.collections .chips {
+  margin-top: 4px;
+}
+
 /* "Add field" and its menu. */
 
 .add-field {
