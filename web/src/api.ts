@@ -1,6 +1,13 @@
 export type TabKind = "search" | "upload";
 
-export type Tab = { id: number; position: number; kind: TabKind; query: string };
+export type Tab = {
+  id: number;
+  position: number;
+  kind: TabKind;
+  query: string;
+  /** Chosen by the user; empty if the tab goes by its query. */
+  name: string;
+};
 
 export type Stats = { files: number; collections: number };
 
@@ -117,8 +124,8 @@ export const getStats = () => request<Stats>("GET", "/stats");
 export const listTabs = () => request<Tab[]>("GET", "/tabs");
 export const createTab = (kind: TabKind, query: string) =>
   request<Tab>("POST", "/tabs", { kind, query });
-export const updateTab = (id: number, query: string) =>
-  request<Tab>("PATCH", `/tabs/${id}`, { query });
+export const updateTab = (id: number, changes: { query?: string; name?: string }) =>
+  request<Tab>("PATCH", `/tabs/${id}`, changes);
 export const orderTabs = (ids: number[]) => request<Tab[]>("PUT", "/tabs/order", { ids });
 export const deleteTab = (id: number) => request<void>("DELETE", `/tabs/${id}`);
 

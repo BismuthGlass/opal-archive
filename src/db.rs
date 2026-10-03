@@ -7,6 +7,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_tab_kinds.sql"),
     include_str!("../migrations/0003_tag_aliases.sql"),
+    include_str!("../migrations/0004_tab_names.sql"),
 ];
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {

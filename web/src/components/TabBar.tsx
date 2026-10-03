@@ -1,6 +1,6 @@
 import { createSignal, For, Show } from "solid-js";
-import type { TabKind } from "../api";
-import { activeId, close, move, open, saveOrder, select, tabs } from "../tabs";
+import type { Tab, TabKind } from "../api";
+import { activeId, close, move, open, rename, saveOrder, select, tabs } from "../tabs";
 import type { IconName } from "./Icon";
 import Icon from "./Icon";
 
@@ -10,9 +10,10 @@ const KINDS: { kind: TabKind; label: string; icon: IconName }[] = [
   { kind: "upload", label: "Upload", icon: "upload" },
 ];
 
-function label(kind: TabKind, query: string) {
-  if (kind === "upload") return query ? `Upload: ${query}` : "Upload";
-  return query || "New search";
+/** What a tab is called when it has not been given a name. */
+function described(tab: Tab) {
+  if (tab.kind === "upload") return tab.query ? `Upload: ${tab.query}` : "Upload";
+  return tab.query || "New search";
 }
 
 /** The + button, and the menu of tab kinds it opens. */
@@ -73,12 +74,14 @@ const DRAG_THRESHOLD = 5;
 export default function TabBar() {
   let strip!: HTMLElement;
   const [dragging, setDragging] = createSignal<number | null>(null);
+  /** The tab whose name is being typed. */
+  const [renaming, setRenaming] = createSignal<number | null>(null);
 
   // Tabs are dragged along the strip to reorder them. The tab moves in the
   // list as the pointer passes its neighbours, and the order is saved on
   // release.
   const startDrag = (id: number, down: PointerEvent) => {
-    if (down.button !== 0) return;
+    if (down.button !== 0 || renaming() !== null) return;
     const onMove = (event: PointerEvent) => {
       if (dragging() === null) {
         if (Math.abs(event.clientX - down.clientX) < DRAG_THRESHOLD) return;
@@ -118,18 +121,47 @@ export default function TabBar() {
               // Middle click closes, as in a browser.
               onAuxClick={(event) => event.button === 1 && close(tab.id)}
             >
-              <button
-                class="tab-label"
-                role="tab"
-                aria-selected={tab.id === activeId()}
-                title={label(tab.kind, tab.query)}
-                onClick={() => select(tab.id)}
+              <Show
+                when={renaming() === tab.id}
+                fallback={
+                  <button
+                    class="tab-label"
+                    role="tab"
+                    aria-selected={tab.id === activeId()}
+                    title={`${described(tab)}\nDouble-click to rename`}
+                    onClick={() => select(tab.id)}
+                    onDblClick={() => setRenaming(tab.id)}
+                  >
+                    <Show when={tab.kind === "upload"}>
+                      <Icon name="upload" />
+                    </Show>
+                    {tab.name || described(tab)}
+                  </button>
+                }
               >
-                <Show when={tab.kind === "upload"}>
-                  <Icon name="upload" />
-                </Show>
-                {label(tab.kind, tab.query)}
-              </button>
+                <input
+                  class="tab-rename"
+                  type="text"
+                  aria-label="Tab name"
+                  placeholder={described(tab)}
+                  value={tab.name}
+                  ref={(el) => queueMicrotask(() => (el.focus(), el.select()))}
+                  // Saves on leaving the box as well as on Enter.
+                  onBlur={(event) => {
+                    if (renaming() !== tab.id) return;
+                    setRenaming(null);
+                    const name = event.currentTarget.value.trim();
+                    if (name !== tab.name) rename(tab.id, name);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.currentTarget.blur();
+                    } else if (event.key === "Escape") {
+                      setRenaming(null);
+                    }
+                  }}
+                />
+              </Show>
               <button class="tab-close" aria-label="Close tab" onClick={() => close(tab.id)}>
                 <Icon name="close" />
               </button>

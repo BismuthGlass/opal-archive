@@ -74,8 +74,15 @@ export const close = (id: number) =>
 
 export const setQuery = (id: number, query: string) =>
   guard(async () => {
-    const tab = await api.updateTab(id, query);
+    const tab = await api.updateTab(id, { query });
     setTabs((t) => t.id === id, "query", tab.query);
+  });
+
+/** Names a tab; an empty name puts it back to showing its query. */
+export const rename = (id: number, name: string) =>
+  guard(async () => {
+    const tab = await api.updateTab(id, { name });
+    setTabs((t) => t.id === id, "name", tab.name);
   });
 
 /** Moves a tab to another place in the strip. Not saved until `saveOrder`. */
