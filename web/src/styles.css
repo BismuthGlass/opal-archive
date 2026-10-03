@@ -932,6 +932,50 @@ span/* With nothing after it, as in the panel, the label fills the chip. */
   text-decoration: none;
 }
 
+/* Inside a modal, chips, namespace headings and link rows keep their own
+   look rather than taking that of the modal's buttons. */
+.dialog .chip button:not(.primary),
+.dialog .namespace button:not(.primary),
+.dialog .links button:not(.primary) {
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+
+.dialog .chip .chip-label:not(.primary) {
+  padding: 1px 4px 1px 8px;
+  border-radius: 12px 0 0 12px;
+}
+
+.dialog .chip-actions button:not(.primary),
+.dialog .links button:not(.primary) {
+  padding: 1px 3px;
+}
+
+.dialog .chip-actions button:last-child:not(.primary) {
+  border-radius: 0 12px 12px 0;
+}
+
+.dialog .namespace button:not(.primary) {
+  padding: 1px 2px;
+  border-radius: 4px;
+}
+
+.dialog .chip-add:hover:not(.primary) {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.dialog .chip-remove:hover:not(.primary) {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+.dialog .namespace-edit:hover:not(.primary) {
+  color: var(--text);
+  background: var(--bg);
+}
+
 /* The editor: room below the box for its suggestions. */
 .field-editor {
   min-height: 260px;
