@@ -47,3 +47,43 @@ There is no need to support injesting existing sidecar files on file upload for 
 ## Authentication
 
 The application doesn't need to support authentication for now.
+
+## Tags
+
+Every multi-value text field of the schema (tags, creator, character, flaws, medium, and so on) is a tag. There is one tag system, and those fields are its **types**.
+
+### Types
+
+- A tag is a value together with its type. `samus` as a `character` and `samus` as a plain `tags` entry are two different tags.
+- A search only looks at the type it names. A plain search term looks at `tags` only, so creator or flaw tags never show up among regular tags.
+- The set of types is fixed and comes from the schema. No custom types, in line with "no custom fields".
+- Tags are case insensitive.
+
+### Namespaces
+
+- A tag may be placed in a namespace, written `<namespace>:<tag>`, as in `metroid:samus`.
+- Namespaces nest without limit: `nintendo:metroid:samus`. Everything before the last colon is the namespace; the last part is the tag's own name.
+- A namespace is not a separate thing to create or manage. It exists as long as some tag is written under it.
+- The parts between colons can't be empty and have no spaces around them: `metroid: samus` is stored as `metroid:samus`, and `metroid::samus` is not a valid tag.
+- Namespaces apply within a type. `metroid:samus` as a `character` says nothing about a `metroid` namespace in `tags`.
+- Types whose values are not names don't have namespaces: in `source_url` a colon is just part of the address.
+
+### Searching
+
+- `metroid:samus` finds exactly that tag.
+- `metroid:*` finds everything under the namespace, at any depth: `metroid:samus` and also `metroid:prime:ridley`.
+- `*:samus` finds the tag `samus` in any namespace.
+- `samus` alone finds only the tag with no namespace. It does not find `metroid:samus`.
+- All of this works the same with a type in front: `character=metroid:*`.
+
+### Interface
+
+- When typing a tag, suggestions complete one level at a time: first the namespaces, then what is inside the chosen one.
+- Tags on a file are shown grouped by namespace, so a long list stays readable.
+- A namespace can be renamed or merged as a whole, which renames every tag under it.
+
+### Open questions
+
+- Should a namespace also count as a tag? That is, should searching `metroid` find a file tagged only `metroid:samus`? The text above says no: a file is found by `metroid:*`, and `metroid` is its own tag.
+- Should `samus` alone find `metroid:samus`? The text above says no, and `*:samus` is the way to ask for it. Saying yes makes casual searches friendlier but makes it impossible to ask for only the tag without a namespace.
+- Does a tag need to exist before it can be used, or is it created by typing it, as now?
