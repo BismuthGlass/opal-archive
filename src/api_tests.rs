@@ -1,0 +1,831 @@
+//! Tests of the API as a client sees it: requests through the router,
+//! against an empty library in memory.
+
+use std::{
+    path::PathBuf,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
+
+use axum::{
+    Router,
+    body::{Body, to_bytes},
+    http::{Request, StatusCode, header::CONTENT_TYPE},
+};
+use rusqlite::params;
+use serde_json::{Value, json};
+use tower::ServiceExt;
+
+use crate::{AppState, api, db, files::stored_name};
+
+static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
+
+/// A server with nothing in it, and a directory of its own for files.
+struct Api {
+    app: Router,
+    state: AppState,
+    dir: PathBuf,
+}
+
+impl Drop for Api {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+impl Api {
+    fn new() -> Self {
+        let dir = std::env::temp_dir().join(format!(
+            "tagutils-test-{}-{}",
+            std::process::id(),
+            NEXT_DIR.fetch_add(1, Ordering::Relaxed)
+        ));
+        let state = AppState {
+            db: Arc::new(Mutex::new(db::open(":memory:".as_ref()).unwrap())),
+            storage: dir.join("storage"),
+            thumbnails: dir.join("thumbnails"),
+            tmp: dir.join("tmp"),
+        };
+        for path in [&state.storage, &state.thumbnails, &state.tmp] {
+            std::fs::create_dir_all(path).unwrap();
+        }
+        Api {
+            app: api().with_state(state.clone()),
+            state,
+            dir,
+        }
+    }
+
+    async fn call(&self, method: &str, path: &str, body: Option<Value>) -> (StatusCode, Value) {
+        let request = Request::builder().method(method).uri(path);
+        let request = match body {
+            Some(body) => request
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string())),
+            None => request.body(Body::empty()),
+        };
+        let response = self.app.clone().oneshot(request.unwrap()).await.unwrap();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
+    }
+
+    /// The answer to a request that has to succeed.
+    async fn ok(&self, method: &str, path: &str, body: Option<Value>) -> Value {
+        let (status, answer) = self.call(method, path, body).await;
+        assert!(status.is_success(), "{method} {path}: {status} {answer}");
+        answer
+    }
+
+    async fn get(&self, path: &str) -> Value {
+        self.ok("GET", path, None).await
+    }
+
+    async fn post(&self, path: &str, body: Value) -> Value {
+        self.ok("POST", path, Some(body)).await
+    }
+
+    /// The status of a request that has to be refused.
+    async fn refused(&self, path: &str, body: Value) -> StatusCode {
+        let (status, _) = self.call("POST", path, Some(body)).await;
+        assert!(status.is_client_error(), "POST {path}: {status}");
+        status
+    }
+
+    /// Puts a file in the library as an upload would, and returns its ID.
+    fn file(&self, name: &str) -> i64 {
+        let conn = self.state.db.lock().unwrap();
+        conn.execute("INSERT INTO entity (kind) VALUES ('file')", [])
+            .unwrap();
+        let id = conn.last_insert_rowid();
+        let hash = format!("{id:064x}");
+        conn.execute(
+            "INSERT INTO file (entity_id, hash, extension, media_type, size, original_name)
+             VALUES (?1, ?2, 'png', 'image', 4, ?3)",
+            params![id, hash, name],
+        )
+        .unwrap();
+        std::fs::write(self.stored(id), b"data").unwrap();
+        id
+    }
+
+    /// Where the file made by `file` is kept.
+    fn stored(&self, id: i64) -> PathBuf {
+        self.state
+            .storage
+            .join(stored_name(&format!("{id:064x}"), "png"))
+    }
+
+    async fn edit(&self, ids: &[i64], changes: Value) -> Value {
+        let mut body = changes;
+        body["ids"] = json!(ids);
+        self.post("/entities/edit", body).await
+    }
+
+    async fn metadata(&self, ids: &[i64]) -> Value {
+        self.post("/entities/metadata", json!({ "ids": ids })).await
+    }
+
+    /// IDs found by a query, lowest first.
+    async fn found(&self, query: &str) -> Vec<i64> {
+        let q: String = query.bytes().map(|b| format!("%{b:02X}")).collect();
+        let answer = self.get(&format!("/search/ids?q={q}")).await;
+        let mut ids: Vec<i64> = serde_json::from_value(answer["ids"].clone()).unwrap();
+        ids.sort();
+        ids
+    }
+
+    /// The tags of a field as the tag editor lists them: value and count.
+    async fn tags(&self, field: &str) -> Vec<(String, i64)> {
+        let answer = self.get(&format!("/tags/all?field={field}")).await;
+        answer["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tag| {
+                (
+                    tag["value"].as_str().unwrap().to_string(),
+                    tag["count"].as_i64().unwrap(),
+                )
+            })
+            .collect()
+    }
+
+    /// Member IDs of a collection by position.
+    fn members(&self, collection: i64) -> Vec<(i64, Option<i64>)> {
+        let conn = self.state.db.lock().unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT member_id, position FROM membership WHERE collection_id = ?1
+                 ORDER BY position IS NULL, position, member_id",
+            )
+            .unwrap();
+        stmt.query_map([collection], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    }
+}
+
+fn tag(value: &str, count: i64) -> (String, i64) {
+    (value.to_string(), count)
+}
+
+/// The values of one field in a metadata answer, with their counts.
+fn carried(metadata: &Value, field: &str) -> Vec<(String, i64)> {
+    let list = match field {
+        "source_urls" | "identifiers" => &metadata[field],
+        _ => &metadata["tags"][field],
+    };
+    list.as_array()
+        .map(|values| {
+            values
+                .iter()
+                .map(|v| tag(v["value"].as_str().unwrap(), v["count"].as_i64().unwrap()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[tokio::test]
+async fn scalars_are_set_checked_and_cleared() {
+    let api = Api::new();
+    let (a, b) = (api.file("a.png"), api.file("b.png"));
+
+    let answer = api
+        .edit(
+            &[a, b],
+            json!({ "set": { "title": "Both", "score": 5, "date": "2020-05" } }),
+        )
+        .await;
+    assert_eq!(answer["updated"], 2);
+    api.edit(
+        &[a],
+        json!({ "set": { "title": "Only a", "original_name": "renamed.png" } }),
+    )
+    .await;
+
+    let both = api.metadata(&[a, b]).await;
+    assert_eq!(both["count"], 2);
+    assert_eq!(both["files"], 2);
+    assert_eq!(
+        both["scalars"]["score"],
+        json!({ "value": 5, "mixed": false })
+    );
+    assert_eq!(
+        both["scalars"]["title"],
+        json!({ "value": null, "mixed": true })
+    );
+    assert_eq!(both["scalars"]["original_name"]["mixed"], true);
+    let one = api.get(&format!("/entities/{a}")).await;
+    assert_eq!(one["title"], "Only a");
+    assert_eq!(one["date"], "2020-05");
+    assert_eq!(one["file"]["original_name"], "renamed.png");
+
+    // Set on one and empty on the other is mixed too.
+    api.edit(&[b], json!({ "set": { "score": null, "title": "" } }))
+        .await;
+    let both = api.metadata(&[a, b]).await;
+    assert_eq!(both["scalars"]["score"]["mixed"], true);
+    assert_eq!(
+        api.get(&format!("/entities/{b}")).await["title"],
+        Value::Null
+    );
+
+    for bad in [
+        json!({ "score": 9 }),
+        json!({ "score": "high" }),
+        json!({ "date": "May 2020" }),
+        json!({ "content_rating": "spicy" }),
+        json!({ "kind": "collection" }),
+        json!({ "collection_type": null }),
+    ] {
+        api.refused("/entities/edit", json!({ "ids": [a], "set": bad }))
+            .await;
+    }
+    assert_eq!(
+        api.call("GET", "/entities/999", None).await.0,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn an_edit_is_all_or_nothing() {
+    let api = Api::new();
+    let a = api.file("a.png");
+    api.refused(
+        "/entities/edit",
+        json!({ "ids": [a], "set": { "title": "Kept out" }, "add": { "tags": ["fine", "@bad"] } }),
+    )
+    .await;
+    api.refused(
+        "/entities/edit",
+        json!({ "ids": [a], "add": { "tags": ["fine"] }, "add_urls": ["javascript:alert(1)"] }),
+    )
+    .await;
+    api.refused(
+        "/entities/edit",
+        json!({ "ids": [a], "add": { "nonsense": ["x"] } }),
+    )
+    .await;
+    let after = api.metadata(&[a]).await;
+    assert_eq!(after["scalars"]["title"]["value"], Value::Null);
+    assert_eq!(after["tags"], json!({}));
+}
+
+#[tokio::test]
+async fn tags_are_added_counted_and_removed() {
+    let api = Api::new();
+    let (a, b) = (api.file("a.png"), api.file("b.png"));
+    api.edit(
+        &[a, b],
+        json!({ "add": { "tags": ["cat", " art : line art "], "creator": ["Abba"] } }),
+    )
+    .await;
+    api.edit(&[a], json!({ "add": { "tags": ["CAT", "solo"] } }))
+        .await;
+
+    let both = api.metadata(&[a, b]).await;
+    assert_eq!(
+        carried(&both, "tags"),
+        [tag("art:line art", 2), tag("cat", 2), tag("solo", 1)]
+    );
+    assert_eq!(carried(&both, "creator"), [tag("Abba", 2)]);
+    assert_eq!(api.found("cat").await, [a, b]);
+    assert_eq!(api.found("art:*").await, [a, b]);
+    assert_eq!(api.found("@cr:abba solo").await, [a]);
+
+    // A tag nothing carries any more is gone.
+    api.edit(&[a, b], json!({ "remove": { "tags": ["solo", "cat"] } }))
+        .await;
+    assert_eq!(api.tags("tags").await, [tag("art:line art", 2)]);
+    assert_eq!(
+        carried(&api.metadata(&[a]).await, "tags"),
+        [tag("art:line art", 1)]
+    );
+}
+
+#[tokio::test]
+async fn links_and_identifiers_are_plain_lists() {
+    let api = Api::new();
+    let (a, b) = (api.file("a.png"), api.file("b.png"));
+    api.edit(
+        &[a, b],
+        json!({ "add_urls": ["example.com/a"], "add_identifiers": [" isbn-1 "] }),
+    )
+    .await;
+    api.edit(&[a], json!({ "add_urls": ["http://other.example/"] }))
+        .await;
+
+    let both = api.metadata(&[a, b]).await;
+    assert_eq!(
+        carried(&both, "source_urls"),
+        [
+            tag("http://other.example/", 1),
+            tag("https://example.com/a", 2)
+        ]
+    );
+    assert_eq!(carried(&both, "identifiers"), [tag("isbn-1", 2)]);
+    // Neither is a tag.
+    assert_eq!(both["tags"], json!({}));
+    assert_eq!(api.found("identifier=isbn-1").await, [a, b]);
+
+    api.edit(
+        &[a, b],
+        json!({ "remove_urls": ["https://example.com/a"], "remove_identifiers": ["isbn-1"] }),
+    )
+    .await;
+    let both = api.metadata(&[a, b]).await;
+    assert_eq!(
+        carried(&both, "source_urls"),
+        [tag("http://other.example/", 1)]
+    );
+    assert_eq!(carried(&both, "identifiers"), []);
+    api.refused(
+        "/entities/edit",
+        json!({ "ids": [a], "add_identifiers": ["  "] }),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn deleting_takes_two_steps() {
+    let api = Api::new();
+    let (a, b) = (api.file("a.png"), api.file("b.png"));
+    api.edit(&[a], json!({ "add": { "tags": ["doomed"] } }))
+        .await;
+    api.edit(&[a, b], json!({ "add": { "tags": ["shared"] } }))
+        .await;
+
+    // Nothing is deleted that is not in the trash.
+    assert_eq!(
+        api.post("/entities/delete", json!({ "ids": [a, b] })).await["deleted"],
+        0
+    );
+    assert!(api.stored(a).exists());
+
+    assert_eq!(
+        api.post("/entities/trash", json!({ "ids": [a] })).await["changed"],
+        1
+    );
+    assert_eq!(
+        api.post("/entities/trash", json!({ "ids": [a] })).await["changed"],
+        0
+    );
+    assert_eq!(api.found("").await, [b]);
+    assert_eq!(api.found("@trashed").await, [a]);
+    assert_eq!(api.found("-@trashed").await, [b]);
+    assert_eq!(api.metadata(&[a, b]).await["trashed"], 1);
+    assert_eq!(
+        api.get("/stats").await,
+        json!({ "files": 1, "collections": 0, "trashed": 1 })
+    );
+    // Trashed, it keeps its file and tags.
+    assert!(api.stored(a).exists());
+    assert_eq!(api.tags("tags").await, [tag("doomed", 1), tag("shared", 2)]);
+
+    assert_eq!(
+        api.post("/entities/restore", json!({ "ids": [a] })).await["changed"],
+        1
+    );
+    assert_eq!(api.found("").await, [a, b]);
+
+    api.post("/entities/trash", json!({ "ids": [a] })).await;
+    assert_eq!(
+        api.post("/entities/delete", json!({ "ids": [a, b] })).await["deleted"],
+        1
+    );
+    assert!(!api.stored(a).exists());
+    assert!(api.stored(b).exists());
+    assert_eq!(api.found("@trashed").await, [] as [i64; 0]);
+    assert_eq!(api.tags("tags").await, [tag("shared", 1)]);
+}
+
+#[tokio::test]
+async fn collections_hold_members() {
+    let api = Api::new();
+    let (a, b, c) = (api.file("a.png"), api.file("b.png"), api.file("c.png"));
+
+    let set = api
+        .post(
+            "/collections",
+            json!({ "collection_type": "set", "members": [a, b] }),
+        )
+        .await["id"]
+        .as_i64()
+        .unwrap();
+    let made = api.get(&format!("/entities/{set}")).await;
+    assert_eq!(made["title"], "Set");
+    assert_eq!(
+        made["collection"],
+        json!({ "collection_type": "set", "member_count": 2, "ordered": false })
+    );
+    assert_eq!(api.members(set), [(a, None), (b, None)]);
+    assert_eq!(api.found(&format!("in={set}")).await, [a, b]);
+
+    let shared = api.metadata(&[a, c]).await;
+    assert_eq!(
+        shared["memberships"],
+        json!([{ "id": set, "title": "Set", "collection_type": "set", "count": 1 }])
+    );
+
+    let answer = api
+        .post(
+            &format!("/collections/{set}/members"),
+            json!({ "add": [c, a], "remove": [b] }),
+        )
+        .await;
+    assert_eq!(answer["member_count"], 2);
+    assert_eq!(api.members(set), [(a, None), (c, None)]);
+
+    // A title, when given, is kept; a blank one is not one.
+    for (title, stored) in [("  Mine ", "Mine"), ("  ", "User Collection")] {
+        let id = api
+            .post(
+                "/collections",
+                json!({ "collection_type": "usercollection", "title": title }),
+            )
+            .await["id"]
+            .as_i64()
+            .unwrap();
+        assert_eq!(api.get(&format!("/entities/{id}")).await["title"], stored);
+    }
+
+    api.refused("/collections", json!({ "collection_type": "pile" }))
+        .await;
+    assert_eq!(
+        api.refused("/collections/999/members", json!({ "add": [a] }))
+            .await,
+        StatusCode::NOT_FOUND
+    );
+    api.refused(
+        &format!("/collections/{set}/members"),
+        json!({ "add": [999] }),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn collections_nest_but_never_in_themselves() {
+    let api = Api::new();
+    let a = api.file("a.png");
+    let new = async |body: Value| api.post("/collections", body).await["id"].as_i64().unwrap();
+    let outer = new(json!({ "collection_type": "set" })).await;
+    let inner = new(json!({ "collection_type": "variant", "members": [a], "parent": outer })).await;
+    assert_eq!(api.members(outer), [(inner, None)]);
+    assert_eq!(api.found(&format!("contains={inner}")).await, [outer]);
+
+    for (collection, member) in [(outer, outer), (inner, outer)] {
+        api.refused(
+            &format!("/collections/{collection}/members"),
+            json!({ "add": [member] }),
+        )
+        .await;
+    }
+    assert_eq!(api.members(inner), [(a, None)]);
+
+    // Deleting a collection leaves its members.
+    api.post("/entities/trash", json!({ "ids": [inner] })).await;
+    api.post("/entities/delete", json!({ "ids": [inner] }))
+        .await;
+    assert_eq!(api.found("").await, [a, outer]);
+    assert_eq!(api.members(outer), []);
+}
+
+#[tokio::test]
+async fn ordered_collections_keep_positions() {
+    let api = Api::new();
+    let (a, b, c, d) = (
+        api.file("a.png"),
+        api.file("b.png"),
+        api.file("c.png"),
+        api.file("d.png"),
+    );
+    // A sequence is ordered unless told otherwise.
+    let sequence = api
+        .post(
+            "/collections",
+            json!({ "collection_type": "sequence", "members": [c, a, b] }),
+        )
+        .await["id"]
+        .as_i64()
+        .unwrap();
+    assert_eq!(
+        api.members(sequence),
+        [(c, Some(0)), (a, Some(1)), (b, Some(2))]
+    );
+
+    // New members go on the end; ones already in keep their place.
+    api.post(
+        &format!("/collections/{sequence}/members"),
+        json!({ "add": [a, d] }),
+    )
+    .await;
+    assert_eq!(api.members(sequence).last(), Some(&(d, Some(3))));
+
+    // Members left out of a new order follow it, as they were.
+    let (status, _) = api
+        .call(
+            "PUT",
+            &format!("/collections/{sequence}/order"),
+            Some(json!({ "ids": [b, d] })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(
+        api.members(sequence),
+        [(b, Some(0)), (d, Some(1)), (c, Some(2)), (a, Some(3))]
+    );
+
+    // A collection that becomes ordered gives its members positions.
+    let set = api
+        .post(
+            "/collections",
+            json!({ "collection_type": "set", "members": [b, a] }),
+        )
+        .await["id"]
+        .as_i64()
+        .unwrap();
+    assert_eq!(api.members(set), [(a, None), (b, None)]);
+    api.edit(&[set], json!({ "set": { "ordered": true } }))
+        .await;
+    assert_eq!(api.members(set), [(a, Some(0)), (b, Some(1))]);
+    assert_eq!(
+        api.metadata(&[set, sequence]).await["ordered"],
+        json!({ "value": true, "mixed": false })
+    );
+    api.edit(&[set], json!({ "set": { "collection_type": "variant" } }))
+        .await;
+    assert_eq!(
+        api.metadata(&[set, sequence]).await["collection_type"]["mixed"],
+        true
+    );
+}
+
+#[tokio::test]
+async fn tags_are_defined_described_and_deleted() {
+    let api = Api::new();
+    let a = api.file("a.png");
+    let named = |value: &str| json!({ "field": "tags", "value": value });
+
+    // A tag made by hand stays though nothing carries it.
+    api.post(
+        "/tags",
+        json!({ "field": "tags", "value": " art : ink ", "description": "Pen work" }),
+    )
+    .await;
+    api.edit(&[a], json!({ "add": { "tags": ["art:ink", "passing"] } }))
+        .await;
+    api.edit(
+        &[a],
+        json!({ "remove": { "tags": ["art:ink", "passing"] } }),
+    )
+    .await;
+    assert_eq!(api.tags("tags").await, [tag("art:ink", 0)]);
+    let listed = api.get("/tags/all?field=tags").await;
+    assert_eq!(listed["tags"][0]["description"], "Pen work");
+
+    // The description shows on the files that carry it.
+    api.edit(&[a], json!({ "add": { "tags": ["art:ink"] } }))
+        .await;
+    assert_eq!(
+        api.metadata(&[a]).await["tags"]["tags"][0]["description"],
+        "Pen work"
+    );
+    let mut described = named("art:ink");
+    described["description"] = json!("  ");
+    api.post("/tags/describe", described).await;
+    assert_eq!(
+        api.metadata(&[a]).await["tags"]["tags"][0]["description"],
+        Value::Null
+    );
+
+    api.refused("/tags/delete", named("art:ink")).await;
+    assert_eq!(
+        api.refused("/tags/delete", named("nothing")).await,
+        StatusCode::NOT_FOUND
+    );
+    api.edit(&[a], json!({ "remove": { "tags": ["art:ink"] } }))
+        .await;
+    api.post("/tags/delete", named("art:ink")).await;
+    assert_eq!(api.tags("tags").await, []);
+
+    api.refused("/tags", named("@at")).await;
+    api.refused("/tags", json!({ "field": "source_url", "value": "x" }))
+        .await;
+}
+
+#[tokio::test]
+async fn renaming_a_tag_merges_into_one_of_that_name() {
+    let api = Api::new();
+    let (a, b) = (api.file("a.png"), api.file("b.png"));
+    let rename = |from: &str, to: &str| json!({ "field": "tags", "from": from, "to": to });
+    api.edit(&[a, b], json!({ "add": { "tags": ["kitten"] } }))
+        .await;
+    api.edit(
+        &[a],
+        json!({ "add": { "tags": ["cat"], "creator": ["kitten"] } }),
+    )
+    .await;
+    api.post(
+        "/tags/describe",
+        json!({ "field": "tags", "value": "kitten", "description": "Young" }),
+    )
+    .await;
+
+    api.post("/tags/rename", rename("kitten", "kitty")).await;
+    assert_eq!(api.tags("tags").await, [tag("cat", 1), tag("kitty", 2)]);
+
+    api.post("/tags/rename", rename("kitty", "Cat")).await;
+    assert_eq!(api.tags("tags").await, [tag("cat", 2)]);
+    assert_eq!(
+        carried(&api.metadata(&[a, b]).await, "tags"),
+        [tag("cat", 2)]
+    );
+    // The merged tag takes the description it lacked.
+    assert_eq!(
+        api.get("/tags/all?field=tags").await["tags"][0]["description"],
+        "Young"
+    );
+    // Another type's tag of the same name is its own.
+    assert_eq!(api.tags("creator").await, [tag("kitten", 1)]);
+
+    assert_eq!(
+        api.refused("/tags/rename", rename("nothing", "something"))
+            .await,
+        StatusCode::NOT_FOUND
+    );
+    api.refused("/tags/rename", rename("cat", "a::b")).await;
+}
+
+#[tokio::test]
+async fn a_namespace_is_renamed_with_everything_under_it() {
+    let api = Api::new();
+    let a = api.file("a.png");
+    let rename = |from: &str, to: &str| json!({ "field": "tags", "from": from, "to": to, "namespace": true });
+    api.edit(
+        &[a],
+        json!({ "add": { "tags": ["art:ink", "art:pen:fine", "artist", "ink"] } }),
+    )
+    .await;
+
+    assert_eq!(
+        api.post("/tags/rename", rename("art", "medium")).await["renamed"],
+        2
+    );
+    assert_eq!(
+        api.tags("tags").await,
+        [
+            tag("artist", 1),
+            tag("ink", 1),
+            tag("medium:ink", 1),
+            tag("medium:pen:fine", 1)
+        ]
+    );
+    // Moved out of the namespace, a tag joins one already there.
+    api.post("/tags/rename", rename("medium", "")).await;
+    assert_eq!(
+        api.tags("tags").await,
+        [tag("artist", 1), tag("ink", 1), tag("pen:fine", 1)]
+    );
+    assert_eq!(
+        api.refused("/tags/rename", rename("art", "x")).await,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn aliases_wait_to_be_applied() {
+    let api = Api::new();
+    let (a, b) = (api.file("a.png"), api.file("b.png"));
+    let alias =
+        |alias: &str, target: &str| json!({ "field": "tags", "alias": alias, "target": target });
+    api.edit(&[a], json!({ "add": { "tags": ["kitty"] } }))
+        .await;
+    api.edit(&[b], json!({ "add": { "tags": ["cat"] } })).await;
+
+    // Files already carrying the alias keep it for now.
+    api.post("/tags/alias", alias("kitty", "cat")).await;
+    let listed = api.get("/tags/all?field=tags").await;
+    assert_eq!(listed["pending"], 1);
+    assert_eq!(
+        listed["tags"],
+        json!([{
+            "value": "cat", "count": 1, "description": null,
+            "aliases": [{ "value": "kitty", "count": 1 }],
+        }])
+    );
+    assert_eq!(
+        carried(&api.metadata(&[a]).await, "tags"),
+        [tag("kitty", 1)]
+    );
+    // A search for the alias is a search for its tag.
+    assert_eq!(api.found("kitty").await, [b]);
+
+    // Added from now on, the alias is its tag.
+    api.edit(&[b], json!({ "add": { "tags": ["Kitty"] } }))
+        .await;
+    assert_eq!(carried(&api.metadata(&[b]).await, "tags"), [tag("cat", 1)]);
+
+    assert_eq!(
+        api.post("/tags/aliases/apply", json!({})).await["updated"],
+        1
+    );
+    assert_eq!(api.tags("tags").await, [tag("cat", 2)]);
+    assert_eq!(api.get("/tags/all?field=tags").await["pending"], 0);
+    assert_eq!(api.found("kitty").await, [a, b]);
+
+    // Aliases never chain, and follow a renamed tag.
+    api.post("/tags/alias", alias("puss", "kitty")).await;
+    api.post(
+        "/tags/rename",
+        json!({ "field": "tags", "from": "cat", "to": "feline" }),
+    )
+    .await;
+    let listed = api.get("/tags/all?field=tags").await;
+    assert_eq!(listed["tags"][0]["value"], "feline");
+    assert_eq!(listed["tags"][0]["aliases"].as_array().unwrap().len(), 2);
+
+    api.refused("/tags/alias", alias("feline", "feline")).await;
+    api.refused(
+        "/tags/rename",
+        json!({ "field": "tags", "from": "kitty", "to": "x" }),
+    )
+    .await;
+    api.refused("/tags", json!({ "field": "tags", "value": "puss" }))
+        .await;
+    api.post("/tags/alias", alias("puss", "")).await;
+    assert_eq!(
+        api.refused("/tags/alias", alias("puss", "")).await,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn suggestions_go_a_namespace_at_a_time() {
+    let api = Api::new();
+    let (a, b) = (api.file("a.png"), api.file("b.png"));
+    api.edit(&[a, b], json!({ "add": { "tags": ["art:ink", "cart"] } }))
+        .await;
+    api.edit(
+        &[a],
+        json!({ "add": { "tags": ["art:pen:fine", "artist", "style:inked"] } }),
+    )
+    .await;
+    api.post(
+        "/tags/alias",
+        json!({ "field": "tags", "alias": "arty", "target": "artist" }),
+    )
+    .await;
+    let suggested = async |typed: &str| {
+        let answer = api.get(&format!("/tags?field=tags&q={typed}")).await;
+        answer
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| {
+                let value = s["value"].as_str().unwrap();
+                match s["alias"].as_str() {
+                    Some(alias) => format!("{alias}>{value} {}", s["count"]),
+                    None => format!("{value} {}", s["count"]),
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+
+    // Starting with what was typed, then containing it; the most used first.
+    assert_eq!(
+        suggested("ar").await,
+        ["art: 3", "artist 1", "arty>artist 1", "cart 2"]
+    );
+    // Inside a namespace: its tags, and the namespaces under it.
+    assert_eq!(suggested("art:").await, ["art:ink 2", "art:pen: 1"]);
+    assert_eq!(suggested("art:pen:f").await, ["art:pen:fine 1"]);
+    // A bare name is found inside namespaces too.
+    assert_eq!(suggested("ink").await, ["art:ink 2", "style:inked 1"]);
+    assert_eq!(suggested("zzz").await, [] as [&str; 0]);
+    assert_eq!(
+        api.call("GET", "/tags?field=nope&q=a", None).await.0,
+        StatusCode::BAD_REQUEST
+    );
+}
+
+#[tokio::test]
+async fn a_bad_query_says_where() {
+    let api = Api::new();
+    let (status, answer) = api.call("GET", "/search?q=score%3Emany", None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(answer["error"].is_string());
+    assert!(answer["position"].is_number());
+
+    let a = api.file("a.png");
+    let page = api.get("/search?q=").await;
+    assert_eq!(page["total"], 1);
+    assert_eq!(page["items"][0]["id"], a);
+    assert_eq!(page["items"][0]["trashed"], false);
+}

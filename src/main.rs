@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod api_tests;
 mod book;
 mod collections;
 mod db;
@@ -42,6 +44,22 @@ fn env_or(key: &str, default: &str) -> String {
     env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
+/// Everything under `/api`.
+fn api() -> Router<AppState> {
+    Router::new()
+        .route("/health", get(health))
+        .route("/stats", get(stats))
+        .merge(settings::router())
+        .merge(tabs::router())
+        .merge(tags::router())
+        .merge(files::router())
+        .merge(search::router())
+        .merge(entities::router())
+        .merge(collections::router())
+        .merge(export::router())
+        .fallback(|| async { ApiError::NotFound })
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = PathBuf::from(env_or("TAGUTILS_DATA", "data"));
@@ -65,23 +83,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tmp,
     };
 
-    let api = Router::new()
-        .route("/health", get(health))
-        .route("/stats", get(stats))
-        .merge(settings::router())
-        .merge(tabs::router())
-        .merge(tags::router())
-        .merge(files::router())
-        .merge(search::router())
-        .merge(entities::router())
-        .merge(collections::router())
-        .merge(export::router())
-        .fallback(|| async { ApiError::NotFound });
     // Anything outside /api is the SPA; unknown paths get index.html so
     // client-side routes survive a reload.
     let spa = ServeDir::new(&web_dir).fallback(ServeFile::new(web_dir.join("index.html")));
     let app = Router::new()
-        .nest("/api", api)
+        .nest("/api", api())
         .fallback_service(spa)
         .with_state(state);
 
