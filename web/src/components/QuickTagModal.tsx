@@ -1,7 +1,6 @@
 import { createResource, createSignal, For, Show } from "solid-js";
 import * as api from "../api";
-import { TAG_FIELDS } from "../api";
-import { fieldLabel, plural } from "../format";
+import { plural } from "../format";
 import { changed } from "../search";
 import { showToast } from "../toast";
 import Icon from "./Icon";
@@ -9,15 +8,18 @@ import Modal from "./Modal";
 
 /**
  * Tags typed in quick succession: Enter puts what is typed on the list,
- * Shift+Enter adds the whole list to the given entities.
+ * Shift+Enter adds the whole list to the given entities. It adds to one
+ * tag field, `tags` unless another is named.
  */
 export default function QuickTagModal(props: {
   ids: number[];
   /** What the tags go on, for the title: "3 items", "this file". */
   target: string;
+  /** The tag field the tags go into. */
+  field?: string;
   onClose: () => void;
 }) {
-  const [field, setField] = createSignal<string>(TAG_FIELDS[0]);
+  const field = () => props.field ?? "tags";
   const [text, setText] = createSignal("");
   const [list, setList] = createSignal<string[]>([]);
   const [error, setError] = createSignal<string | null>(null);
@@ -52,15 +54,6 @@ export default function QuickTagModal(props: {
   return (
     <Modal title={`Add tags to ${props.target}`} onClose={props.onClose}>
       <div class="quick-tag">
-        <select aria-label="Tag type" onChange={(event) => setField(event.currentTarget.value)}>
-          <For each={TAG_FIELDS}>
-            {(option) => (
-              <option value={option} selected={option === field()}>
-                {fieldLabel(option)}
-              </option>
-            )}
-          </For>
-        </select>
         <input
           type="text"
           autofocus

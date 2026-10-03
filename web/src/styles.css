@@ -1268,10 +1268,6 @@ kbd {
   gap: 8px;
 }
 
-.quick-tag select {
-  flex: 0 0 120px;
-}
-
 .quick-tag-list {
   min-height: 28px;
   margin-top: 10px;
