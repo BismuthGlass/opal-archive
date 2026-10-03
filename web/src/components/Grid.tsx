@@ -14,9 +14,8 @@ import {
   searchCount,
   selected,
 } from "../search";
-import { activeTab } from "../tabs";
 import { stats } from "../stats";
-import { openCollection } from "../tabs";
+import { activeTab, openCollection } from "../tabs";
 import { openContextMenu } from "./ContextMenu";
 import Icon from "./Icon";
 
