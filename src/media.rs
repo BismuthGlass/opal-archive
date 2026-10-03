@@ -1,18 +1,23 @@
 //! Classifying stored files, reading their attributes and making thumbnails
 //! with external tools (`file`, ImageMagick, ffmpeg, poppler). A missing or
 //! failing tool is logged and leaves the attribute unset; it never fails the
-//! upload.
+//! upload. EPUB and CBZ archives are read directly, in `book`.
 
 use std::{
     ffi::{OsStr, OsString},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use serde_json::Value;
 use tokio::process::Command;
 
+use crate::book;
+
 /// Book formats `file` reports as a generic archive or not at all.
 const BOOK_EXTENSIONS: &[&str] = &["pdf", "epub", "mobi", "azw3", "djvu", "cbz", "cbr", "cb7"];
+
+/// Books that are zip archives, read by `book`.
+const ARCHIVE_BOOKS: &[&str] = &["epub", "cbz"];
 
 /// Longest side of a thumbnail, in pixels.
 const THUMBNAIL_SIZE: u32 = 400;
@@ -84,8 +89,53 @@ pub async fn probe(path: &Path, media_type: &str, extension: &str) -> Attributes
             page_count: pdf_pages(path).await,
             ..Attributes::default()
         },
+        "book" if ARCHIVE_BOOKS.contains(&extension) => Attributes {
+            page_count: in_archive(path, extension, book::pages).await,
+            ..Attributes::default()
+        },
         _ => Attributes::default(),
     }
+}
+
+/// Runs one of the blocking `book` functions off the async threads.
+async fn in_archive<T: Send + 'static>(
+    path: &Path,
+    extension: &str,
+    read: fn(&Path, &str) -> Option<T>,
+) -> Option<T> {
+    let (path, extension): (PathBuf, String) = (path.into(), extension.into());
+    tokio::task::spawn_blocking(move || read(&path, &extension))
+        .await
+        .ok()
+        .flatten()
+}
+
+/// Thumbnail of an image file. [0] takes the first frame of animations and
+/// multi-page images.
+async fn image_thumbnail(source: &Path, dest: &Path) {
+    let size = THUMBNAIL_SIZE;
+    let mut first_frame = source.as_os_str().to_owned();
+    first_frame.push("[0]");
+    let mut output = OsString::from("jpeg:");
+    output.push(dest);
+    let mut args = vec![first_frame];
+    // ">" only ever shrinks. Transparency is flattened onto white.
+    args.extend(os(&[
+        "-auto-orient",
+        "-thumbnail",
+        &format!("{size}x{size}>"),
+        "-background",
+        "white",
+        "-alpha",
+        "remove",
+        "-alpha",
+        "off",
+        "-strip",
+        "-quality",
+        "82",
+    ]));
+    args.push(output);
+    run("magick", &args, false).await;
 }
 
 async fn probe_image(path: &Path) -> Attributes {
@@ -149,7 +199,7 @@ async fn pdf_pages(path: &Path) -> Option<i64> {
 }
 
 /// Writes a JPEG thumbnail of `source` to `dest`. Returns whether one was
-/// made; many files (text, audio without cover art, e-books) have none.
+/// made; many files (text, audio without cover art, most e-book formats) have none.
 pub async fn thumbnail(
     source: &Path,
     media_type: &str,
@@ -163,31 +213,7 @@ pub async fn thumbnail(
         "scale='min({size},iw)':'min({size},ih)':force_original_aspect_ratio=decrease"
     );
     match media_type {
-        "image" => {
-            // [0] takes the first frame of animations and multi-page images.
-            let mut first_frame = source.as_os_str().to_owned();
-            first_frame.push("[0]");
-            let mut output = OsString::from("jpeg:");
-            output.push(dest);
-            let mut args = vec![first_frame];
-            // ">" only ever shrinks. Transparency is flattened onto white.
-            args.extend(os(&[
-                "-auto-orient",
-                "-thumbnail",
-                &format!("{size}x{size}>"),
-                "-background",
-                "white",
-                "-alpha",
-                "remove",
-                "-alpha",
-                "off",
-                "-strip",
-                "-quality",
-                "82",
-            ]));
-            args.push(output);
-            run("magick", &args, false).await;
-        }
+        "image" => image_thumbnail(source, dest).await,
         "video" => {
             // A little way in, to skip black lead-in frames.
             let offset = length.map_or(0.0, |length| (length * 0.1).min(10.0));
@@ -217,6 +243,16 @@ pub async fn thumbnail(
             args.push(source.into());
             args.push(dest.with_extension("").into());
             run("pdftoppm", &args, false).await;
+        }
+        "book" if ARCHIVE_BOOKS.contains(&extension) => {
+            // The cover goes through a file, for ImageMagick to read.
+            if let Some(cover) = in_archive(source, extension, book::cover).await {
+                let extracted = dest.with_extension("cover");
+                if tokio::fs::write(&extracted, cover).await.is_ok() {
+                    image_thumbnail(&extracted, dest).await;
+                }
+                let _ = tokio::fs::remove_file(&extracted).await;
+            }
         }
         _ => return false,
     }

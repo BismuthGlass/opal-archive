@@ -19,6 +19,13 @@ the search language.
 If one of these is missing, uploads still succeed; the attributes or thumbnail
 it would have provided are left out and a line is logged.
 
+EPUB books and CBZ comic archives are read by the server itself: the cover
+becomes the thumbnail (through ImageMagick) and the page count is recorded. A
+CBZ has one page per image. An EPUB's count is the number of print pages it
+marks in its navigation; most mark none, and for those it is an estimate of
+1800 characters of text per page. Other book formats (mobi, azw3, djvu, cbr,
+cb7) are stored without either.
+
 SQLite is compiled into the server, so no system install is needed.
 
 ## Layout

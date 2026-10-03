@@ -1,3 +1,4 @@
+mod book;
 mod collections;
 mod db;
 mod entities;
