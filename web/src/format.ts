@@ -31,3 +31,13 @@ export function quoteValue(value: string): string {
     ? `"${escaped}"`
     : value;
 }
+
+/** A query term for a tag, or with `under`, for every tag in a namespace. */
+export function tagQuery(field: string, value: string, under = false): string {
+  let term = quoteValue(value);
+  if (under) {
+    // The wildcard has to stay unescaped, inside the quotes if there are any.
+    term = term.endsWith('"') ? `${term.slice(0, -1)}:*"` : `${term}:*`;
+  }
+  return field === "tags" ? term : `${field}=${term}`;
+}

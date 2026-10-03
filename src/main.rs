@@ -9,6 +9,7 @@ mod media;
 mod query;
 mod search;
 mod tabs;
+mod tags;
 
 use std::{
     env,
@@ -67,6 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/health", get(health))
         .route("/stats", get(stats))
         .merge(tabs::router())
+        .merge(tags::router())
         .merge(files::router())
         .merge(search::router())
         .merge(entities::router())

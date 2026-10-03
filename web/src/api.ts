@@ -82,6 +82,9 @@ export const TAG_FIELDS = [
   "ai_usage_tags",
 ] as const;
 
+/** Tag fields whose values are not names: a colon in them is no namespace. */
+export const FLAT_TAG_FIELDS: readonly string[] = ["source_url"];
+
 export const COLLECTION_TYPES = ["usercollection", "set", "sequence", "variant", "sourceset"];
 export const CONTENT_RATINGS = ["safe", "risky", "nsfw"];
 export const AI_CONTENT = ["none", "partial", "full", "unknown"];
@@ -140,8 +143,14 @@ export const edit = (ids: number[], changes: Changes) =>
   request<{ updated: number }>("POST", "/entities/edit", { ids, ...changes });
 export const deleteEntities = (ids: number[]) =>
   request<{ deleted: number }>("POST", "/entities/delete", { ids });
+/** A tag, or a namespace (ending in a colon) to look further into. */
+export type Suggestion = { value: string; count: number; namespace: boolean };
+
 export const suggestTags = (field: string, q: string) =>
-  request<{ value: string; count: number }[]>("GET", `/tags?${params({ field, q })}`);
+  request<Suggestion[]>("GET", `/tags?${params({ field, q })}`);
+/** Renames a namespace on every tag under it; an empty `to` removes it. */
+export const renameNamespace = (field: string, from: string, to: string) =>
+  request<{ renamed: number }>("POST", "/tags/rename", { field, from, to });
 
 export const createCollection = (collection_type: string, title: string, members: number[]) =>
   request<{ id: number }>("POST", "/collections", { collection_type, title, members });

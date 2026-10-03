@@ -646,8 +646,65 @@ button.primary {
 }
 
 /* The input sits above its chips, so it stays put as values come and go. */
-.suggest + .chips {
+.suggest + .tag-groups {
   margin-top: 6px;
+}
+
+/* One row of chips per namespace, headed by its name. */
+.tag-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.namespace {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.namespace button {
+  padding: 1px 2px;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 4px;
+}
+
+.namespace-label:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.namespace-edit {
+  line-height: 1;
+  opacity: 0;
+}
+
+.chips:hover .namespace-edit,
+.namespace-edit:focus-visible {
+  opacity: 1;
+}
+
+.namespace-edit:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+
+.namespace input {
+  width: 14ch;
+  padding: 0 6px;
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+}
+
+.suggestion-count {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
 }
 
 /* A chip has three parts in three colours: the value, how many of the

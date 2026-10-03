@@ -82,7 +82,8 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `POST /entities/metadata`        | `{ids}` → what those entities have in common                   |
 | `POST /entities/edit`            | `{ids, set, add, remove}` → the same edit applied to all       |
 | `POST /entities/delete`          | `{ids}` → delete; files leave storage                          |
-| `GET /tags?field=&q=`            | Existing values of a tag field, for completion                 |
+| `GET /tags?field=&q=`            | Completions for a tag field, one namespace level at a time     |
+| `POST /tags/rename`              | `{field, from, to}` → rename a namespace on every tag under it; an empty `to` removes it |
 | `POST /collections`              | `{collection_type, title, members}` → new collection           |
 | `POST /collections/{id}/members` | `{add, remove}` → change membership                            |
 | `PUT /collections/{id}/order`    | `{ids}` → set member positions                                 |

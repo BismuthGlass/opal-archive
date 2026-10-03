@@ -10,9 +10,9 @@ import {
   Switch,
 } from "solid-js";
 import * as api from "../api";
-import { AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS, TAG_FIELDS } from "../api";
+import { AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS, FLAT_TAG_FIELDS, TAG_FIELDS } from "../api";
 import type { Changes, Metadata, Scalar } from "../api";
-import { duration, fieldLabel, fileSize, plural, quoteValue } from "../format";
+import { duration, fieldLabel, fileSize, plural, tagQuery } from "../format";
 import { changed, clearSelection, dataVersion, selected } from "../search";
 import { open as openTab } from "../tabs";
 import Icon from "./Icon";
@@ -94,6 +94,15 @@ export default function Sidebar(props: { onGroup: () => void }) {
   const apply = async (changes: Changes) => {
     try {
       await api.edit(ids(), changes);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+    changed();
+  };
+  const rename = async (field: string, from: string, to: string) => {
+    try {
+      await api.renameNamespace(field, from, to);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -269,7 +278,7 @@ export default function Sidebar(props: { onGroup: () => void }) {
             />
 
             <For each={TAG_FIELDS}>
-              {(field) => <TagField field={field} data={data()} apply={apply} />}
+              {(field) => <TagField field={field} data={data()} apply={apply} rename={rename} />}
             </For>
 
             <div class="field">
@@ -545,7 +554,73 @@ const MAX_SUGGESTIONS = 8;
  * it the values the selection carries. A value only some of the selection
  * has shows how many in brackets, and a "+" to give it to the rest.
  */
-function TagField(props: FieldProps & { field: string }) {
+/**
+ * The heading of a group of chips: the namespace they share. Clicking it
+ * searches the namespace; the pencil renames it everywhere.
+ */
+function Namespace(props: { field: string; name: string; rename: RenameNamespace }) {
+  const [editing, setEditing] = createSignal(false);
+
+  const save = (typed: string) => {
+    // As the server will store it: no space around colons, none trailing.
+    const to = typed
+      .split(":")
+      .map((part) => part.trim())
+      .join(":")
+      .replace(/:+$/, "");
+    setEditing(false);
+    if (to === props.name) return;
+    const question = to
+      ? `Rename the namespace "${props.name}" to "${to}"?`
+      : `Remove the namespace "${props.name}"? Its tags are kept, without it.`;
+    const kind = fieldLabel(props.field).toLowerCase();
+    const scope = `This changes every ${kind} tag under it, across the whole library.`;
+    if (confirm(`${question} ${scope}`)) props.rename(props.field, props.name, to);
+  };
+
+  return (
+    <span class="namespace">
+      <Show
+        when={editing()}
+        fallback={
+          <>
+            <button
+              class="namespace-label"
+              title="Search for everything in this namespace"
+              onClick={() => openTab("search", tagQuery(props.field, props.name, true))}
+            >
+              {props.name}:
+            </button>
+            <button
+              class="namespace-edit"
+              aria-label={`Rename the namespace ${props.name}`}
+              title="Rename this namespace everywhere"
+              onClick={() => setEditing(true)}
+            >
+              <Icon name="edit-outline" />
+            </button>
+          </>
+        }
+      >
+        <input
+          type="text"
+          aria-label={`New name for the namespace ${props.name}`}
+          value={props.name}
+          ref={(el) => queueMicrotask(() => (el.focus(), el.select()))}
+          onBlur={() => setEditing(false)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") save(event.currentTarget.value);
+            else if (event.key === "Escape") setEditing(false);
+          }}
+        />
+      </Show>
+    </span>
+  );
+}
+
+type RenameNamespace = (field: string, from: string, to: string) => void;
+
+function TagField(props: FieldProps & { field: string; rename: RenameNamespace }) {
   const [text, setText] = createSignal("");
   const [open, setOpen] = createSignal(false);
   /** Highlighted suggestion; -1 means the typed text itself. */
@@ -566,9 +641,29 @@ function TagField(props: FieldProps & { field: string }) {
         .map((tag) => tag.value.toLowerCase()),
     );
     return (fetched.latest ?? [])
-      .filter((option) => !complete.has(option.value.toLowerCase()))
+      .filter((option) => option.namespace || !complete.has(option.value.toLowerCase()))
       .slice(0, MAX_SUGGESTIONS);
   });
+
+  /** The values by namespace: those without one first, then by name. */
+  const groups = createMemo(() => {
+    const flat = FLAT_TAG_FIELDS.includes(props.field);
+    type Group = { namespace: string; tags: Metadata["tags"][string] };
+    const byNamespace = new Map<string, Group>();
+    for (const tag of values()) {
+      const colon = flat ? -1 : tag.value.lastIndexOf(":");
+      const namespace = colon < 0 ? "" : tag.value.slice(0, colon);
+      const key = namespace.toLowerCase();
+      if (!byNamespace.has(key)) byNamespace.set(key, { namespace, tags: [] });
+      byNamespace.get(key)!.tags.push(tag);
+    }
+    return [...byNamespace.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, group]) => group);
+  });
+  /** A tag's own name, without its namespace. */
+  const leaf = (value: string, namespace: string) =>
+    namespace ? value.slice(namespace.length + 1) : value;
 
   const add = (value: string) => {
     const trimmed = value.trim();
@@ -576,6 +671,16 @@ function TagField(props: FieldProps & { field: string }) {
     setText("");
     setActive(-1);
     props.apply({ add: { [props.field]: [trimmed] } });
+  };
+
+  /** Choosing a namespace steps into it; choosing a tag adds it. */
+  const pick = (option: api.Suggestion) => {
+    if (option.namespace) {
+      setText(option.value);
+      setActive(-1);
+    } else {
+      add(option.value);
+    }
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -589,7 +694,8 @@ function TagField(props: FieldProps & { field: string }) {
       setActive((i) => (i < 0 ? count - 1 : i - 1));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      add(active() >= 0 ? suggestions()[active()].value : text());
+      if (active() >= 0) pick(suggestions()[active()]);
+      else add(text());
     } else if (event.key === "Escape") {
       setOpen(false);
       setActive(-1);
@@ -632,10 +738,15 @@ function TagField(props: FieldProps & { field: string }) {
                   classList={{ active: i() === active() }}
                   // Keeps focus in the input, so the list stays open to click.
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => add(option.value)}
+                  onClick={() => pick(option)}
                 >
                   <span class="suggestion-value">{option.value}</span>
-                  <span class="suggestion-count">{option.count}</span>
+                  <span class="suggestion-count">
+                    {option.count}
+                    <Show when={option.namespace}>
+                      <Icon name="chevron-right" />
+                    </Show>
+                  </span>
                 </li>
               )}
             </For>
@@ -643,57 +754,59 @@ function TagField(props: FieldProps & { field: string }) {
         </Show>
       </div>
       <Show when={values().length > 0}>
-        <div class="chips">
-          <For each={values()}>
-            {(tag) => {
-              const partial = () => tag.count < props.data.count;
-              return (
-                <span class="chip" classList={{ partial: partial() }}>
-                  <button
-                    class="chip-label"
-                    title="Search for this"
-                    onClick={() =>
-                      openTab(
-                        "search",
-                        props.field === "tags"
-                          ? quoteValue(tag.value)
-                          : `${props.field}=${quoteValue(tag.value)}`,
-                      )
-                    }
-                  >
-                    {tag.value}
-                  </button>
-                  <Show when={partial()}>
-                    <span
-                      class="chip-count"
-                      title={`On ${tag.count} of ${props.data.count} selected`}
-                    >
-                      ({tag.count})
-                    </span>
-                  </Show>
-                  <span class="chip-actions">
-                    <Show when={partial()}>
+        <div class="tag-groups">
+          <For each={groups()}>
+            {(group) => (
+            <div class="chips">
+              <Show when={group.namespace}>
+                <Namespace field={props.field} name={group.namespace} rename={props.rename} />
+              </Show>
+              <For each={group.tags}>
+                {(tag) => {
+                  const partial = () => tag.count < props.data.count;
+                  return (
+                    <span class="chip" classList={{ partial: partial() }}>
                       <button
-                        class="chip-add"
-                        aria-label={`Add ${tag.value} to all selected`}
-                        title="Add to all selected"
-                        onClick={() => props.apply({ add: { [props.field]: [tag.value] } })}
+                        class="chip-label"
+                        title={group.namespace ? `Search for ${tag.value}` : "Search for this"}
+                        onClick={() => openTab("search", tagQuery(props.field, tag.value))}
                       >
-                        <Icon name="add" />
+                        {leaf(tag.value, group.namespace)}
                       </button>
-                    </Show>
-                    <button
-                      class="chip-remove"
-                      aria-label={`Remove ${tag.value}`}
-                      title="Remove"
-                      onClick={() => props.apply({ remove: { [props.field]: [tag.value] } })}
-                    >
-                      <Icon name="close" />
-                    </button>
-                  </span>
-                </span>
-              );
-            }}
+                      <Show when={partial()}>
+                        <span
+                          class="chip-count"
+                          title={`On ${tag.count} of ${props.data.count} selected`}
+                        >
+                          ({tag.count})
+                        </span>
+                      </Show>
+                      <span class="chip-actions">
+                        <Show when={partial()}>
+                          <button
+                            class="chip-add"
+                            aria-label={`Add ${tag.value} to all selected`}
+                            title="Add to all selected"
+                            onClick={() => props.apply({ add: { [props.field]: [tag.value] } })}
+                          >
+                            <Icon name="add" />
+                          </button>
+                        </Show>
+                        <button
+                          class="chip-remove"
+                          aria-label={`Remove ${tag.value}`}
+                          title="Remove"
+                          onClick={() => props.apply({ remove: { [props.field]: [tag.value] } })}
+                        >
+                          <Icon name="close" />
+                        </button>
+                      </span>
+                    </span>
+                  );
+                }}
+              </For>
+            </div>
+            )}
           </For>
         </div>
       </Show>

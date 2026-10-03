@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     routing::{get, post},
 };
 use rusqlite::{Connection, OptionalExtension, params, types::Value as SqlValue};
@@ -15,9 +15,8 @@ use crate::{
     AppState,
     error::ApiError,
     files::{stored_name, thumbnail_name},
-    query::{
-        AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS, TAG_FIELDS, contains_pattern, valid_date,
-    },
+    query::{AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS, valid_date},
+    tags,
 };
 
 /// Single-valued metadata columns of `entity`.
@@ -54,20 +53,12 @@ struct EditInput {
     remove: BTreeMap<String, Vec<String>>,
 }
 
-#[derive(Deserialize)]
-struct TagParams {
-    field: String,
-    #[serde(default)]
-    q: String,
-}
-
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/entities/{id}", get(entity))
         .route("/entities/metadata", post(metadata))
         .route("/entities/edit", post(edit))
         .route("/entities/delete", post(delete))
-        .route("/tags", get(tags))
 }
 
 fn to_json(value: SqlValue) -> Value {
@@ -312,22 +303,22 @@ fn scalar_value(field: &str, value: &Value) -> Result<SqlValue, ApiError> {
     }
 }
 
-/// Checks tag input: a known field and non-empty, trimmed values.
-fn tag_values(changes: &BTreeMap<String, Vec<String>>) -> Result<Vec<(&str, &str)>, ApiError> {
+/// Checks tag input: a known field and well-formed values. Values to
+/// remove are only trimmed, so a tag stored before a rule existed can still
+/// be taken off.
+fn tag_values(
+    changes: &BTreeMap<String, Vec<String>>,
+    adding: bool,
+) -> Result<Vec<(&str, String)>, ApiError> {
     let mut pairs = Vec::new();
     for (field, values) in changes {
-        if !TAG_FIELDS.contains(&field.as_str()) {
-            return Err(ApiError::BadRequest(format!(
-                "`{field}` is not a tag field"
-            )));
-        }
+        tags::check_field(field)?;
         for value in values {
-            let value = value.trim();
-            if value.is_empty() {
-                return Err(ApiError::BadRequest(format!(
-                    "empty value for `{field}`"
-                )));
-            }
+            let value = if adding {
+                tags::normalize(field, value)?
+            } else {
+                value.trim().to_string()
+            };
             pairs.push((field.as_str(), value));
         }
     }
@@ -363,8 +354,8 @@ async fn edit(
         }
         updates.push((field.as_str(), scalar_value(field, value)?));
     }
-    let added = tag_values(&input.add)?;
-    let removed = tag_values(&input.remove)?;
+    let added = tag_values(&input.add, true)?;
+    let removed = tag_values(&input.remove, false)?;
     let ids = ids_json(&input.ids);
 
     let mut conn = state.db.lock().unwrap();
@@ -379,10 +370,10 @@ async fn edit(
         };
         tx.execute(&sql, params![ids, value])?;
     }
-    for (field, value) in added {
+    for (field, value) in &added {
         tx.execute(
             "INSERT INTO tag (field, value) VALUES (?1, ?2) ON CONFLICT (field, value) DO NOTHING",
-            [field, value],
+            [field, &value.as_str()],
         )?;
         tx.execute(
             &format!(
@@ -440,34 +431,4 @@ async fn delete(
         let _ = std::fs::remove_file(state.thumbnails.join(thumbnail_name(&hash)));
     }
     Ok(Json(json!({ "deleted": deleted })))
-}
-
-/// Existing values of a tag field containing `q`: those that start with it
-/// first, then most used first. For completion while typing.
-async fn tags(
-    State(state): State<AppState>,
-    Query(params): Query<TagParams>,
-) -> Result<Json<Value>, ApiError> {
-    if !TAG_FIELDS.contains(&params.field.as_str()) {
-        return Err(ApiError::BadRequest(format!(
-            "`{}` is not a tag field",
-            params.field
-        )));
-    }
-    let conn = state.db.lock().unwrap();
-    let mut stmt = conn.prepare(
-        "SELECT t.value, count(*) AS uses FROM tag t JOIN entity_tag et ON et.tag_id = t.id
-         WHERE t.field = ?1 AND t.value LIKE ?2 ESCAPE '\\'
-         GROUP BY t.id
-         ORDER BY t.value LIKE ?3 ESCAPE '\\' DESC, uses DESC, t.value LIMIT 50",
-    )?;
-    let contains = contains_pattern(&params.q);
-    // The same pattern without its leading wildcard.
-    let starts_with = &contains[1..];
-    let values = stmt
-        .query_map([&params.field, &contains, starts_with], |row| {
-            Ok(json!({ "value": row.get::<_, String>(0)?, "count": row.get::<_, i64>(1)? }))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(Json(json!(values)))
 }

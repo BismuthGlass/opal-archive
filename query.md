@@ -101,6 +101,16 @@ hash=3fa9*                  hash prefix
 For multi-valued fields the term matches if any one of the entity's values
 matches. Write `\*` for a literal asterisk.
 
+Tags may sit in namespaces, written `namespace:tag` and nested to any depth.
+A namespace is part of the tag's value, so the wildcard is how to search one:
+
+```
+character=metroid:samus     that tag exactly
+character=metroid:*         everything under metroid, at any depth
+character=*:samus           samus in any namespace
+character=samus             only the samus that has no namespace
+```
+
 `name` is the filename the file was uploaded with, and `ext` its extension
 without the dot.
 
