@@ -8,6 +8,7 @@ mod files;
 mod media;
 mod query;
 mod search;
+mod settings;
 mod tabs;
 mod tags;
 
@@ -67,6 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let api = Router::new()
         .route("/health", get(health))
         .route("/stats", get(stats))
+        .merge(settings::router())
         .merge(tabs::router())
         .merge(tags::router())
         .merge(files::router())

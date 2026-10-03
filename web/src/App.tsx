@@ -2,6 +2,7 @@ import { createEffect, createSignal, on, onCleanup, onMount, Show } from "solid-
 import CollectionDialog from "./components/CollectionDialog";
 import Grid from "./components/Grid";
 import { modalOpen } from "./components/Modal";
+import QuickTagModal from "./components/QuickTagModal";
 import Icon from "./components/Icon";
 import { createStoredFlag, Module } from "./components/Panel";
 import QueryBar from "./components/QueryBar";
@@ -12,18 +13,24 @@ import TagEditor from "./components/TagEditor";
 import Toolbar from "./components/Toolbar";
 import { DropTarget, UploadBox, UploadPanel } from "./components/Upload";
 import Viewer from "./components/Viewer";
+import * as api from "./api";
 import { plural } from "./format";
+import { actionFor } from "./hotkeys";
 import {
   PAGE,
   clearSelection,
+  changed,
   dataVersion,
   goToPage,
+  itemAt,
   runSearch,
   search,
   selectAll,
   selected,
 } from "./search";
+import { loadSettings } from "./settings";
 import { refreshStats, stats } from "./stats";
+import { hideToast, showToast, toast } from "./toast";
 import { activeTab, error, load, open, refresh } from "./tabs";
 
 export default function App() {
@@ -32,10 +39,15 @@ export default function App() {
   const [grouping, setGrouping] = createSignal(false);
   const [editingTags, setEditingTags] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
+  /** What quick tagging applies to, while its modal is open. */
+  const [tagging, setTagging] = createSignal<{ ids: number[]; name: string } | null>(null);
+  /** What the next digit rates, after the quick-rate key. */
+  const [rating, setRating] = createSignal<{ ids: number[]; name: string } | null>(null);
   const [panelOpen, setPanelOpen] = createStoredFlag("tagutils.panel", true);
 
   onMount(() => {
     load();
+    loadSettings();
     refreshStats();
   });
 
@@ -61,9 +73,69 @@ export default function App() {
   // ordered, and its deletion.
   createEffect(on(dataVersion, refresh, { defer: true }));
 
+  /**
+   * What a hotkey acts on: in the viewer just the open file, otherwise
+   * everything selected.
+   */
+  const hotkeyTarget = () => {
+    const index = viewing();
+    if (index !== null) {
+      const item = itemAt(index);
+      return item ? { ids: [item.id], name: "this file" } : null;
+    }
+    const ids = [...selected()];
+    return ids.length > 0 ? { ids, name: plural(ids.length, "item") } : null;
+  };
+
+  const rate = async (target: { ids: number[]; name: string }, score: number | null) => {
+    try {
+      await api.edit(target.ids, { set: { score } });
+      showToast(
+        score === null ? `Cleared the score of ${target.name}` : `Rated ${target.name} ${score}`,
+      );
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    }
+    changed();
+  };
+
+  // On the window and capturing, so that it hears keys before the viewer
+  // does and can keep the ones it uses from it.
   const onKeyDown = (event: KeyboardEvent) => {
     const target = event.target as HTMLElement;
     if (target.matches("input, textarea, select, [contenteditable]") || modalOpen()) return;
+
+    // After the quick-rate key, the next key is the score, or calls it off.
+    const rated = rating();
+    if (rated) {
+      setRating(null);
+      hideToast();
+      const score = /^[0-7]$/.test(event.key) ? Number(event.key) : null;
+      if (score !== null || event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (score !== null) rate(rated, score || null);
+        return;
+      }
+      // Any other key calls the rating off and does what it usually does.
+    }
+
+    const action = actionFor(event);
+    if (action) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const on = hotkeyTarget();
+      if (!on) return showToast("Select something first");
+      if (action === "quickTag") {
+        setTagging(on);
+      } else {
+        setRating(on);
+        showToast(`Rate ${on.name}: press 1 to 7, or 0 to clear`, true);
+      }
+      return;
+    }
+
+    if (viewing() !== null) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
       event.preventDefault();
       selectAll();
@@ -71,8 +143,8 @@ export default function App() {
       clearSelection();
     }
   };
-  onMount(() => document.addEventListener("keydown", onKeyDown));
-  onCleanup(() => document.removeEventListener("keydown", onKeyDown));
+  onMount(() => window.addEventListener("keydown", onKeyDown, true));
+  onCleanup(() => window.removeEventListener("keydown", onKeyDown, true));
 
   return (
     <>
@@ -183,6 +255,20 @@ export default function App() {
             setViewing(index);
           }}
         />
+      </Show>
+      <Show when={tagging()}>
+        {(target) => (
+          <QuickTagModal
+            ids={target().ids}
+            target={target().name}
+            onClose={() => setTagging(null)}
+          />
+        )}
+      </Show>
+      <Show when={toast()}>
+        <div class="toast" role="status">
+          {toast()}
+        </div>
       </Show>
       <Show when={editingTags()}>
         <TagEditor onClose={() => setEditingTags(false)} />

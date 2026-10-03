@@ -128,6 +128,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 const params = (values: Record<string, string | number>) =>
   new URLSearchParams(Object.entries(values).map(([key, value]) => [key, String(value)]));
 
+export const getSettings = () => request<Record<string, never>>("GET", "/settings");
+/** Sets the given settings (`null` removes one) and returns them all. */
+export const changeSettings = (changes: Record<string, unknown>) =>
+  request<Record<string, never>>("PATCH", "/settings", changes);
+
 export const getStats = () => request<Stats>("GET", "/stats");
 
 export const listTabs = () => request<Tab[]>("GET", "/tabs");

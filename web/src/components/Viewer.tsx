@@ -2,6 +2,7 @@ import { createEffect, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { contentUrl } from "../api";
 import { ensureRange, itemAt, search } from "../search";
 import Icon from "./Icon";
+import { modalOpen } from "./Modal";
 
 /**
  * Full-window view of one result. Left / right step through the results,
@@ -18,6 +19,8 @@ export default function Viewer(props: { index: number; onMove: (index: number | 
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
+    // A modal over the viewer has the keyboard.
+    if (modalOpen()) return;
     if (event.key === "Escape") props.onMove(null);
     else if (event.key === "ArrowLeft") step(-1);
     else if (event.key === "ArrowRight") step(1);

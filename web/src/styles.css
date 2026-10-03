@@ -1166,6 +1166,144 @@ button.primary {
   opacity: 0.5;
 }
 
+/* Settings: sections down the side, the chosen one beside. */
+
+.settings {
+  display: flex;
+  gap: 20px;
+  min-height: 320px;
+}
+
+.settings-nav {
+  display: flex;
+  flex: 0 0 140px;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 12px;
+  border-right: 1px solid var(--border);
+}
+
+.dialog .settings-nav button {
+  padding: 5px 10px;
+  text-align: left;
+  color: var(--text);
+  border-radius: 6px;
+}
+
+.dialog .settings-nav button[aria-current] {
+  font-weight: 600;
+  background: var(--bg);
+}
+
+.settings-pane {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-pane h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.setting-rows {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.setting-rows li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+}
+
+.setting-rows li + li {
+  border-top: 1px solid var(--border);
+}
+
+.setting-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.setting-label {
+  font-weight: 500;
+}
+
+.dialog button.keycap,
+kbd {
+  font: inherit;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+}
+
+.dialog button.keycap {
+  flex: none;
+  min-width: 44px;
+  padding: 3px 10px;
+}
+
+.dialog button.keycap.capturing {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+kbd {
+  padding: 0 5px;
+}
+
+/* Quick tagging. */
+
+.quick-tag {
+  display: flex;
+  gap: 8px;
+}
+
+.quick-tag select {
+  flex: 0 0 120px;
+}
+
+.quick-tag-list {
+  min-height: 28px;
+  margin-top: 10px;
+}
+
+.quick-tag-foot button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.quick-tag-foot {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+/* A short message over everything, the viewer included. */
+.toast {
+  position: fixed;
+  bottom: 48px;
+  left: 50%;
+  z-index: 40;
+  padding: 6px 14px;
+  color: #fff;
+  background: rgb(20 20 20 / 0.9);
+  border-radius: 16px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
 /* Tag editor. */
 
 .tag-editor-bar {
