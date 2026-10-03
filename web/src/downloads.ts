@@ -1,4 +1,4 @@
-import { createStore, reconcile } from "solid-js/store";
+import { createStore, produce, reconcile } from "solid-js/store";
 import * as api from "./api";
 import type { DownloadState } from "./api";
 import { addedTo } from "./search";
@@ -54,6 +54,12 @@ async function follow(tab: number) {
     addedTo(tab);
   }
   setTimeout(() => follow(tab), POLL);
+}
+
+/** Drops what is kept for a tab that has been closed; its number is used again. */
+export function forgetDownload(tab: number) {
+  following.delete(tab);
+  setStates(produce((all) => void delete all[tab]));
 }
 
 export async function startDownload(tab: number, url: string) {

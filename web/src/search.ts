@@ -227,6 +227,22 @@ export function runSearch(
   loadPage(0);
 }
 
+/**
+ * Drops the views kept for a tab that has been closed. The server gives a
+ * later tab the same number, and it must not be shown the closed one's.
+ */
+export function forgetViews(tab: number) {
+  for (const key of [...views.keys()]) {
+    if (key.startsWith(`${tab}:`)) views.delete(key);
+  }
+  if (viewTab === tab) {
+    // Nothing more is saved for it either.
+    clearTimeout(saving);
+    saving = 0;
+    viewTab = null;
+  }
+}
+
 /** Saves a view that is waiting to be saved, at once. */
 function flushSave() {
   if (!saving) return;

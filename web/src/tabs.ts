@@ -3,6 +3,14 @@ import { createStore, reconcile } from "solid-js/store";
 import * as api from "./api";
 import { errorMessage } from "./format";
 import type { Tab, TabKind } from "./api";
+import { forgetDownload } from "./downloads";
+import { forgetViews } from "./search";
+
+/** Drops what the page keeps for a closed tab: its number is given out again. */
+function forget(id: number) {
+  forgetViews(id);
+  forgetDownload(id);
+}
 
 // Tabs live on the server; which one is active is remembered per browser.
 const ACTIVE_KEY = "tagutils.activeTab";
@@ -69,6 +77,7 @@ export async function open(
 export const close = (id: number) =>
   guard(async () => {
     await api.deleteTab(id);
+    forget(id);
     const index = tabs.findIndex((tab) => tab.id === id);
     const rest = tabs.filter((tab) => tab.id !== id);
     // There is always at least one tab.
@@ -103,6 +112,10 @@ export const refresh = () =>
     let list = await api.listTabs();
     if (list.length === 0) list = [await api.createTab("gallery", "")];
     const index = tabs.findIndex((tab) => tab.id === activeId());
+    // A collection tab goes with its collection.
+    for (const tab of tabs) {
+      if (!list.some((kept) => kept.id === tab.id)) forget(tab.id);
+    }
     setTabs(reconcile(list, { key: "id" }));
     if (!list.some((tab) => tab.id === activeId())) {
       select(list[Math.max(0, Math.min(index, list.length - 1))].id);
