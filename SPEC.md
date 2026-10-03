@@ -56,6 +56,15 @@ What a view lists is decided when its search is calculated, and stays put after 
 
 The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab or downloaded into a download tab, a collection created inside the collection a tab shows).
 
+## Playing a view
+
+The viewer, opened on any result of a view, can play through the results by itself. A button starts and stops it; beside it are how many seconds each result stays up, and whether they come in the view's order or at random. Both are settings, kept for next time.
+
+- In order, the last result is followed by the first. At random, no result comes twice before all have been shown.
+- The seconds count from when an image has loaded. Video and audio are not cut off: they play to their end, and then the next result comes.
+- What cannot be shown (a collection, a file with no preview) is passed over after a second.
+- Stepping by hand while it plays moves on, and the count starts again.
+
 ## Downloaders
 
 A downloader fetches files from a website straight into the library, in a tab of its own kind. Each downloader is for one site; the first is for Pinterest. They are made to be added to: a downloader is a folder with a manifest and a script, and the server and the interface need no change for a new one unless it wants a panel of its own. `downloaders/README.md` describes how they are written.

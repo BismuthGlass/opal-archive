@@ -1498,6 +1498,56 @@ span.chip-label:hover {
   line-height: 1;
 }
 
+/* Playing through the results: the button, the seconds, the order. */
+.viewer-player {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 2px 6px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 8px;
+}
+
+.viewer-player label {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  color: #aaa;
+}
+
+.viewer-player input {
+  width: 4.5ch;
+  padding: 1px 4px;
+  text-align: right;
+  background: rgb(255 255 255 / 0.08);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  appearance: textfield;
+}
+
+.viewer-player input:focus {
+  border-color: #b8c5ff;
+  outline: none;
+}
+
+.viewer-player input::-webkit-inner-spin-button {
+  appearance: none;
+}
+
+.viewer-player button {
+  padding: 1px 3px;
+  border-radius: 4px;
+}
+
+.viewer-player button[aria-pressed="true"] {
+  color: #111;
+  background: #b8c5ff;
+}
+
+.viewer-random[aria-pressed="false"] {
+  opacity: 0.55;
+}
+
 .viewer-body {
   display: grid;
   /* One cell with a definite size, so the media's percentage limits resolve
