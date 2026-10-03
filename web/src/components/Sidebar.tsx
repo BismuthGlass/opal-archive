@@ -115,11 +115,13 @@ export default function Sidebar(props: { onGroup: () => void }) {
   /** Whether everything selected is already in the trash. */
   const allTrashed = () => meta() !== undefined && meta()!.trashed === meta()!.count;
 
-  /** Runs a change that takes the selection out of the view. */
-  const dispose = async (action: (ids: number[]) => Promise<unknown>) => {
+  /** Trashes, restores or deletes the selection. */
+  const dispose = async (action: (ids: number[]) => Promise<unknown>, gone = false) => {
     try {
       await action(ids());
-      clearSelection();
+      // Trashed and restored items stay listed, and selected; deleted ones
+      // are gone.
+      if (gone) clearSelection();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -131,7 +133,7 @@ export default function Sidebar(props: { onGroup: () => void }) {
   const remove = () => {
     const count = ids().length;
     if (confirm(`Delete ${plural(count, "item")} for good? This cannot be undone.`)) {
-      dispose(api.deleteEntities);
+      dispose(api.deleteEntities, true);
     }
   };
 

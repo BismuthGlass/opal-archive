@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store";
 import * as api from "./api";
-import { changed } from "./search";
+import { addedTo } from "./search";
 import { activeTab, open } from "./tabs";
 
 type Failure = { name: string; reason: string };
@@ -45,6 +45,8 @@ function enqueue(files: File[], tab: number) {
 async function run() {
   setUploads("active", true);
   let lastRefresh = Date.now();
+  /** Upload tabs with files their view has not been told about yet. */
+  const waiting = new Set<number>();
   while (queue.length > 0) {
     const { file, tab } = queue.shift()!;
     setUploads("progress", 0);
@@ -58,14 +60,16 @@ async function run() {
       setUploads("failures", (list) => [...list, { name: file.name, reason }]);
     }
     setUploads("done", (n) => n + 1);
+    waiting.add(tab);
     // Show new files as they arrive, without reloading for every one.
     if (Date.now() - lastRefresh > 2000) {
       lastRefresh = Date.now();
-      changed();
+      waiting.forEach(addedTo);
+      waiting.clear();
     }
   }
   setUploads({ active: false, progress: 0 });
-  changed();
+  waiting.forEach(addedTo);
 }
 
 export function dismiss() {

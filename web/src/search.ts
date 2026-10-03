@@ -24,7 +24,7 @@ const [search, setSearch] = createStore({
 });
 const [pages, setPages] = createStore<Record<number, Item[]>>({});
 const [selected, setSelected] = createSignal<ReadonlySet<number>>(new Set());
-// Bumped when a new query starts (the grid scrolls back to the top) and
+// Bumped when a new search is shown (the grid scrolls back to the top) and
 // when library data changes (dependent views reload).
 const [searchCount, setSearchCount] = createSignal(0);
 const [dataVersion, setDataVersion] = createSignal(0);
@@ -33,18 +33,26 @@ export { search, selected, searchCount, dataVersion };
 
 // Responses from an older generation are dropped.
 let generation = 0;
+/** Counts calculations of the view; a reload in between does not void one. */
+let calculation = 0;
 let seed = 0;
 let requested = new Set<number>();
-let allIds: Promise<number[]> | null = null;
 /**
- * Every result ID in the order the user dragged them into, if they have.
- * It is kept per view while the page is open, so switching tabs and coming
- * back does not lose it; reloading the page does.
+ * The view: every result ID, in order, as found when the search was last
+ * calculated. It only changes when the user asks: by refreshing, or by
+ * dragging results into another order. Edits, trashing included, change
+ * how a result looks but not whether it is listed.
  */
-let order: number[] | null = null;
+let ids: number[] = [];
+/** Settles when the view has been calculated. */
+let calculated: Promise<void> = Promise.resolve();
 let viewKey = "";
-const customOrders = new Map<string, number[]>();
-/** Items seen in this view, so a reorder can redraw without asking again. */
+/**
+ * The views seen while the page is open, so that coming back to a tab
+ * shows what it showed before. Reloading the page calculates afresh.
+ */
+const views = new Map<string, { ids: number[]; custom: boolean }>();
+/** Items already fetched, so a reorder can redraw without asking again. */
 const known = new Map<number, Item>();
 /** Index the next shift-click extends from. */
 let anchor: number | null = null;
@@ -52,30 +60,34 @@ let anchor: number | null = null;
 export const itemAt = (index: number): Item | undefined =>
   pages[Math.floor(index / PAGE)]?.[index % PAGE];
 
-/** A page of the custom order, which the server is asked for by ID. */
-async function loadCustomPage(page: number, ids: number[]): Promise<api.SearchPage> {
-  const slice = ids.slice(page * PAGE, (page + 1) * PAGE);
-  if (slice.some((id) => !known.has(id))) {
-    const result = await api.search(`id=${slice.join(",")}`, 0, PAGE, 0, null, true);
-    for (const item of result.items) known.set(item.id, item);
+const remember = () => views.set(viewKey, { ids, custom: search.custom });
+
+/** A page of the view. Its items are asked for by ID, trashed or not. */
+async function fetchPage(page: number): Promise<Item[]> {
+  for (;;) {
+    const slice = ids.slice(page * PAGE, (page + 1) * PAGE);
+    if (slice.some((id) => !known.has(id))) {
+      const result = await api.search(`id=${slice.join(",")}`, 0, PAGE, 0, null, true);
+      for (const item of result.items) known.set(item.id, item);
+    }
+    // What was deleted for good is the one thing that has to leave.
+    const gone = new Set(slice.filter((id) => !known.has(id)));
+    if (gone.size === 0) return slice.map((id) => known.get(id)!);
+    ids = ids.filter((id) => !gone.has(id));
+    remember();
   }
-  const items = slice.flatMap((id) => known.get(id) ?? []);
-  return { total: ids.length, offset: page * PAGE, items };
 }
 
 function loadPage(page: number) {
   if (requested.has(page)) return;
   requested.add(page);
   const current = generation;
-  const loading = order
-    ? loadCustomPage(page, order)
-    : api.search(search.query, page * PAGE, PAGE, seed, search.scope);
-  loading
-    .then((result) => {
+  calculated
+    .then(() => (current === generation ? fetchPage(page) : []))
+    .then((items) => {
       if (current !== generation) return;
-      for (const item of result.items) known.set(item.id, item);
-      setPages(page, result.items);
-      setSearch({ total: result.total, ready: true, error: null });
+      setPages(page, items);
+      setSearch({ total: ids.length, ready: true, error: null });
       // Results may have gone away under the page on show.
       if (search.page > lastPage()) setSearch("page", lastPage());
     })
@@ -100,98 +112,122 @@ export function ensureRange(first: number, last: number) {
   }
 }
 
+/** Drops what is loaded and loads the page on show again. */
+function reload() {
+  generation += 1;
+  requested = new Set();
+  setDataVersion((n) => n + 1);
+  loadPage(search.page);
+}
+
 /**
- * Brings a custom order in line with what the query finds now: results
- * that are gone drop out, new ones go at the end.
+ * Runs the query and makes its results the view. A view dragged into an
+ * order of its own keeps that order: results that are gone drop out and
+ * new ones go at the end.
  */
-async function reconcileOrder() {
-  const current = generation;
-  const ids = await api.searchIds(search.query, seed, search.scope);
-  if (current !== generation || !order) return;
-  const found = new Set(ids);
-  const kept = order.filter((id) => found.delete(id));
-  order = [...kept, ...ids.filter((id) => found.has(id))];
-  customOrders.set(viewKey, order);
-}
-
-/** Loads the first page, of the custom order if the view has one. */
-function start() {
-  if (!order) return loadPage(0);
-  const current = generation;
-  reconcileOrder()
-    .catch(() => {
-      // The query no longer runs; let the plain search report why.
-      if (current === generation) dropOrder();
-    })
-    .then(() => {
-      if (current !== generation) return;
-      loadPage(0);
-      setDataVersion((n) => n + 1);
-    });
-}
-
-function dropOrder() {
-  order = null;
-  customOrders.delete(viewKey);
-  setSearch("custom", false);
+function calculate() {
+  const current = (calculation += 1);
+  calculated = api.searchIds(search.query, seed, search.scope).then((found) => {
+    if (current !== calculation) return;
+    if (search.custom) {
+      const fresh = new Set(found);
+      const kept = ids.filter((id) => fresh.delete(id));
+      ids = [...kept, ...found.filter((id) => fresh.has(id))];
+    } else {
+      ids = found;
+    }
+    remember();
+    // What is no longer listed is no longer selected.
+    const listed = new Set(ids);
+    if ([...selected()].some((id) => !listed.has(id))) {
+      setSelected(new Set([...selected()].filter((id) => listed.has(id))));
+    }
+  });
+  // Failures are reported by the page load that waits on this.
+  calculated.catch(() => {});
 }
 
 /**
- * Starts a new search, discarding results and selection. `key` names the
- * view, which gets back the order its results were last dragged into.
+ * Shows a search, discarding results and selection. `key` names the view:
+ * one already seen comes back as it was left, a new one is calculated.
  */
 export function runSearch(query: string, scope: number | null = null, key = "") {
   generation += 1;
   seed = Math.floor(Math.random() * 2 ** 31);
   requested = new Set();
-  allIds = null;
   anchor = null;
   viewKey = key;
-  order = customOrders.get(key) ?? null;
   known.clear();
+  const seen = views.get(key);
+  ids = seen?.ids ?? [];
   setPages(reconcile({}));
   setSearch({
     query,
     scope,
     page: 0,
-    custom: order !== null,
+    custom: seen?.custom ?? false,
     total: 0,
     ready: false,
     error: null,
   });
   setSelected(new Set<number>());
   setSearchCount((n) => n + 1);
-  start();
+  if (seen) {
+    // Voids a calculation still running for the view just left.
+    calculation += 1;
+    calculated = Promise.resolve();
+  } else {
+    calculate();
+  }
+  loadPage(0);
+}
+
+/** Calculates the current search again. */
+export function refresh() {
+  generation += 1;
+  seed = Math.floor(Math.random() * 2 ** 31);
+  requested = new Set();
+  anchor = null;
+  known.clear();
+  calculate();
+  setDataVersion((n) => n + 1);
+  loadPage(search.page);
 }
 
 /**
- * Call after anything changes library data. Reloads the current results in
- * place: what is on screen stays until its replacement arrives.
+ * Call after anything changes library data. What is listed stays as it
+ * is; the results are fetched again so that they show the change.
  */
 export function changed() {
-  generation += 1;
-  requested = new Set();
-  allIds = null;
   known.clear();
-  setDataVersion((n) => n + 1);
-  start();
+  reload();
+  refreshStats();
+}
+
+/**
+ * Call after files are uploaded into an upload tab, or anything else is
+ * put into what a tab holds from that tab: unlike other changes, these
+ * are added to its view.
+ */
+export function addedTo(tab: number) {
+  for (const key of [...views.keys()]) {
+    if (key.startsWith(`${tab}:`) && key !== viewKey) views.delete(key);
+  }
+  if (viewKey.startsWith(`${tab}:`)) refresh();
   refreshStats();
 }
 
 /** Every result ID, in the order on show. */
-export const resultIds = (): Promise<number[]> =>
-  order
-    ? Promise.resolve(order)
-    : (allIds ??= api.searchIds(search.query, seed, search.scope));
+export const resultIds = (): Promise<number[]> => calculated.then(() => ids);
 
 /**
  * Moves results to sit before the result at `before` (an index into all
  * results, or their number to move to the end). From then on the view
  * keeps this order instead of the query's, until `resetOrder`.
  */
-export async function moveItems(ids: number[], before: number) {
+export async function moveItems(moved: number[], before: number) {
   const current = await resultIds();
-  const moving = new Set(ids);
+  const moving = new Set(moved);
   // The moved items land before the first unmoved one at or after the drop.
   let target = before;
   while (target < current.length && moving.has(current[target])) target += 1;
@@ -204,21 +240,18 @@ export async function moveItems(ids: number[], before: number) {
   ];
   if (next.every((id, index) => id === current[index])) return;
 
-  order = next;
-  customOrders.set(viewKey, next);
-  generation += 1;
-  requested = new Set();
+  ids = next;
   anchor = null;
-  setSearch({ custom: true, total: next.length });
-  setDataVersion((n) => n + 1);
-  loadPage(search.page);
+  setSearch("custom", true);
+  remember();
+  reload();
 }
 
 /** Goes back to the order the query gives. */
 export function resetOrder() {
-  if (!order) return;
-  dropOrder();
-  changed();
+  if (!search.custom) return;
+  setSearch("custom", false);
+  refresh();
 }
 
 export async function clickSelect(

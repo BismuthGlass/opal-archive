@@ -2,7 +2,8 @@ import { createResource, createSignal, For, Show } from "solid-js";
 import * as api from "../api";
 import { COLLECTION_TYPES } from "../api";
 import { plural, quoteValue } from "../format";
-import { changed } from "../search";
+import { addedTo, changed } from "../search";
+import { tabs } from "../tabs";
 import Modal from "./Modal";
 
 /**
@@ -45,6 +46,10 @@ export default function CollectionDialog(props: {
       } else {
         return setError("Pick a collection.");
       }
+      // A collection that gained something shows it in its own tab.
+      const grown = mode() === "new" ? (nested() ? props.parent?.id : undefined) : target();
+      const tab = tabs.find((tab) => grown != null && tab.collection?.id === grown);
+      if (tab) addedTo(tab.id);
       changed();
       props.onClose();
     } catch (err) {

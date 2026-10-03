@@ -3,10 +3,10 @@ import { plural } from "../format";
 import * as api from "../api";
 import {
   PAGE,
-  changed,
   clearSelection,
   goToPage,
   pageCount,
+  refresh,
   resetOrder,
   resultIds,
   search,
@@ -35,12 +35,19 @@ export default function Toolbar() {
     await api.setOrder(id, await resultIds());
     // The collection's own order is now the one on show.
     resetOrder();
-    changed();
   };
 
   return (
-    <Show when={search.total > 0}>
-      <div class="toolbar">
+    <div class="toolbar">
+      <button
+        aria-label="Refresh"
+        title="Calculate this search again. Until then the results listed stay as they are."
+        onClick={refresh}
+      >
+        <Icon name="refresh" />
+        Refresh
+      </button>
+      <Show when={search.total > 0}>
         <button
           onClick={selectAll}
           disabled={allSelected()}
@@ -121,7 +128,7 @@ export default function Toolbar() {
             </button>
           </Show>
         </nav>
-      </div>
-    </Show>
+      </Show>
+    </div>
   );
 }

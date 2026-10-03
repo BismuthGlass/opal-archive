@@ -48,6 +48,12 @@ Collections should behave as their own entities that may also be categorized and
 
 There is no need to support injesting existing sidecar files on file upload for now. We will also support exporting sidecar files, but that's in the future.
 
+## Gallery views
+
+What a view lists is decided when its search is calculated, and stays put after that. Editing, tagging, rating or trashing a file changes how it is shown, but it does not drop out of the view, and files that start matching do not appear. A Refresh button calculates the search again.
+
+The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab, a collection created inside the collection a tab shows).
+
 ## Deleting
 
 Deleting is two steps. The first moves a file or collection to the trash: it keeps its file and all its metadata, but no longer shows up in searches. From the trash it can be restored, or deleted for good, which removes the file from storage. Uploading a trashed file again restores it.
