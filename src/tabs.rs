@@ -2,9 +2,9 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     http::StatusCode,
-    routing::{get, patch},
+    routing::{get, patch, put},
 };
-use rusqlite::Row;
+use rusqlite::{Connection, Row};
 use serde::{Deserialize, Serialize};
 
 use crate::{AppState, error::ApiError};
@@ -32,6 +32,11 @@ fn default_kind() -> String {
 }
 
 #[derive(Deserialize)]
+struct OrderInput {
+    ids: Vec<i64>,
+}
+
+#[derive(Deserialize)]
 struct TabInput {
     #[serde(default)]
     query: String,
@@ -40,6 +45,7 @@ struct TabInput {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/tabs", get(list).post(create))
+        .route("/tabs/order", put(reorder))
         .route("/tabs/{id}", patch(update).delete(remove))
 }
 
@@ -52,13 +58,38 @@ fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
     })
 }
 
-async fn list(State(state): State<AppState>) -> Result<Json<Vec<Tab>>, ApiError> {
-    let conn = state.db.lock().unwrap();
+fn all(conn: &Connection) -> rusqlite::Result<Vec<Tab>> {
     let mut stmt =
         conn.prepare("SELECT id, position, kind, query FROM tab ORDER BY position, id")?;
-    let tabs = stmt
-        .query_map([], tab_from_row)?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    stmt.query_map([], tab_from_row)?.collect()
+}
+
+async fn list(State(state): State<AppState>) -> Result<Json<Vec<Tab>>, ApiError> {
+    Ok(Json(all(&state.db.lock().unwrap())?))
+}
+
+/// Puts the tabs in the order of `ids`. Tabs left out go after them, in
+/// the order they had.
+async fn reorder(
+    State(state): State<AppState>,
+    Json(input): Json<OrderInput>,
+) -> Result<Json<Vec<Tab>>, ApiError> {
+    let mut conn = state.db.lock().unwrap();
+    let tx = conn.transaction()?;
+    let mut ids = input.ids;
+    for tab in all(&tx)? {
+        if !ids.contains(&tab.id) {
+            ids.push(tab.id);
+        }
+    }
+    for (position, id) in ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE tab SET position = ?1 WHERE id = ?2",
+            (position as i64, id),
+        )?;
+    }
+    let tabs = all(&tx)?;
+    tx.commit()?;
     Ok(Json(tabs))
 }
 

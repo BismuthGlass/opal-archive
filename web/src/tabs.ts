@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { createStore } from "solid-js/store";
+import { createStore, reconcile } from "solid-js/store";
 import * as api from "./api";
 import type { Tab, TabKind } from "./api";
 
@@ -76,4 +76,19 @@ export const setQuery = (id: number, query: string) =>
   guard(async () => {
     const tab = await api.updateTab(id, query);
     setTabs((t) => t.id === id, "query", tab.query);
+  });
+
+/** Moves a tab to another place in the strip. Not saved until `saveOrder`. */
+export function move(id: number, index: number) {
+  const from = tabs.findIndex((tab) => tab.id === id);
+  if (from < 0 || from === index) return;
+  const list = tabs.map((tab) => ({ ...tab }));
+  list.splice(index, 0, ...list.splice(from, 1));
+  // Keyed, so each tab keeps its place in the page and just moves.
+  setTabs(reconcile(list, { key: "id" }));
+}
+
+export const saveOrder = () =>
+  guard(async () => {
+    await api.orderTabs(tabs.map((tab) => tab.id));
   });

@@ -103,12 +103,25 @@ a {
 
 .tab {
   display: flex;
+  /* Tabs are dragged to reorder them; don't select their text instead. */
+  user-select: none;
   flex: 0 1 200px;
   min-width: 90px;
   border: 1px solid transparent;
   border-bottom: none;
   border-radius: 6px 6px 0 0;
   color: var(--muted);
+}
+
+/* Being dragged to a new place in the strip. */
+.tab.dragging {
+  background: var(--surface);
+  border-color: var(--accent);
+  cursor: grabbing;
+}
+
+.tab.dragging button {
+  cursor: grabbing;
 }
 
 .tab:hover {

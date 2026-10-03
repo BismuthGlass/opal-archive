@@ -119,6 +119,7 @@ export const createTab = (kind: TabKind, query: string) =>
   request<Tab>("POST", "/tabs", { kind, query });
 export const updateTab = (id: number, query: string) =>
   request<Tab>("PATCH", `/tabs/${id}`, { query });
+export const orderTabs = (ids: number[]) => request<Tab[]>("PUT", "/tabs/order", { ids });
 export const deleteTab = (id: number) => request<void>("DELETE", `/tabs/${id}`);
 
 /** `tab` narrows a search to the files uploaded through that upload tab. */

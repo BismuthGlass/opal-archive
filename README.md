@@ -93,6 +93,7 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `POST /export`                   | Form field `ids=1,2,3` → zip of those files                    |
 | `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query}` → new tab, `kind` being `search` or `upload` |
 | `PATCH /tabs/{id}`, `DELETE …`   | Change a tab's query, close a tab                              |
+| `PUT /tabs/order`                | `{ids}` → put the tabs in that order                           |
 | `GET /stats`, `GET /health`      | Library counts; liveness and schema version                    |
 
 Uploading from a shell:
