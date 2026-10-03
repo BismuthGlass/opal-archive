@@ -49,6 +49,16 @@ cd web && npm install && npm run dev   # frontend with live reload, proxies /api
 For a single-process setup, build the frontend once with `npm run build` and
 the server will serve it from `web/dist`.
 
+## Testing
+
+```sh
+cargo test
+```
+
+The tests use a library in memory and a directory of their own under the
+system's temporary one; they never touch `data/`. `src/query.rs` tests the
+query language, and `src/api_tests.rs` the API, through its router.
+
 ## Configuration
 
 | Variable        | Default          | Meaning                          |

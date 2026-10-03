@@ -1055,6 +1055,53 @@ fn placeholders(count: usize) -> String {
     vec!["?"; count].join(", ")
 }
 
+/// The contents of an ORDER BY clause for the given keys, and its
+/// parameters. `top_level_in` is what `sort=position` orders by.
+fn order_by(sorts: &[Sort], top_level_in: &[i64], seed: i64) -> Res<(String, Vec<Value>)> {
+    let mut clauses = Vec::new();
+    let mut order_params = Vec::new();
+    for sort in sorts {
+        let direction = if sort.descending { "DESC" } else { "ASC" };
+        let expr = match sort.key {
+            "random" => {
+                // `shuffle` is defined in db.rs: a different order per seed,
+                // and the same one for every page of a search.
+                order_params.push(Value::Integer(seed));
+                clauses.push("shuffle(e0.id, ?)".to_string());
+                continue;
+            }
+            "position" => {
+                let [collection] = top_level_in[..] else {
+                    return error(
+                        "`sort=position` needs exactly one top-level `in=<id>` term",
+                        sort.pos,
+                    );
+                };
+                // The expression appears twice below.
+                order_params.extend([Value::Integer(collection), Value::Integer(collection)]);
+                "(SELECT position FROM membership WHERE collection_id = ? AND member_id = e0.id)"
+            }
+            "added" => "e0.date_added",
+            "date" => "e0.date",
+            "score" => "e0.score",
+            "title" => "e0.title COLLATE NOCASE",
+            "name" => "f0.original_name COLLATE NOCASE",
+            "size" => "f0.size",
+            "width" => "f0.width",
+            "height" => "f0.height",
+            "length" => "f0.length",
+            "pages" => "f0.page_count",
+            _ => "e0.id",
+        };
+        // Entities without a value sort last in either direction.
+        clauses.push(format!("{expr} IS NULL, {expr} {direction}"));
+    }
+    let tie = if sorts[0].descending { "DESC" } else { "ASC" };
+    clauses.push(format!("e0.id {tie}"));
+
+    Ok((clauses.join(", "), order_params))
+}
+
 /// Compiles a query. `seed` fixes the order of `sort=random` so that pages
 /// of one search agree with each other.
 ///
@@ -1093,61 +1140,18 @@ pub fn compile(source: &str, seed: i64, aliases: &Aliases, include_trashed: bool
 
     let sorted = !parser.sorts.is_empty();
     if parser.sorts.is_empty() {
+        // Newest first unless the query says otherwise.
         parser.sorts.push(Sort {
             key: "added",
             descending: true,
             pos: 0,
         });
     }
-    let mut clauses = Vec::new();
-    let mut order_params = Vec::new();
-    for sort in &parser.sorts {
-        let direction = if sort.descending { "DESC" } else { "ASC" };
-        let expr = match sort.key {
-            "random" => {
-                // `shuffle` is defined in db.rs: a different order per seed,
-                // and the same one for every page of a search.
-                order_params.push(Value::Integer(seed));
-                clauses.push("shuffle(e0.id, ?)".to_string());
-                continue;
-            }
-            "position" => {
-                let [collection] = parser.top_level_in[..] else {
-                    return error(
-                        "`sort=position` needs exactly one top-level `in=<id>` term",
-                        sort.pos,
-                    );
-                };
-                // The expression appears twice below.
-                order_params.extend([Value::Integer(collection), Value::Integer(collection)]);
-                "(SELECT position FROM membership WHERE collection_id = ? AND member_id = e0.id)"
-            }
-            "added" => "e0.date_added",
-            "date" => "e0.date",
-            "score" => "e0.score",
-            "title" => "e0.title COLLATE NOCASE",
-            "name" => "f0.original_name COLLATE NOCASE",
-            "size" => "f0.size",
-            "width" => "f0.width",
-            "height" => "f0.height",
-            "length" => "f0.length",
-            "pages" => "f0.page_count",
-            _ => "e0.id",
-        };
-        // Entities without a value sort last in either direction.
-        clauses.push(format!("{expr} IS NULL, {expr} {direction}"));
-    }
-    let tie = if parser.sorts[0].descending {
-        "DESC"
-    } else {
-        "ASC"
-    };
-    clauses.push(format!("e0.id {tie}"));
-
+    let (order, order_params) = order_by(&parser.sorts, &parser.top_level_in, seed)?;
     Ok(Compiled {
         filter,
         filter_params: parser.params,
-        order: clauses.join(", "),
+        order,
         order_params,
         sorted,
     })
