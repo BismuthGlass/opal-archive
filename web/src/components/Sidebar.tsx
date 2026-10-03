@@ -16,6 +16,7 @@ import { dateTime, duration, fieldLabel, fileSize, plural, tagQuery } from "../f
 import { changed, clearSelection, dataVersion, selected } from "../search";
 import { open as openTab, openCollection } from "../tabs";
 import Icon from "./Icon";
+import Modal from "./Modal";
 import { createStoredFlag } from "./Panel";
 
 const SCORES = [1, 2, 3, 4, 5, 6, 7];
@@ -56,13 +57,11 @@ export default function Sidebar(props: { onGroup: () => void }) {
   /** An unset field picked from "Add field", shown while it is filled in. */
   const [adding, setAdding] = createSignal<string | null>(null);
   /**
-   * The list fields on show (the tag fields and the source URLs): those
-   * with values, and any picked from "Add field". One that is emptied stays until the selection changes, so the
-   * panel does not jump while it is being worked on.
+   * The list field (a tag field, or one of the plain lists) open in the
+   * modal where its values are added and removed. The panel itself only
+   * shows the values.
    */
-  const [shownTags, setShownTags] = createSignal<ReadonlySet<string>>(new Set());
-  /** A tag field just picked from "Add field", to put the cursor in. */
-  const [pickedTag, setPickedTag] = createSignal<string | null>(null);
+  const [editingList, setEditingList] = createSignal<string | null>(null);
   // An error, or a half-added field, belongs to the selection it began on.
   createEffect(
     on(
@@ -70,8 +69,6 @@ export default function Sidebar(props: { onGroup: () => void }) {
       () => {
         setError(null);
         setAdding(null);
-        setShownTags(new Set<string>());
-        setPickedTag(null);
       },
       { defer: true },
     ),
@@ -102,25 +99,12 @@ export default function Sidebar(props: { onGroup: () => void }) {
       { defer: true },
     ),
   );
-  createEffect(() => {
-    const data = metadata.latest;
-    if (!data || data.of !== ids()) return;
-    const filled: string[] = TAG_FIELDS.filter((field) => (data.tags[field]?.length ?? 0) > 0);
-    for (const list of PLAIN_LISTS) {
-      if (list.values(data).length > 0) filled.push(list.field);
-    }
-    if (filled.some((field) => !shownTags().has(field))) {
-      setShownTags(new Set([...shownTags(), ...filled]));
-    }
-  });
   const pick = (field: string) => {
     const list =
       PLAIN_LISTS.some((list) => list.field === field) ||
       (TAG_FIELDS as readonly string[]).includes(field);
     if (!list) return setAdding(field);
-    // Before the field is shown, which is when it looks at this.
-    setPickedTag(field);
-    setShownTags(new Set([...shownTags(), field]));
+    setEditingList(field);
   };
   const single = () => (ids().length === 1 ? entity.latest : undefined);
 
@@ -336,25 +320,25 @@ export default function Sidebar(props: { onGroup: () => void }) {
             </dl>
             <For each={TAG_FIELDS}>
               {(field) => (
-                <Show when={shownTags().has(field)}>
+                <Show when={(data().tags[field]?.length ?? 0) > 0}>
                   <TagField
                     field={field}
                     data={data()}
                     apply={apply}
                     rename={rename}
-                    autofocus={pickedTag() === field}
+                    onEdit={() => setEditingList(field)}
                   />
                 </Show>
               )}
             </For>
             <For each={PLAIN_LISTS}>
               {(list) => (
-                <Show when={shownTags().has(list.field)}>
+                <Show when={list.values(data()).length > 0}>
                   <PlainList
                     list={list}
                     data={data()}
                     apply={apply}
-                    autofocus={pickedTag() === list.field}
+                    onEdit={() => setEditingList(list.field)}
                   />
                 </Show>
               )}
@@ -369,12 +353,53 @@ export default function Sidebar(props: { onGroup: () => void }) {
                     adding() !== detail.field,
                 ),
                 [
-                  ...TAG_FIELDS.map((field) => ({ field, label: fieldLabel(field) })),
-                  ...PLAIN_LISTS.map(({ field, label }) => ({ field, label })),
-                ].filter((entry) => !shownTags().has(entry.field)),
+                  ...TAG_FIELDS.filter((field) => (data().tags[field]?.length ?? 0) === 0).map(
+                    (field) => ({ field, label: fieldLabel(field) }),
+                  ),
+                  ...PLAIN_LISTS.filter((list) => list.values(data()).length === 0).map(
+                    ({ field, label }) => ({ field, label }),
+                  ),
+                ],
               ]}
               onPick={pick}
             />
+
+            {/* Values are added and removed in a modal, one field at a time. */}
+            <Show when={editingList()}>
+              {(field) => {
+                const plain = () => PLAIN_LISTS.find((list) => list.field === field());
+                return (
+                  <Modal
+                    title={`${plain()?.label ?? fieldLabel(field())} of ${
+                      data().count === 1 ? "this item" : plural(data().count, "item")
+                    }`}
+                    onClose={() => setEditingList(null)}
+                  >
+                    <div class="field-editor">
+                      <Show
+                        when={plain()}
+                        fallback={
+                          <TagField
+                            field={field()}
+                            data={data()}
+                            apply={apply}
+                            rename={rename}
+                            editing
+                          />
+                        }
+                      >
+                        {(list) => <PlainList list={list()} data={data()} apply={apply} editing />}
+                      </Show>
+                    </div>
+                    <Show when={error()}>
+                      <p class="form-error" role="alert">
+                        {error()}
+                      </p>
+                    </Show>
+                  </Modal>
+                );
+              }}
+            </Show>
           </>
         )}
       </Show>
@@ -706,6 +731,23 @@ const MAX_SUGGESTIONS = 8;
 const isWebAddress = (url: string) => /^https?:\/\//i.test(url);
 
 /**
+ * A list field is drawn two ways: in the panel as just its values, under
+ * a label that opens the editor; and with `editing`, in that editor's
+ * modal, with the box to add values and the buttons to remove them.
+ */
+type ListMode = { editing?: boolean; onEdit?: () => void };
+
+/** A list field's label in the panel: click it to edit the list. */
+function ListLabel(props: ListMode & { label: string }) {
+  return (
+    <button class="label list-label" title={`Edit ${props.label}`} onClick={props.onEdit}>
+      {props.label}
+      <Icon name="edit-outline" />
+    </button>
+  );
+}
+
+/**
  * The lists a file has that are not tags: plain values with no
  * suggestions, namespaces or aliases. Source URLs are shown as links, one
  * to a line; identifiers as chips.
@@ -731,9 +773,7 @@ const PLAIN_LISTS = [
   },
 ];
 
-function PlainList(
-  props: FieldProps & { list: (typeof PLAIN_LISTS)[number]; autofocus?: boolean },
-) {
+function PlainList(props: FieldProps & ListMode & { list: (typeof PLAIN_LISTS)[number] }) {
   const [text, setText] = createSignal("");
   const values = () => props.list.values(props.data);
 
@@ -752,48 +792,51 @@ function PlainList(
           ({entry.count})
         </span>
       </Show>
-      <span class="chip-actions">
-        <Show when={entry.count < props.data.count}>
+      <Show when={props.editing}>
+        <span class="chip-actions">
+          <Show when={entry.count < props.data.count}>
+            <button
+              class="chip-add"
+              aria-label={`Add ${entry.value} to all selected`}
+              title="Add to all selected"
+              onClick={() => props.apply(props.list.add(entry.value))}
+            >
+              <Icon name="add" />
+            </button>
+          </Show>
           <button
-            class="chip-add"
-            aria-label={`Add ${entry.value} to all selected`}
-            title="Add to all selected"
-            onClick={() => props.apply(props.list.add(entry.value))}
+            class="chip-remove"
+            aria-label={`Remove ${entry.value}`}
+            title="Remove"
+            onClick={() => props.apply(props.list.remove(entry.value))}
           >
-            <Icon name="add" />
+            <Icon name="close" />
           </button>
-        </Show>
-        <button
-          class="chip-remove"
-          aria-label={`Remove ${entry.value}`}
-          title="Remove"
-          onClick={() => props.apply(props.list.remove(entry.value))}
-        >
-          <Icon name="close" />
-        </button>
-      </span>
+        </span>
+      </Show>
     </>
   );
 
   return (
     <div class="field">
-      <span class="label">{props.list.label}</span>
-      <input
-        type="text"
-        aria-label={`Add to ${props.list.label}`}
-        placeholder={props.list.placeholder}
-        autocomplete="off"
-        spellcheck={false}
-        value={text()}
-        ref={(el) => props.autofocus && queueMicrotask(() => el.focus())}
-        onInput={(event) => setText(event.currentTarget.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            add();
-          }
-        }}
-      />
+      <Show when={props.editing} fallback={<ListLabel label={props.list.label} {...props} />}>
+        <input
+          type="text"
+          autofocus
+          aria-label={`Add to ${props.list.label}`}
+          placeholder={props.list.placeholder}
+          autocomplete="off"
+          spellcheck={false}
+          value={text()}
+          onInput={(event) => setText(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              add();
+            }
+          }}
+        />
+      </Show>
       <Show when={values().length > 0}>
         <Show
           when={props.list.links}
@@ -843,7 +886,7 @@ function PlainList(
  * The heading of a group of chips: the namespace they share. Clicking it
  * searches the namespace; the pencil renames it everywhere.
  */
-function Namespace(props: { field: string; name: string; rename: RenameNamespace }) {
+function Namespace(props: { field: string; name: string; rename?: RenameNamespace }) {
   const [editing, setEditing] = createSignal(false);
 
   const save = (typed: string) => {
@@ -860,7 +903,7 @@ function Namespace(props: { field: string; name: string; rename: RenameNamespace
       : `Remove the namespace "${props.name}"? Its tags are kept, without it.`;
     const kind = fieldLabel(props.field).toLowerCase();
     const scope = `This changes every ${kind} tag under it, across the whole library.`;
-    if (confirm(`${question} ${scope}`)) props.rename(props.field, props.name, to);
+    if (confirm(`${question} ${scope}`)) props.rename?.(props.field, props.name, to);
   };
 
   return (
@@ -876,14 +919,16 @@ function Namespace(props: { field: string; name: string; rename: RenameNamespace
             >
               {props.name}:
             </button>
-            <button
-              class="namespace-edit"
-              aria-label={`Rename the namespace ${props.name}`}
-              title="Rename this namespace everywhere"
-              onClick={() => setEditing(true)}
-            >
-              <Icon name="edit-outline" />
-            </button>
+            <Show when={props.rename}>
+              <button
+                class="namespace-edit"
+                aria-label={`Rename the namespace ${props.name}`}
+                title="Rename this namespace everywhere"
+                onClick={() => setEditing(true)}
+              >
+                <Icon name="edit-outline" />
+              </button>
+            </Show>
           </>
         }
       >
@@ -905,14 +950,7 @@ function Namespace(props: { field: string; name: string; rename: RenameNamespace
 
 type RenameNamespace = (field: string, from: string, to: string) => void;
 
-function TagField(
-  props: FieldProps & {
-    field: string;
-    rename: RenameNamespace;
-    /** Put the cursor in the box when the field appears. */
-    autofocus?: boolean;
-  },
-) {
+function TagField(props: FieldProps & ListMode & { field: string; rename: RenameNamespace }) {
   const [text, setText] = createSignal("");
   const [open, setOpen] = createSignal(false);
   /** Highlighted suggestion; -1 means the typed text itself. */
@@ -988,6 +1026,8 @@ function TagField(
       if (active() >= 0) pick(suggestions()[active()]);
       else add(text());
     } else if (event.key === "Escape") {
+      // With suggestions showing, Escape puts them away and no more.
+      if (open() && suggestions().length > 0) event.preventDefault();
       setOpen(false);
       setActive(-1);
     }
@@ -995,13 +1035,13 @@ function TagField(
 
   return (
     <div class="field">
-      <span class="label">{fieldLabel(props.field)}</span>
+      <Show when={props.editing} fallback={<ListLabel label={fieldLabel(props.field)} {...props} />}>
       <div class="suggest">
         <input
           type="text"
           role="combobox"
+          autofocus
           aria-label={`Add to ${fieldLabel(props.field)}`}
-          ref={(el) => props.autofocus && queueMicrotask(() => el.focus())}
           aria-expanded={open() && suggestions().length > 0}
           aria-controls={listId}
           aria-autocomplete="list"
@@ -1050,13 +1090,18 @@ function TagField(
           </ul>
         </Show>
       </div>
+      </Show>
       <Show when={values().length > 0}>
         <div class="tag-groups">
           <For each={groups()}>
             {(group) => (
             <div class="chips">
               <Show when={group.namespace}>
-                <Namespace field={props.field} name={group.namespace} rename={props.rename} />
+                <Namespace
+                  field={props.field}
+                  name={group.namespace}
+                  rename={props.editing ? props.rename : undefined}
+                />
               </Show>
               <For each={group.tags}>
                 {(tag) => {
@@ -1065,7 +1110,10 @@ function TagField(
                     <span class="chip" classList={{ partial: partial() }}>
                       <button
                         class="chip-label"
-                        title={group.namespace ? `Search for ${tag.value}` : "Search for this"}
+                        // In the editor a chip is just a value; in the panel it
+                        // searches.
+                        disabled={props.editing}
+                        title={props.editing ? undefined : `Search for ${tag.value}`}
                         onClick={() => openTab("gallery", tagQuery(props.field, tag.value))}
                       >
                         {leaf(tag.value, group.namespace)}
@@ -1078,6 +1126,7 @@ function TagField(
                           ({tag.count})
                         </span>
                       </Show>
+                      <Show when={props.editing}>
                       <span class="chip-actions">
                         <Show when={partial()}>
                           <button
@@ -1098,6 +1147,7 @@ function TagField(
                           <Icon name="close" />
                         </button>
                       </span>
+                      </Show>
                     </span>
                   );
                 }}

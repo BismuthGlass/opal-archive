@@ -788,7 +788,12 @@ button.primary {
 }
 
 /* These chips are not searches, so their label is not a button. */
-span.chip-label:hover {
+span/* With nothing after it, as in the panel, the label fills the chip. */
+.chip-label:last-child {
+  padding-right: 8px;
+}
+
+.chip-label:hover {
   text-decoration: none;
 }
 
@@ -892,8 +897,54 @@ span.chip-label:hover {
 }
 
 /* The input sits above its chips, so it stays put as values come and go. */
-.suggest + .tag-groups {
-  margin-top: 6px;
+.suggest + .tag-groups,
+.list-label + .tag-groups,
+.list-label + .chips,
+.list-label + .links {
+  margin-top: 4px;
+}
+
+/* A list field's label in the panel opens its editor. */
+.list-label {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+.list-label .icon {
+  opacity: 0;
+}
+
+.field:hover .list-label .icon,
+.list-label:focus-visible .icon {
+  opacity: 1;
+}
+
+.list-label:hover {
+  color: var(--text);
+}
+
+.chip-label:disabled {
+  cursor: default;
+  text-decoration: none;
+}
+
+/* The editor: room below the box for its suggestions. */
+.field-editor {
+  min-height: 260px;
+}
+
+.field-editor .field {
+  margin-top: 0;
+}
+
+.field-editor .suggest + .tag-groups,
+.field-editor .plain-chips,
+.field-editor .links {
+  margin-top: 10px;
 }
 
 /* One row of chips per namespace, headed by its name. */
