@@ -91,7 +91,7 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
   });
 
   const activate = (index: number, item: Item) => {
-    if (item.kind === "collection") openTab("search", `in=${item.id} sort=position`);
+    if (item.kind === "collection") openTab("gallery", `in=${item.id} sort=position`);
     else props.onOpen(index);
   };
 

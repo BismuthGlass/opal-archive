@@ -251,7 +251,7 @@ export default function Sidebar(props: { onGroup: () => void }) {
                           <dd>
                             <button
                               class="link"
-                              onClick={() => openTab("search", `in=${current().id} sort=position`)}
+                              onClick={() => openTab("gallery", `in=${current().id} sort=position`)}
                             >
                               {plural(collection().member_count, "item")}, open
                             </button>
@@ -290,7 +290,7 @@ export default function Sidebar(props: { onGroup: () => void }) {
                       <button
                         class="chip-label"
                         title="Open this collection"
-                        onClick={() => openTab("search", `in=${membership.id} sort=position`)}
+                        onClick={() => openTab("gallery", `in=${membership.id} sort=position`)}
                       >
                         {membership.title || `#${membership.id}`}
                       </button>
@@ -587,7 +587,7 @@ function Namespace(props: { field: string; name: string; rename: RenameNamespace
             <button
               class="namespace-label"
               title="Search for everything in this namespace"
-              onClick={() => openTab("search", tagQuery(props.field, props.name, true))}
+              onClick={() => openTab("gallery", tagQuery(props.field, props.name, true))}
             >
               {props.name}:
             </button>
@@ -774,7 +774,7 @@ function TagField(props: FieldProps & { field: string; rename: RenameNamespace }
                       <button
                         class="chip-label"
                         title={group.namespace ? `Search for ${tag.value}` : "Search for this"}
-                        onClick={() => openTab("search", tagQuery(props.field, tag.value))}
+                        onClick={() => openTab("gallery", tagQuery(props.field, tag.value))}
                       >
                         {leaf(tag.value, group.namespace)}
                       </button>

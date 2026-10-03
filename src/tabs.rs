@@ -13,7 +13,8 @@ use crate::{AppState, error::ApiError};
 struct Tab {
     id: i64,
     position: i64,
-    /// `search`, or `upload`: the files uploaded through the tab.
+    /// `gallery`, a search of the library, or `upload`, the files uploaded
+    /// through the tab.
     kind: String,
     /// What the tab searches for; in an upload tab, a filter on its files.
     query: String,
@@ -30,7 +31,7 @@ struct NewTab {
 }
 
 fn default_kind() -> String {
-    "search".to_string()
+    "gallery".to_string()
 }
 
 #[derive(Deserialize)]

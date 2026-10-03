@@ -1,4 +1,4 @@
-export type TabKind = "search" | "upload";
+export type TabKind = "gallery" | "upload";
 
 export type Tab = {
   id: number;

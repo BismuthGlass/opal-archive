@@ -44,7 +44,7 @@ async function guard(action: () => Promise<void>) {
 export const load = () =>
   guard(async () => {
     let list = await api.listTabs();
-    if (list.length === 0) list = [await api.createTab("search", "")];
+    if (list.length === 0) list = [await api.createTab("gallery", "")];
     setTabs(list);
     const saved = savedActiveId();
     select(list.some((tab) => tab.id === saved) ? saved! : list[0].id);
@@ -67,7 +67,7 @@ export const close = (id: number) =>
     const index = tabs.findIndex((tab) => tab.id === id);
     const rest = tabs.filter((tab) => tab.id !== id);
     // There is always at least one tab.
-    if (rest.length === 0) rest.push(await api.createTab("search", ""));
+    if (rest.length === 0) rest.push(await api.createTab("gallery", ""));
     setTabs(rest);
     if (activeId() === id) select(rest[Math.min(index, rest.length - 1)].id);
   });

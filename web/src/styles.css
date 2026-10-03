@@ -153,6 +153,10 @@ a {
   white-space: nowrap;
 }
 
+.tab-label .icon {
+  margin-right: 4px;
+}
+
 .tab-rename {
   flex: 1;
   min-width: 0;

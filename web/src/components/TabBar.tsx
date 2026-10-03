@@ -6,14 +6,16 @@ import Icon from "./Icon";
 
 /** The kinds of tab on offer; add new ones here. */
 const KINDS: { kind: TabKind; label: string; icon: IconName }[] = [
-  { kind: "search", label: "Search", icon: "search" },
+  { kind: "gallery", label: "Gallery", icon: "photo-library-outline" },
   { kind: "upload", label: "Upload", icon: "upload" },
 ];
+
+const iconOf = (kind: TabKind) => KINDS.find((entry) => entry.kind === kind)!.icon;
 
 /** What a tab is called when it has not been given a name. */
 function described(tab: Tab) {
   if (tab.kind === "upload") return tab.query ? `Upload: ${tab.query}` : "Upload";
-  return tab.query || "New search";
+  return tab.query || "Gallery";
 }
 
 /** The + button, and the menu of tab kinds it opens. */
@@ -132,9 +134,7 @@ export default function TabBar() {
                     onClick={() => select(tab.id)}
                     onDblClick={() => setRenaming(tab.id)}
                   >
-                    <Show when={tab.kind === "upload"}>
-                      <Icon name="upload" />
-                    </Show>
+                    <Icon name={iconOf(tab.kind)} />
                     {tab.name || described(tab)}
                   </button>
                 }
