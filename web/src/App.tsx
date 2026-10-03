@@ -39,6 +39,14 @@ export default function App() {
   const [viewing, setViewing] = createSignal<number | null>(null);
   /** The entities being put into a collection, while that dialog is open. */
   const [grouping, setGrouping] = createSignal<number[] | null>(null);
+  /**
+   * The collection a new one made from these could go inside: the one the
+   * tab is tied to, unless it is itself among them.
+   */
+  const parentFor = (ids: number[]) => {
+    const collection = activeTab()?.collection;
+    return collection && !ids.includes(collection.id) ? collection : undefined;
+  };
   /** The collection the tab is tied to, shown when nothing is selected. */
   const shownCollection = () => (selected().size === 0 ? activeTab()?.collection : undefined);
   const [editingTags, setEditingTags] = createSignal(false);
@@ -275,11 +283,11 @@ export default function App() {
           }}
         />
       </Show>
-      <Show when={tagging()}>
+      <Show when={tagging()} keyed>
         {(target) => (
           <QuickTagModal
-            ids={target().ids}
-            target={target().name}
+            ids={target.ids}
+            target={target.name}
             onClose={() => setTagging(null)}
           />
         )}
@@ -296,16 +304,15 @@ export default function App() {
       <Show when={settingsOpen()}>
         <SettingsModal onClose={() => setSettingsOpen(false)} />
       </Show>
-      <Show when={grouping()}>
+      {/* Keyed: the dialog is given the value itself. Handed a way to read
+          it instead, it would still be reading as the dialog closes, when
+          there is nothing left to read. The same goes for the other
+          dialogs opened with a value. */}
+      <Show when={grouping()} keyed>
         {(ids) => (
           <CollectionDialog
-            ids={ids()}
-            // A collection is not offered a place inside itself.
-            parent={
-              ids().includes(activeTab()?.collection?.id ?? -1)
-                ? undefined
-                : (activeTab()?.collection ?? undefined)
-            }
+            ids={ids}
+            parent={parentFor(ids)}
             onClose={() => setGrouping(null)}
           />
         )}

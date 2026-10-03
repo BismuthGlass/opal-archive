@@ -28,7 +28,12 @@ const close = () => setOpened(null);
  * the selection is in the trash already.
  */
 export default function ContextMenu() {
-  return <Show when={opened()}>{(at) => <Menu at={at()} />}</Show>;
+  // Keyed, so the menu is given the value itself and can use it as it closes.
+  return (
+    <Show when={opened()} keyed>
+      {(at) => <Menu at={at} />}
+    </Show>
+  );
 }
 
 function Menu(props: { at: Opened }) {

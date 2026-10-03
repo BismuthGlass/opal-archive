@@ -330,9 +330,9 @@ export default function Sidebar(props: {
 
             {/* Values are added and removed in a modal: one for all the tags,
                 one for each of the plain lists. */}
-            <Show when={editingList()}>
+            <Show when={editingList()} keyed>
               {(field) => {
-                const plain = () => PLAIN_LISTS.find((list) => list.field === field());
+                const plain = () => PLAIN_LISTS.find((list) => list.field === field);
                 return (
                   <Modal
                     title={`${plain()?.label ?? "Tags"} of ${
