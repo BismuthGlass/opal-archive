@@ -14,7 +14,14 @@ import { AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS, TAG_FIELDS } from "../ap
 import type { Changes, Metadata, Scalar } from "../api";
 import { dateTime, duration, fieldLabel, fileSize, plural, tagQuery } from "../format";
 import { changed, clearSelection, dataVersion, selected } from "../search";
-import { aggregatedTypes, pillStyle, prefixOf, tagType, typeOfPrefix } from "../tagTypes";
+import {
+  aggregatedTypes,
+  orderedTypes,
+  pillStyle,
+  prefixOf,
+  tagType,
+  typeOfPrefix,
+} from "../tagTypes";
 import { open as openTab, openCollection } from "../tabs";
 import Icon from "./Icon";
 import Modal from "./Modal";
@@ -335,7 +342,7 @@ export default function Sidebar(props: { onGroup: () => void }) {
                 )}
               </Show>
             </dl>
-            <For each={TAG_FIELDS.filter((field) => !tagType(field).aggregate)}>
+            <For each={orderedTypes().filter((field) => !tagType(field).aggregate)}>
               {(field) => (
                 <Show when={filled(data(), field)}>
                   <TagField
@@ -370,9 +377,9 @@ export default function Sidebar(props: { onGroup: () => void }) {
                     adding() !== detail.field,
                 ),
                 [
-                  ...TAG_FIELDS.filter(
-                    (field) => !tagType(field).aggregate && !filled(data(), field),
-                  ).map((field) => ({ field, label: fieldLabel(field) })),
+                  ...orderedTypes()
+                    .filter((field) => !tagType(field).aggregate && !filled(data(), field))
+                    .map((field) => ({ field, label: fieldLabel(field) })),
                   ...PLAIN_LISTS.filter((list) => list.values(data()).length === 0).map(
                     ({ field, label }) => ({ field, label }),
                   ),
@@ -995,7 +1002,7 @@ function TagInput(props: FieldProps & { field: string; onType?: (field: string) 
   const types = createMemo(() => {
     const typed = naming();
     if (typed === null) return [];
-    return TAG_FIELDS.filter(
+    return orderedTypes().filter(
       (field) => prefixOf(field).startsWith(typed) || field.replaceAll("_", " ").startsWith(typed),
     );
   });
@@ -1303,7 +1310,7 @@ function AggregatedTags(props: FieldProps & ListMode) {
   // In the editor a type reached by its prefix is listed too, even if it
   // is not one of the aggregated ones, so that what is added can be seen.
   const types = createMemo(() =>
-    TAG_FIELDS.filter(
+    orderedTypes().filter(
       (field) => tagType(field).aggregate || (props.editing && field === target()),
     ),
   );

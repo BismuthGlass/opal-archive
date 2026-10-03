@@ -1570,6 +1570,24 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
   border-top: 1px solid var(--border);
 }
 
+.drag-handle {
+  flex: none;
+  margin: 0 -6px 0 -6px;
+  line-height: 0;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.setting-rows li.dragging {
+  background: var(--bg);
+  outline: 1px solid var(--accent);
+}
+
+.setting-rows li.dragging .drag-handle {
+  cursor: grabbing;
+}
+
 .setting-text {
   display: flex;
   flex: 1;

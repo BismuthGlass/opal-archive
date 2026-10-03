@@ -1,9 +1,17 @@
 import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { ACTIONS, bind, isDefault, keyFor, keyLabel, keyOf } from "../hotkeys";
 import type { Action } from "../hotkeys";
-import { TAG_FIELDS } from "../api";
 import { fieldLabel } from "../format";
-import { isCustom, pillStyle, setTagType, tagType } from "../tagTypes";
+import {
+  isCustom,
+  isCustomOrder,
+  orderedTypes,
+  pillStyle,
+  setTagType,
+  setTagTypeOrder,
+  tagType,
+} from "../tagTypes";
+import Icon from "./Icon";
 import type { TagType } from "../tagTypes";
 import Modal from "./Modal";
 
@@ -15,11 +23,53 @@ const SECTIONS = [
 
 /** Each tag type's pill colours, and whether it joins the one list. */
 function TagTypes() {
+  let list!: HTMLUListElement;
   const [error, setError] = createSignal<string | null>(null);
+  /** The order while a row is being dragged, and the row. */
+  const [dragOrder, setDragOrder] = createSignal<string[] | null>(null);
+  const [dragging, setDragging] = createSignal<string | null>(null);
+  const order = () => dragOrder() ?? orderedTypes();
+
+  const report = (err: unknown) => setError(err instanceof Error ? err.message : String(err));
+
+  // A row is dragged by its handle. It moves in the list as the pointer
+  // passes the other rows, and the order is saved on release.
+  const startDrag = (field: string, down: PointerEvent) => {
+    down.preventDefault();
+    setDragging(field);
+    setDragOrder(orderedTypes());
+    const onMove = (event: PointerEvent) => {
+      const others = [...list.querySelectorAll<HTMLElement>("li:not(.dragging)")];
+      // Its place is after every other row whose middle the pointer passed.
+      const index = others.filter((row) => {
+        const box = row.getBoundingClientRect();
+        return box.top + box.height / 2 < event.clientY;
+      }).length;
+      const rest = order().filter((other) => other !== field);
+      rest.splice(index, 0, field);
+      if (rest.some((other, i) => other !== order()[i])) setDragOrder(rest);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      const next = order();
+      setDragging(null);
+      const moved = next.some((other, i) => other !== orderedTypes()[i]);
+      if (!moved) return setDragOrder(null);
+      setTagTypeOrder(next)
+        .then(() => setError(null), report)
+        .finally(() => setDragOrder(null));
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
+
   const change = (field: string, changes: Partial<TagType> | null) =>
     setTagType(field, changes).then(
       () => setError(null),
-      (err) => setError(err instanceof Error ? err.message : String(err)),
+      report,
     );
 
   return (
@@ -27,12 +77,29 @@ function TagTypes() {
       <h3>Tag types</h3>
       <p class="hint">
         Tags are shown as pills in the colours of their type. The types ticked as aggregated share
-        one list in the side panel; the others each get a section of their own.
+        one list in the side panel; the others each get a section of their own. Drag a row by its
+        handle to change the order the types are listed in.
+        <Show when={isCustomOrder()}>
+          {" "}
+          <button
+            class="link"
+            onClick={() => setTagTypeOrder(null).then(() => setError(null), report)}
+          >
+            Reset the order
+          </button>
+        </Show>
       </p>
-      <ul class="setting-rows">
-        <For each={TAG_FIELDS}>
+      <ul class="setting-rows" ref={list}>
+        <For each={order()}>
           {(field) => (
-            <li>
+            <li classList={{ dragging: dragging() === field }}>
+              <span
+                class="drag-handle"
+                title="Drag to reorder"
+                onPointerDown={(event) => startDrag(field, event)}
+              >
+                <Icon name="drag-indicator" />
+              </span>
               <div class="setting-text">
                 <span>
                   <span class="chip tinted type-sample" style={pillStyle(field)}>

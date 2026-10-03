@@ -74,9 +74,43 @@ export const pillStyle = (field: string) => {
   return { background: type.bg, color: type.fg };
 };
 
-/** The types shown together in one list, in their usual order. */
+/**
+ * The order tags are listed in by default: who and what the work is, then
+ * how it is made, with plain tags closing the aggregated list, and the
+ * housekeeping types after.
+ */
+const DEFAULT_ORDER: string[] = [
+  "creator",
+  "character",
+  "source_work",
+  "person",
+  "genre",
+  "style",
+  "medium",
+  "tags",
+  "flaws",
+  "language",
+  "source",
+  "usage_tags",
+  "ai_usage_tags",
+];
+
+/** Every tag type, in the order chosen in the settings. */
+export const orderedTypes = (): string[] => {
+  const known = new Set<string>(TAG_FIELDS);
+  const chosen = (settings.tagTypeOrder ?? []).filter((field) => known.delete(field));
+  // Types the saved order does not mention keep their default place at the end.
+  return [...chosen, ...DEFAULT_ORDER.filter((field) => known.has(field))];
+};
+
+export const isCustomOrder = () => settings.tagTypeOrder !== undefined;
+
+/** Sets the order of the types; null puts the default one back. */
+export const setTagTypeOrder = (order: string[] | null) => saveSetting("tagTypeOrder", order);
+
+/** The types shown together in one list, in order. */
 export const aggregatedTypes = (): string[] =>
-  TAG_FIELDS.filter((field) => tagType(field).aggregate);
+  orderedTypes().filter((field) => tagType(field).aggregate);
 
 /** Changes how a type is shown; null puts it back to its defaults. */
 export async function setTagType(field: string, changes: Partial<TagType> | null) {

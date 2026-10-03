@@ -7,6 +7,8 @@ export type Settings = {
   hotkeys?: Record<string, string>;
   /** Tag type to what differs from its defaults: colours, aggregation. */
   tagTypes?: Record<string, { bg?: string; fg?: string; aggregate?: boolean }>;
+  /** The tag types in the order they are listed, if not the default one. */
+  tagTypeOrder?: string[];
 };
 
 const [settings, setSettings] = createStore<Settings>({});
