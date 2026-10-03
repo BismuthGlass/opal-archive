@@ -120,6 +120,147 @@ pub fn normalize(field: &str, value: &str) -> Result<String, ApiError> {
     Ok(parts.join(":"))
 }
 
+impl Suggestion {
+    fn tag(value: String, count: i64, description: Option<String>) -> Self {
+        Suggestion {
+            value,
+            count,
+            namespace: false,
+            alias: None,
+            description,
+        }
+    }
+}
+
+/// How well a name matches what was typed: 0 if it starts with it, 1 if it
+/// only contains it.
+fn rank(name: &str, typed: &str) -> Option<u8> {
+    match name.to_lowercase().find(typed) {
+        Some(0) => Some(0),
+        Some(_) => Some(1),
+        None => None,
+    }
+}
+
+/// Splits what was typed into the namespace being looked in, with its
+/// colon, and the start of a name inside it, in lower case.
+fn split_typed(typed: &str) -> (String, String) {
+    match typed.rfind(':') {
+        Some(at) => {
+            let parts: Vec<&str> = typed[..at].split(':').map(str::trim).collect();
+            (
+                format!("{}:", parts.join(":")),
+                typed[at + 1..].trim().to_lowercase(),
+            )
+        }
+        None => (String::new(), typed.to_lowercase()),
+    }
+}
+
+/// Suggestions by a key that tells them apart, each with its rank: 0 and 1
+/// as `rank` gives them, 2 for a tag deeper down whose own name starts
+/// with what was typed.
+type Found = HashMap<String, (u8, Suggestion)>;
+
+/// The tags and namespaces directly under `prefix` whose name matches
+/// `rest`.
+fn matching_tags(
+    conn: &Connection,
+    field: &str,
+    prefix: &str,
+    rest: &str,
+) -> rusqlite::Result<Found> {
+    let mut stmt = conn.prepare(
+        // Left join: a pinned tag is offered though nothing carries it yet.
+        "SELECT t.value, count(et.entity_id), t.description
+         FROM tag t LEFT JOIN entity_tag et ON et.tag_id = t.id
+         WHERE t.field = ?1 AND t.value LIKE ?2 ESCAPE '\\'
+         GROUP BY t.id",
+    )?;
+    // contains_pattern gives %text%; without the first % it is a prefix.
+    let pattern = &contains_pattern(prefix)[1..];
+    let tags = stmt.query_map([field, pattern], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, Option<String>>(2)?,
+        ))
+    })?;
+
+    let mut found = Found::new();
+    for tag in tags {
+        let (value, uses, description) = tag?;
+        let Some(inside) = value.get(prefix.len()..) else {
+            continue;
+        };
+        let Some((namespace, _)) = inside.split_once(':') else {
+            if let Some(rank) = rank(inside, rest) {
+                let key = value.to_lowercase();
+                found.insert(key, (rank, Suggestion::tag(value, uses, description)));
+            }
+            continue;
+        };
+        // A tag further down counts towards the namespace it is under.
+        if let Some(rank) = rank(namespace, rest) {
+            let namespace = &value[..prefix.len() + namespace.len() + 1];
+            found
+                .entry(namespace.to_lowercase())
+                .or_insert_with(|| {
+                    let mut suggestion = Suggestion::tag(namespace.to_string(), 0, None);
+                    suggestion.namespace = true;
+                    (rank, suggestion)
+                })
+                .1
+                .count += uses;
+        }
+        // Typing a bare name also finds it inside namespaces.
+        let name = value.rsplit(':').next().unwrap_or("");
+        if prefix.is_empty() && !rest.is_empty() && rank(name, rest) == Some(0) {
+            let key = value.to_lowercase();
+            found.insert(key, (2, Suggestion::tag(value, uses, description)));
+        }
+    }
+    Ok(found)
+}
+
+/// Takes the aliases out of the suggestions, and for the aliases that
+/// start with what was typed, offers the tags they defer to.
+fn suggest_aliases(
+    conn: &Connection,
+    field: &str,
+    typed: &str,
+    found: &mut Found,
+) -> rusqlite::Result<()> {
+    // An alias is never offered as a tag, even while entities still carry it.
+    let mut stmt = conn.prepare("SELECT alias FROM tag_alias WHERE field = ?1")?;
+    let names = stmt.query_map([field], |row| row.get::<_, String>(0))?;
+    for name in names {
+        found.remove(&name?.to_lowercase());
+    }
+    if typed.is_empty() {
+        return Ok(());
+    }
+    let mut stmt = conn.prepare(
+        "SELECT a.alias, a.target,
+                (SELECT count(*) FROM tag t JOIN entity_tag et ON et.tag_id = t.id
+                 WHERE t.field = a.field AND t.value = a.target)
+         FROM tag_alias a WHERE a.field = ?1 AND a.alias LIKE ?2 ESCAPE '\\'",
+    )?;
+    let pattern = &contains_pattern(typed)[1..];
+    let rows = stmt.query_map([field, pattern], |row| {
+        Ok((row.get::<_, String>(0)?, row.get(1)?, row.get(2)?))
+    })?;
+    for row in rows {
+        let (alias, value, count): (String, String, i64) = row?;
+        // Keyed apart from the tags, so a tag and an alias of it both show.
+        let key = format!("\0{}", alias.to_lowercase());
+        let mut suggestion = Suggestion::tag(value, count, None);
+        suggestion.alias = Some(alias);
+        found.insert(key, (0, suggestion));
+    }
+    Ok(())
+}
+
 /// Completions for what has been typed into a tag field. They go one level
 /// at a time: the namespaces and tags directly under the namespace typed so
 /// far.
@@ -129,140 +270,20 @@ async fn suggest(
 ) -> Result<Json<Vec<Suggestion>>, ApiError> {
     check_field(&params.field)?;
     let typed = params.q.trim();
-    // What is typed splits into the namespace being looked in, with its
-    // colon, and the start of a name inside it.
-    let (prefix, rest) = match typed.rfind(':') {
-        Some(at) => {
-            let parts: Vec<&str> = typed[..at].split(':').map(str::trim).collect();
-            (format!("{}:", parts.join(":")), typed[at + 1..].trim())
-        }
-        None => (String::new(), typed),
-    };
-    let rest = rest.to_lowercase();
+    let (prefix, rest) = split_typed(typed);
 
     let conn = state.db.lock().unwrap();
-    let mut stmt = conn.prepare(
-        // Left join: a pinned tag is offered though nothing carries it yet.
-        "SELECT t.value, count(et.entity_id), t.description
-         FROM tag t LEFT JOIN entity_tag et ON et.tag_id = t.id
-         WHERE t.field = ?1 AND t.value LIKE ?2 ESCAPE '\\'
-         GROUP BY t.id",
-    )?;
-    // contains_pattern gives %text%; without the first % it is a prefix.
-    let pattern = &contains_pattern(&prefix)[1..];
-    let tags = stmt
-        .query_map([params.field.as_str(), pattern], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, Option<String>>(2)?,
-            ))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut found = matching_tags(&conn, &params.field, &prefix, &rest)?;
+    suggest_aliases(&conn, &params.field, typed, &mut found)?;
 
-    // Best matches first: 0 starts with what was typed, 1 contains it, 2 is
-    // a tag deeper down whose own name starts with it.
-    let mut found: HashMap<String, (u8, Suggestion)> = HashMap::new();
-    let rank = |name: &str| {
-        let name = name.to_lowercase();
-        match name.find(&rest) {
-            Some(0) => Some(0),
-            Some(_) => Some(1),
-            None => None,
-        }
-    };
-    for (value, uses, description) in tags {
-        let Some(inside) = value.get(prefix.len()..) else {
-            continue;
-        };
-        let below = inside.split_once(':');
-        match below {
-            Some((namespace, _)) => {
-                if let Some(rank) = rank(namespace) {
-                    let namespace = &value[..prefix.len() + namespace.len() + 1];
-                    found
-                        .entry(namespace.to_lowercase())
-                        .or_insert_with(|| {
-                            let value = namespace.to_string();
-                            let namespace = Suggestion {
-                                value,
-                                count: 0,
-                                namespace: true,
-                                alias: None,
-                                description: None,
-                            };
-                            (rank, namespace)
-                        })
-                        .1
-                        .count += uses;
-                }
-                // Typing a bare name also finds it inside namespaces.
-                let name = value.rsplit(':').next().unwrap_or("");
-                if prefix.is_empty() && !rest.is_empty() && rank(name) == Some(0) {
-                    let key = value.to_lowercase();
-                    let tag = Suggestion {
-                        value,
-                        count: uses,
-                        namespace: false,
-                        alias: None,
-                        description,
-                    };
-                    found.insert(key, (2, tag));
-                }
-            }
-            None => {
-                if let Some(rank) = rank(inside) {
-                    let key = value.to_lowercase();
-                    let tag = Suggestion {
-                        value,
-                        count: uses,
-                        namespace: false,
-                        alias: None,
-                        description,
-                    };
-                    found.insert(key, (rank, tag));
-                }
-            }
-        }
-    }
-    // An alias is never offered as a tag, even while entities still carry it.
-    let mut stmt = conn.prepare("SELECT alias FROM tag_alias WHERE field = ?1")?;
-    let names = stmt.query_map([&params.field], |row| row.get::<_, String>(0))?;
-    for name in names {
-        found.remove(&name?.to_lowercase());
-    }
-    // Typing an alias offers the tag it defers to.
-    if !typed.is_empty() {
-        let mut stmt = conn.prepare(
-            "SELECT a.alias, a.target,
-                    (SELECT count(*) FROM tag t JOIN entity_tag et ON et.tag_id = t.id
-                     WHERE t.field = a.field AND t.value = a.target)
-             FROM tag_alias a WHERE a.field = ?1 AND a.alias LIKE ?2 ESCAPE '\\'",
-        )?;
-        let pattern = &contains_pattern(typed)[1..];
-        let rows = stmt.query_map([params.field.as_str(), pattern], |row| {
-            Ok((row.get::<_, String>(0)?, row.get(1)?, row.get(2)?))
-        })?;
-        for row in rows {
-            let (alias, value, count): (String, String, i64) = row?;
-            let key = format!("\0{}", alias.to_lowercase());
-            let alias = Some(alias);
-            let tag = Suggestion {
-                value,
-                count,
-                namespace: false,
-                alias,
-                description: None,
-            };
-            found.insert(key, (0, tag));
-        }
-    }
+    // Best matches first, then the most used; a tag before an alias of it.
     let mut found: Vec<_> = found.into_values().collect();
     found.sort_by(|(rank_a, a), (rank_b, b)| {
         rank_a
             .cmp(rank_b)
             .then(b.count.cmp(&a.count))
             .then_with(|| a.value.to_lowercase().cmp(&b.value.to_lowercase()))
+            .then_with(|| a.alias.cmp(&b.alias))
     });
     found.truncate(MAX_SUGGESTIONS);
     Ok(Json(
@@ -333,53 +354,49 @@ pub fn resolve(conn: &Connection, field: &str, value: String) -> rusqlite::Resul
     Ok(target.unwrap_or(value))
 }
 
-/// Renames a tag, or with `namespace` a whole namespace: every tag under it
-/// moves to the new one. Where a tag of the new name already exists the two
-/// are merged. Aliases follow the tags they defer to.
-async fn rename(
-    State(state): State<AppState>,
-    Json(input): Json<RenameInput>,
-) -> Result<Json<Value>, ApiError> {
-    check_field(&input.field)?;
-    let field = input.field.as_str();
-    let mut conn = state.db.lock().unwrap();
-    let tx = conn.transaction()?;
-
-    if !input.namespace {
-        // Only trimmed, so a tag stored before a rule existed can be fixed.
-        let from = input.from.trim();
-        let to = normalize(field, &input.to)?;
-        for name in [from, &to] {
-            let target = resolve(&tx, field, name.to_string())?;
-            if !target.eq_ignore_ascii_case(name) {
-                return Err(ApiError::BadRequest(format!(
-                    "`{name}` is an alias of `{target}`; remove the alias first"
-                )));
-            }
+/// Renames one tag. If a tag of the new name exists the two are merged;
+/// aliases of the tag follow it.
+fn rename_tag(conn: &Connection, field: &str, from: &str, to: &str) -> Result<(), ApiError> {
+    // Only trimmed, so a tag stored before a rule existed can be fixed.
+    let from = from.trim();
+    let to = normalize(field, to)?;
+    for name in [from, &to] {
+        let target = resolve(conn, field, name.to_string())?;
+        if !target.eq_ignore_ascii_case(name) {
+            return Err(ApiError::BadRequest(format!(
+                "`{name}` is an alias of `{target}`; remove the alias first"
+            )));
         }
-        let id = tx
-            .query_row(
-                "SELECT id FROM tag WHERE field = ?1 AND value = ?2",
-                [field, from],
-                |row| row.get::<_, i64>(0),
-            )
-            .optional()?;
-        let repointed = tx.execute(
-            "UPDATE tag_alias SET target = ?3 WHERE field = ?1 AND target = ?2",
-            [field, from, &to],
-        )?;
-        match id {
-            Some(id) => move_tag(&tx, field, id, &to)?,
-            // A tag nothing carries exists only as the target of aliases.
-            None if repointed > 0 => {}
-            None => return Err(ApiError::NotFound),
-        }
-        tx.commit()?;
-        return Ok(Json(json!({ "renamed": 1 })));
     }
+    let id = conn
+        .query_row(
+            "SELECT id FROM tag WHERE field = ?1 AND value = ?2",
+            [field, from],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()?;
+    let repointed = conn.execute(
+        "UPDATE tag_alias SET target = ?3 WHERE field = ?1 AND target = ?2",
+        [field, from, &to],
+    )?;
+    match id {
+        Some(id) => Ok(move_tag(conn, field, id, &to)?),
+        // A tag nothing carries exists only as the target of aliases.
+        None if repointed > 0 => Ok(()),
+        None => Err(ApiError::NotFound),
+    }
+}
 
-    let from = normalize(field, &input.from)?;
-    let to = match input.to.trim() {
+/// Renames a namespace: every tag under it moves to the new one, or with
+/// an empty `to`, out of it. Returns how many tags moved.
+fn rename_namespace(
+    conn: &Connection,
+    field: &str,
+    from: &str,
+    to: &str,
+) -> Result<usize, ApiError> {
+    let from = normalize(field, from)?;
+    let to = match to.trim() {
         "" => String::new(),
         to => format!("{}:", normalize(field, to)?),
     };
@@ -387,15 +404,15 @@ async fn rename(
     let renamed = |value: &str| format!("{to}{}", &value[from.len() + 1..]);
 
     let tags = {
-        let mut stmt =
-            tx.prepare("SELECT id, value FROM tag WHERE field = ?1 AND value LIKE ?2 ESCAPE '\\'")?;
+        let mut stmt = conn
+            .prepare("SELECT id, value FROM tag WHERE field = ?1 AND value LIKE ?2 ESCAPE '\\'")?;
         stmt.query_map([field, pattern], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?
     };
     let targets = {
-        let mut stmt = tx.prepare(
+        let mut stmt = conn.prepare(
             "SELECT DISTINCT target FROM tag_alias
              WHERE field = ?1 AND target LIKE ?2 ESCAPE '\\'",
         )?;
@@ -406,16 +423,35 @@ async fn rename(
         return Err(ApiError::NotFound);
     }
     for (id, value) in &tags {
-        move_tag(&tx, field, *id, &renamed(value))?;
+        move_tag(conn, field, *id, &renamed(value))?;
     }
     for target in &targets {
-        tx.execute(
+        conn.execute(
             "UPDATE tag_alias SET target = ?3 WHERE field = ?1 AND target = ?2",
             [field, target, &renamed(target)],
         )?;
     }
+    Ok(tags.len())
+}
+
+/// Renames a tag, or with `namespace` a whole namespace. Where a tag of
+/// the new name already exists the two are merged. Aliases follow the tags
+/// they defer to.
+async fn rename(
+    State(state): State<AppState>,
+    Json(input): Json<RenameInput>,
+) -> Result<Json<Value>, ApiError> {
+    check_field(&input.field)?;
+    let mut conn = state.db.lock().unwrap();
+    let tx = conn.transaction()?;
+    let renamed = if input.namespace {
+        rename_namespace(&tx, &input.field, &input.from, &input.to)?
+    } else {
+        rename_tag(&tx, &input.field, &input.from, &input.to)?;
+        1
+    };
     tx.commit()?;
-    Ok(Json(json!({ "renamed": tags.len() })))
+    Ok(Json(json!({ "renamed": renamed })))
 }
 
 /// Every tag of a field with the aliases that defer to it, for the tag
