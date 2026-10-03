@@ -198,6 +198,13 @@ def media_urls(pin: dict, want_video: bool) -> list[str]:
     return [u for u in urls if u]
 
 
+def pin_title(pin: dict) -> str:
+    """The title a pin shows on its page, if it has one."""
+    # Pins made in Pinterest's own editor ("story pins") keep theirs apart.
+    story = ((pin.get("story_pin_data") or {}).get("metadata") or {}).get("pin_title")
+    return (pin.get("title") or pin.get("grid_title") or story or "").strip()
+
+
 # --- downloading -------------------------------------------------------------
 
 
@@ -311,7 +318,7 @@ def download() -> int:
                     key=key,
                     source_url=key,
                     files=files,
-                    title=(pin.get("title") or pin.get("grid_title") or "").strip(),
+                    title=pin_title(pin),
                     description=(pin.get("description") or "").strip(),
                 )
     return 0
