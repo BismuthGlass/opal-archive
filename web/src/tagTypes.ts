@@ -58,6 +58,16 @@ export const prefixOf = (field: string) => TAG_PREFIXES[field as keyof typeof TA
 export const typeOfPrefix = (prefix: string): string | undefined =>
   TAG_FIELDS.find((field) => TAG_PREFIXES[field] === prefix.toLowerCase());
 
+/**
+ * If `typed` starts with a type's prefix and a space (`@cr name`), the
+ * type and what follows the prefix.
+ */
+export function splitPrefix(typed: string): { field: string; rest: string } | null {
+  const match = /^@(\S+)\s(.*)$/.exec(typed);
+  const field = match && typeOfPrefix(match[1]);
+  return field ? { field, rest: match![2] } : null;
+}
+
 export const defaultTagType = (field: string): TagType =>
   DEFAULTS[field as keyof typeof DEFAULTS] ?? DEFAULTS.tags;
 

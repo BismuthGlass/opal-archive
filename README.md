@@ -85,6 +85,9 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `POST /entities/restore`         | `{ids}` → take back out of the trash                           |
 | `POST /entities/delete`          | `{ids}` → delete for good those that are in the trash; files leave storage |
 | `GET /tags?field=&q=`            | Completions for a tag field, one namespace level at a time     |
+| `POST /tags`                     | `{field, value, description}` → create a tag nothing carries yet; it is kept until deleted |
+| `POST /tags/describe`            | `{field, value, description}` → set a tag's description; empty clears it |
+| `POST /tags/delete`              | `{field, value}` → delete a tag nothing carries                |
 | `GET /tags/all?field=`           | Every tag of a field with its aliases, and how many alias uses await updating |
 | `POST /tags/rename`              | `{field, from, to}` → rename a tag, merging it into `to` if that exists. With `namespace: true`, rename a namespace on every tag under it; an empty `to` removes it |
 | `POST /tags/alias`               | `{field, alias, target}` → make `alias` stand for `target`; an empty `target` removes the alias |

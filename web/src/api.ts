@@ -70,7 +70,7 @@ export type Metadata = {
   collection_type: { value: string | null; mixed: boolean };
   /** Whether the selected collections keep their members in order. */
   ordered: { value: boolean | null; mixed: boolean };
-  tags: Record<string, { value: string; count: number }[]>;
+  tags: Record<string, { value: string; count: number; description: string | null }[]>;
   source_urls: { value: string; count: number }[];
   identifiers: { value: string; count: number }[];
   memberships: { id: number; title: string | null; collection_type: string; count: number }[];
@@ -187,12 +187,14 @@ export type Suggestion = {
   namespace: boolean;
   /** The alias that was typed, when the tag was found through one. */
   alias?: string;
+  description?: string;
 };
 
 /** A tag in the tag editor, with the aliases that defer to it. */
 export type TagEntry = {
   value: string;
   count: number;
+  description: string | null;
   /** `count` is the items still carrying the alias itself. */
   aliases: { value: string; count: number }[];
 };
@@ -208,6 +210,15 @@ export const renameTag = (field: string, from: string, to: string) =>
 /** `pending` counts items, in any field, still carrying an alias. */
 export const listTags = (field: string) =>
   request<{ tags: TagEntry[]; pending: number }>("GET", `/tags/all?${params({ field })}`);
+/** Creates a tag nothing carries yet; it is kept until deleted. */
+export const createTag = (field: string, value: string) =>
+  request<{ value: string }>("POST", "/tags", { field, value });
+/** Sets a tag's description; an empty one clears it. */
+export const describeTag = (field: string, value: string, description: string) =>
+  request<{ value: string }>("POST", "/tags/describe", { field, value, description });
+/** Deletes a tag that nothing carries. */
+export const deleteTag = (field: string, value: string) =>
+  request<void>("POST", "/tags/delete", { field, value });
 /** Makes `alias` stand for `target`; an empty target removes the alias. */
 export const setAlias = (field: string, alias: string, target: string) =>
   request<void>("POST", "/tags/alias", { field, alias, target });

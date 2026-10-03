@@ -20,7 +20,7 @@ import {
   pillStyle,
   prefixOf,
   tagType,
-  typeOfPrefix,
+  splitPrefix,
 } from "../tagTypes";
 import { open as openTab, openCollection } from "../tabs";
 import Icon from "./Icon";
@@ -1052,14 +1052,19 @@ function TagInput(props: FieldProps & { field: string; onType?: (field: string) 
     setActive(-1);
   };
 
-  const onInput = (typed: string) => {
+  const onInput = (box: HTMLInputElement) => {
     setOpen(true);
     setActive(-1);
     // "@cr " at the start: a prefix, finished by the space.
-    const prefixed = props.onType ? /^@(\S+)\s(.*)$/.exec(typed) : null;
-    const field = prefixed && typeOfPrefix(prefixed[1]);
-    if (field) switchTo(field, prefixed![2]);
-    else setText(typed);
+    const prefixed = props.onType ? splitPrefix(box.value) : null;
+    if (prefixed) {
+      // Written to the box itself: if the text was already this, setting it
+      // again would not redraw the box.
+      box.value = prefixed.rest;
+      switchTo(prefixed.field, prefixed.rest);
+    } else {
+      setText(box.value);
+    }
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -1106,7 +1111,7 @@ function TagInput(props: FieldProps & { field: string; onType?: (field: string) 
         autocomplete="off"
         placeholder={props.onType ? `Add to ${fieldLabel(props.field)}, or @ for another type` : "Add…"}
         value={text()}
-        onInput={(e) => onInput(e.currentTarget.value)}
+        onInput={(e) => onInput(e.currentTarget)}
         onFocus={() => setOpen(true)}
         onBlur={() => {
           setOpen(false);
@@ -1147,6 +1152,9 @@ function TagInput(props: FieldProps & { field: string; onType?: (field: string) 
                     <span class="suggestion-alias">{option.alias} → </span>
                   </Show>
                   {option.value}
+                  <Show when={option.description}>
+                    <span class="suggestion-note"> {option.description}</span>
+                  </Show>
                 </span>
                 <span class="suggestion-count">
                   {option.count}
@@ -1196,7 +1204,11 @@ function TagChip(
         title={
           props.editing
             ? undefined
-            : `${fieldLabel(props.field)}: ${props.tag.value}\nClick to search for it`
+            : [
+                `${fieldLabel(props.field)}: ${props.tag.value}`,
+                ...(props.tag.description ? [props.tag.description] : []),
+                "Click to search for it",
+              ].join("\n")
         }
         onClick={() => openTab("gallery", tagQuery(props.field, props.tag.value))}
       >

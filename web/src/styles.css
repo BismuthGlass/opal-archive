@@ -1673,10 +1673,6 @@ kbd {
   align-items: center;
 }
 
-.tag-editor-bar select {
-  flex: 0 0 150px;
-}
-
 .tag-editor-bar input {
   flex: 1;
   min-width: 0;
@@ -1734,7 +1730,7 @@ kbd {
 }
 
 .tag-name {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1742,7 +1738,52 @@ kbd {
 }
 
 .tag-alias .tag-name {
+  flex: 1;
   color: var(--text);
+}
+
+/* A tag's description fills the row; click it to edit. */
+.dialog button.tag-description {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  overflow: hidden;
+  font-size: 13px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.dialog button.tag-description.unset {
+  visibility: hidden;
+  font-style: italic;
+}
+
+.tag-list li:hover .tag-description.unset,
+.tag-list li:focus-within .tag-description.unset {
+  visibility: visible;
+}
+
+.dialog button.tag-create {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 2px 8px;
+  text-align: left;
+  color: var(--text);
+  border-radius: 0;
+}
+
+.dialog .tag-actions button.danger {
+  color: var(--danger-text);
+}
+
+.suggestion-note {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .tag-uses,

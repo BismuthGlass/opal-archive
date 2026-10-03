@@ -267,14 +267,18 @@ async fn metadata(
 
     let mut tags: BTreeMap<String, Vec<Value>> = BTreeMap::new();
     let mut stmt = conn.prepare(&format!(
-        "SELECT t.field, t.value, count(*) FROM entity_tag et JOIN tag t ON t.id = et.tag_id
+        "SELECT t.field, t.value, count(*), t.description
+         FROM entity_tag et JOIN tag t ON t.id = et.tag_id
          WHERE et.entity_id {IN_IDS} GROUP BY t.id ORDER BY t.value"
     ))?;
-    for row in stmt.query_map([&ids], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))? {
-        let (field, value, count): (String, String, i64) = row?;
+    let rows = stmt.query_map([&ids], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+    })?;
+    for row in rows {
+        let (field, value, count, description): (String, String, i64, Option<String>) = row?;
         tags.entry(field)
             .or_default()
-            .push(json!({ "value": value, "count": count }));
+            .push(json!({ "value": value, "count": count, "description": description }));
     }
 
     let mut stmt = conn.prepare(&format!(
@@ -429,10 +433,11 @@ fn source_url(value: &str) -> Result<String, ApiError> {
     }
 }
 
-/// Deletes tag values no entity carries any more.
+/// Deletes tag values no entity carries any more, except the pinned ones:
+/// those created or described by hand.
 fn prune_tags(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute(
-        "DELETE FROM tag WHERE id NOT IN (SELECT tag_id FROM entity_tag)",
+        "DELETE FROM tag WHERE pinned = 0 AND id NOT IN (SELECT tag_id FROM entity_tag)",
         [],
     )?;
     Ok(())

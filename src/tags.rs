@@ -38,6 +38,17 @@ struct Suggestion {
     /// Set when the suggestion was found through an alias of the tag.
     #[serde(skip_serializing_if = "Option::is_none")]
     alias: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+}
+
+/// Names a tag, to create, describe or delete it.
+#[derive(Deserialize)]
+struct TagInput {
+    field: String,
+    value: String,
+    /// For describing: the new description; empty or absent clears it.
+    description: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -68,7 +79,9 @@ struct RenameInput {
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/tags", get(suggest))
+        .route("/tags", get(suggest).post(create))
+        .route("/tags/describe", post(describe))
+        .route("/tags/delete", post(delete))
         .route("/tags/all", get(list))
         .route("/tags/rename", post(rename))
         .route("/tags/alias", post(set_alias))
@@ -121,7 +134,9 @@ async fn suggest(
 
     let conn = state.db.lock().unwrap();
     let mut stmt = conn.prepare(
-        "SELECT t.value, count(*) FROM tag t JOIN entity_tag et ON et.tag_id = t.id
+        // Left join: a pinned tag is offered though nothing carries it yet.
+        "SELECT t.value, count(et.entity_id), t.description
+         FROM tag t LEFT JOIN entity_tag et ON et.tag_id = t.id
          WHERE t.field = ?1 AND t.value LIKE ?2 ESCAPE '\\'
          GROUP BY t.id",
     )?;
@@ -129,7 +144,11 @@ async fn suggest(
     let pattern = &contains_pattern(&prefix)[1..];
     let tags = stmt
         .query_map([params.field.as_str(), pattern], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
 
@@ -144,7 +163,7 @@ async fn suggest(
             None => None,
         }
     };
-    for (value, uses) in tags {
+    for (value, uses, description) in tags {
         let Some(inside) = value.get(prefix.len()..) else {
             continue;
         };
@@ -157,7 +176,14 @@ async fn suggest(
                         .entry(namespace.to_lowercase())
                         .or_insert_with(|| {
                             let value = namespace.to_string();
-                            (rank, Suggestion { value, count: 0, namespace: true, alias: None })
+                            let namespace = Suggestion {
+                                value,
+                                count: 0,
+                                namespace: true,
+                                alias: None,
+                                description: None,
+                            };
+                            (rank, namespace)
                         })
                         .1
                         .count += uses;
@@ -166,13 +192,27 @@ async fn suggest(
                 let name = value.rsplit(':').next().unwrap_or("");
                 if prefix.is_empty() && !rest.is_empty() && rank(name) == Some(0) {
                     let key = value.to_lowercase();
-                    found.insert(key, (2, Suggestion { value, count: uses, namespace: false, alias: None }));
+                    let tag = Suggestion {
+                        value,
+                        count: uses,
+                        namespace: false,
+                        alias: None,
+                        description,
+                    };
+                    found.insert(key, (2, tag));
                 }
             }
             None => {
                 if let Some(rank) = rank(inside) {
                     let key = value.to_lowercase();
-                    found.insert(key, (rank, Suggestion { value, count: uses, namespace: false, alias: None }));
+                    let tag = Suggestion {
+                        value,
+                        count: uses,
+                        namespace: false,
+                        alias: None,
+                        description,
+                    };
+                    found.insert(key, (rank, tag));
                 }
             }
         }
@@ -199,7 +239,14 @@ async fn suggest(
             let (alias, value, count): (String, String, i64) = row?;
             let key = format!("\0{}", alias.to_lowercase());
             let alias = Some(alias);
-            found.insert(key, (0, Suggestion { value, count, namespace: false, alias }));
+            let tag = Suggestion {
+                value,
+                count,
+                namespace: false,
+                alias,
+                description: None,
+            };
+            found.insert(key, (0, tag));
         }
     }
     let mut found: Vec<_> = found.into_values().collect();
@@ -228,6 +275,15 @@ fn move_tag(conn: &Connection, field: &str, id: i64, value: &str) -> rusqlite::R
             conn.execute(
                 "INSERT OR IGNORE INTO entity_tag (entity_id, tag_id)
                  SELECT entity_id, ?2 FROM entity_tag WHERE tag_id = ?1",
+                [id, target],
+            )?;
+            // The merged tag keeps its own description, or failing that
+            // takes the other's, and stays pinned if either was.
+            conn.execute(
+                "UPDATE tag SET
+                     description = coalesce(description, (SELECT description FROM tag WHERE id = ?1)),
+                     pinned = max(pinned, (SELECT pinned FROM tag WHERE id = ?1))
+                 WHERE id = ?2",
                 [id, target],
             )?;
             conn.execute("DELETE FROM tag WHERE id = ?1", [id])?;
@@ -359,15 +415,24 @@ async fn list(
     let conn = state.db.lock().unwrap();
 
     let mut uses: BTreeMap<String, (String, i64)> = BTreeMap::new();
+    let mut descriptions: HashMap<String, String> = HashMap::new();
     let mut stmt = conn.prepare(
-        "SELECT t.value, count(*) FROM tag t JOIN entity_tag et ON et.tag_id = t.id
+        "SELECT t.value, count(et.entity_id), t.description
+         FROM tag t LEFT JOIN entity_tag et ON et.tag_id = t.id
          WHERE t.field = ?1 GROUP BY t.id",
     )?;
     let rows = stmt.query_map([&params.field], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, Option<String>>(2)?,
+        ))
     })?;
     for row in rows {
-        let (value, count) = row?;
+        let (value, count, description) = row?;
+        if let Some(description) = description {
+            descriptions.insert(value.to_lowercase(), description);
+        }
         uses.insert(value.to_lowercase(), (value, count));
     }
 
@@ -395,7 +460,12 @@ async fn list(
         .into_iter()
         .map(|(key, (value, count))| {
             let aliases = aliases.remove(&key).unwrap_or_default();
-            json!({ "value": value, "count": count, "aliases": aliases })
+            json!({
+                "value": value,
+                "count": count,
+                "description": descriptions.get(&key),
+                "aliases": aliases,
+            })
         })
         .collect();
     let pending: i64 = conn.query_row(
@@ -477,4 +547,102 @@ async fn apply_aliases(State(state): State<AppState>) -> Result<Json<Value>, Api
     }
     tx.commit()?;
     Ok(Json(json!({ "updated": updated })))
+}
+
+/// The tag row for a value: its ID, and how many entities carry it.
+fn find(conn: &Connection, field: &str, value: &str) -> rusqlite::Result<Option<(i64, i64)>> {
+    conn.query_row(
+        "SELECT t.id, (SELECT count(*) FROM entity_tag et WHERE et.tag_id = t.id)
+         FROM tag t WHERE t.field = ?1 AND t.value = ?2",
+        [field, value],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .optional()
+}
+
+/// The value to pin, checked: well-formed and not an alias.
+fn definable(conn: &Connection, field: &str, value: &str) -> Result<String, ApiError> {
+    check_field(field)?;
+    let value = normalize(field, value)?;
+    let target = resolve(conn, field, value.clone())?;
+    if !target.eq_ignore_ascii_case(&value) {
+        return Err(ApiError::BadRequest(format!(
+            "`{value}` is an alias of `{target}`"
+        )));
+    }
+    Ok(value)
+}
+
+/// Pins a tag, creating it if need be, and returns its ID.
+fn pin(conn: &Connection, field: &str, value: &str) -> rusqlite::Result<i64> {
+    conn.query_row(
+        "INSERT INTO tag (field, value, pinned) VALUES (?1, ?2, 1)
+         ON CONFLICT (field, value) DO UPDATE SET pinned = 1
+         RETURNING id",
+        [field, value],
+        |row| row.get(0),
+    )
+}
+
+/// Creates a tag nothing carries yet, so that it can be described, given
+/// aliases and offered as a suggestion. A tag that exists is left as it is,
+/// only kept from now on when its last use goes.
+async fn create(
+    State(state): State<AppState>,
+    Json(input): Json<TagInput>,
+) -> Result<Json<Value>, ApiError> {
+    let conn = state.db.lock().unwrap();
+    let value = definable(&conn, &input.field, &input.value)?;
+    let id = pin(&conn, &input.field, &value)?;
+    if let Some(description) = input.description.as_deref().map(str::trim) {
+        if !description.is_empty() {
+            conn.execute(
+                "UPDATE tag SET description = ?2 WHERE id = ?1",
+                params![id, description],
+            )?;
+        }
+    }
+    Ok(Json(json!({ "value": value })))
+}
+
+/// Sets a tag's description; an empty one clears it. Describing a tag also
+/// keeps it when nothing carries it.
+async fn describe(
+    State(state): State<AppState>,
+    Json(input): Json<TagInput>,
+) -> Result<Json<Value>, ApiError> {
+    let conn = state.db.lock().unwrap();
+    let value = definable(&conn, &input.field, &input.value)?;
+    let description = input
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|text| !text.is_empty());
+    let id = pin(&conn, &input.field, &value)?;
+    conn.execute(
+        "UPDATE tag SET description = ?2 WHERE id = ?1",
+        params![id, description],
+    )?;
+    Ok(Json(json!({ "value": value })))
+}
+
+/// Deletes a tag nothing carries. One still on entities is refused: it
+/// would have to be taken off them first.
+async fn delete(
+    State(state): State<AppState>,
+    Json(input): Json<TagInput>,
+) -> Result<Json<Value>, ApiError> {
+    check_field(&input.field)?;
+    let conn = state.db.lock().unwrap();
+    let value = input.value.trim();
+    match find(&conn, &input.field, value)? {
+        None => Err(ApiError::NotFound),
+        Some((_, uses)) if uses > 0 => Err(ApiError::BadRequest(format!(
+            "`{value}` is still on {uses} items"
+        ))),
+        Some((id, _)) => {
+            conn.execute("DELETE FROM tag WHERE id = ?1", [id])?;
+            Ok(Json(json!({ "deleted": true })))
+        }
+    }
 }

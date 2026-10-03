@@ -120,7 +120,10 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 
 ### Tag editor
 
-- A modal listing every tag of a type, with how many files carry it.
+- A modal listing every tag of a type, with how many files carry it. The type is chosen from a row of the types or with its prefix (`@cr `) in the text box, which otherwise filters the list.
+- A tag can be created here before any file carries it, by typing a name that does not exist yet. It is then offered as a suggestion when tagging.
+- A tag can have a description, edited in the list, shown with the tag's suggestions and in the tooltip of its pill.
+- A tag that no file carries can be deleted.
 - A tag can be renamed. Giving it the name of another tag merges the two.
 - Aliases are listed under the tag they defer to, behind an arrow that expands them, and can be added and removed there.
 - The "Update aliases" button lives here and shows how many uses are waiting.
@@ -129,4 +132,4 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 
 - A namespace is not itself a tag. Searching `metroid` does not find a file tagged only `metroid:samus`; `metroid:*` does, and `metroid` is its own tag.
 - A bare name does not reach into namespaces. Searching `samus` does not find `metroid:samus`; `*:samus` does. This keeps it possible to ask for only the tag without a namespace.
-- A tag does not need to exist before it is used. Typing a new one creates it, and a tag no file carries any more disappears.
+- A tag does not need to exist before it is used. Typing a new one creates it, and a tag no file carries any more disappears, unless it was created or described in the tag editor: those are kept until deleted there.
