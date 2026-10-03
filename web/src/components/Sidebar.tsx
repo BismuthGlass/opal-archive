@@ -682,6 +682,8 @@ function AddField(props: {
 
 /** How many suggestions the dropdown shows at once. */
 const MAX_SUGGESTIONS = 8;
+/** How much of a tag has to be typed before tags are suggested for it. */
+const MIN_TYPED = 2;
 
 /**
  * Editor for one multi-valued field: an input with suggestions, and below
@@ -946,11 +948,12 @@ function createTagBox(props: FieldProps & { initial?: string }) {
   /** What goes in front of a tag in the box: `-`, `@cr:`, both or neither. */
   const lead = () => (removing() ? "-" : "") + read().lead;
 
-  // With nothing typed this returns the type's most used tags.
+  /** Tags are only suggested once this much of one has been typed. */
+  const enough = () => read().value.length >= MIN_TYPED;
   const [fetched] = createResource(
     () => {
       const { field, value } = read();
-      return field && !removing() ? { field, typed: value } : null;
+      return field && !removing() && enough() ? { field, typed: value } : null;
     },
     ({ field, typed }) => api.suggestTags(field, typed),
   );
@@ -973,6 +976,7 @@ function createTagBox(props: FieldProps & { initial?: string }) {
           note: tag.count < props.data.count ? `on ${tag.count} of ${props.data.count}` : "",
         }));
     }
+    if (!enough()) return [];
     // Tags the whole selection already has are still listed, so that it is
     // plain they exist, but marked: there is nothing to add.
     const complete = new Set(
@@ -1100,11 +1104,13 @@ function createTagBox(props: FieldProps & { initial?: string }) {
           each={options()}
           fallback={
             <li class="hint">
-              {read().field && read().value && !removing()
-                ? "No tag like that yet. Enter adds it as a new one."
-                : removing()
-                  ? "Nothing like that to take off."
-                  : "Nothing to suggest."}
+              {removing()
+                ? "Nothing like that to take off."
+                : !read().field
+                  ? "Nothing to suggest."
+                  : enough()
+                    ? "No tag like that yet. Enter adds it as a new one."
+                    : `Type ${MIN_TYPED} letters to see suggestions.`}
             </li>
           }
         >
