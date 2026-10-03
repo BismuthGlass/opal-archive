@@ -7,8 +7,8 @@ import { saveSetting, settings } from "./settings";
 export const ACTIONS = [
   {
     id: "quickTag",
-    label: "Quick add tags",
-    description: "Type tags for the selected items, or for the file open in the viewer.",
+    label: "Edit tags",
+    description: "Opens the tag editor for the selected items, or for the file open in the viewer.",
     key: "t",
   },
   {

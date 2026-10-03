@@ -3,12 +3,11 @@ import CollectionDialog from "./components/CollectionDialog";
 import ContextMenu, { contextMenuOpen } from "./components/ContextMenu";
 import Grid from "./components/Grid";
 import { modalOpen } from "./components/Modal";
-import QuickTagModal from "./components/QuickTagModal";
 import Icon from "./components/Icon";
 import { createStoredFlag, Module } from "./components/Panel";
 import QueryBar from "./components/QueryBar";
 import SettingsModal from "./components/SettingsModal";
-import Sidebar from "./components/Sidebar";
+import Sidebar, { TagsModal } from "./components/Sidebar";
 import TabBar from "./components/TabBar";
 import TagEditor from "./components/TagEditor";
 import Toolbar from "./components/Toolbar";
@@ -51,7 +50,7 @@ export default function App() {
   const shownCollection = () => (selected().size === 0 ? activeTab()?.collection : undefined);
   const [editingTags, setEditingTags] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
-  /** What quick tagging applies to, while its modal is open. */
+  /** What the tagging hotkey applies to, while the tag editor it opens is up. */
   const [tagging, setTagging] = createSignal<{ ids: number[]; name: string } | null>(null);
   /** What the next digit rates, after the quick-rate key. */
   const [rating, setRating] = createSignal<{ ids: number[]; name: string } | null>(null);
@@ -285,11 +284,7 @@ export default function App() {
       </Show>
       <Show when={tagging()} keyed>
         {(target) => (
-          <QuickTagModal
-            ids={target.ids}
-            target={target.name}
-            onClose={() => setTagging(null)}
-          />
+          <TagsModal ids={target.ids} target={target.name} onClose={() => setTagging(null)} />
         )}
       </Show>
       <ContextMenu />

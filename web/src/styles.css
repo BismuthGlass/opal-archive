@@ -1720,31 +1720,6 @@ kbd {
   padding: 0 5px;
 }
 
-/* Quick tagging. */
-
-.quick-tag {
-  display: flex;
-  gap: 8px;
-}
-
-.quick-tag-list {
-  min-height: 28px;
-  margin-top: 10px;
-}
-
-.quick-tag-foot button {
-  flex: none;
-  white-space: nowrap;
-}
-
-.quick-tag-foot {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 12px;
-}
-
 /* A short message over everything, the viewer included. */
 .toast {
   position: fixed;

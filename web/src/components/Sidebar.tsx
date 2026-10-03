@@ -1016,9 +1016,13 @@ function TagInput(props: FieldProps & { initial?: string }) {
         spellcheck={false}
         placeholder="Add a tag, or @cr:name for another type"
         value={text()}
-        // With a type written in ahead, the cursor goes after it.
+        // The box takes the cursor when it appears, which may be after its
+        // modal opened; with a type written in ahead, the cursor goes after it.
         ref={(el) =>
-          queueMicrotask(() => el.setSelectionRange(el.value.length, el.value.length))
+          queueMicrotask(() => {
+            el.focus();
+            el.setSelectionRange(el.value.length, el.value.length);
+          })
         }
         onInput={(e) => {
           setText(e.currentTarget.value);
@@ -1193,6 +1197,47 @@ function TagsEditor(props: FieldProps & { initial?: string }) {
         </For>
       </div>
     </div>
+  );
+}
+
+/**
+ * The tag editor in a modal of its own, for the given entities: what the
+ * tagging hotkey opens, on the selection or on the file in the viewer.
+ */
+export function TagsModal(props: {
+  ids: number[];
+  /** What the tags are of, for the title: "3 items", "this file". */
+  target: string;
+  onClose: () => void;
+}) {
+  const [error, setError] = createSignal<string | null>(null);
+  const [metadata] = createResource(
+    () => [props.ids, dataVersion()] as const,
+    ([ids]) => api.getMetadata(ids),
+  );
+  const apply = async (changes: Changes) => {
+    try {
+      await api.edit(props.ids, changes);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+    changed();
+  };
+  return (
+    <Modal title={`Tags of ${props.target}`} onClose={props.onClose}>
+      <div class="field-editor">
+        {/* `latest` keeps the tags on screen while a change reloads them. */}
+        <Show when={metadata.latest} fallback={<div class="field" />}>
+          {(data) => <TagsEditor data={data()} apply={apply} />}
+        </Show>
+      </div>
+      <Show when={error()}>
+        <p class="form-error" role="alert">
+          {error()}
+        </p>
+      </Show>
+    </Modal>
   );
 }
 
