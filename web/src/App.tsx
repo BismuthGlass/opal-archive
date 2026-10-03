@@ -6,7 +6,7 @@ import { createStoredFlag, Module } from "./components/Panel";
 import QueryBar from "./components/QueryBar";
 import Sidebar from "./components/Sidebar";
 import TabBar from "./components/TabBar";
-import { DropTarget, UploadButton, UploadPanel } from "./components/Upload";
+import { DropTarget, UploadBox, UploadPanel } from "./components/Upload";
 import Viewer from "./components/Viewer";
 import { plural } from "./format";
 import { clearSelection, runSearch, search, selectAll, selected } from "./search";
@@ -24,7 +24,8 @@ export default function App() {
     refreshStats();
   });
 
-  // Each tab is a search: run it when the tab or its query changes.
+  // Each tab shows a search, over the library or over the tab's own
+  // uploads: run it when the tab or its query changes.
   createEffect(
     on(
       () => {
@@ -34,7 +35,8 @@ export default function App() {
       (key) => {
         if (key === undefined) return;
         setViewing(null);
-        runSearch(activeTab()!.query);
+        const tab = activeTab()!;
+        runSearch(tab.query, tab.kind === "upload" ? tab.id : null);
       },
     ),
   );
@@ -66,7 +68,6 @@ export default function App() {
         </button>
         <span class="brand">tagutils</span>
         <TabBar />
-        <UploadButton />
       </header>
       <Show when={error()}>
         {(message) => (
@@ -104,7 +105,12 @@ export default function App() {
             </Module>
           </aside>
         </Show>
-        <Grid onOpen={setViewing} />
+        <main class="content">
+          <Show when={activeTab()?.kind === "upload"}>
+            <UploadBox />
+          </Show>
+          <Grid onOpen={setViewing} />
+        </main>
       </div>
       <footer class="statusbar">
         <span>{plural(search.total, "result")}</span>

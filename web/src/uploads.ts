@@ -1,6 +1,7 @@
 import { createStore } from "solid-js/store";
 import * as api from "./api";
 import { changed } from "./search";
+import { activeTab, open } from "./tabs";
 
 type Failure = { name: string; reason: string };
 
@@ -19,13 +20,23 @@ const [uploads, setUploads] = createStore({ ...idle });
 
 export { uploads };
 
-const queue: File[] = [];
+const queue: { file: File; tab: number }[] = [];
+
+/**
+ * Uploads files into the active tab if it is an upload tab, and into a new
+ * upload tab otherwise.
+ */
+export async function upload(files: File[]) {
+  if (files.length === 0) return;
+  const current = activeTab();
+  const tab = current?.kind === "upload" ? current : await open("upload");
+  if (tab) enqueue(files, tab.id);
+}
 
 /** Adds files to the batch in progress, or starts a new one. */
-export function enqueue(files: File[]) {
-  if (files.length === 0) return;
+function enqueue(files: File[], tab: number) {
   if (!uploads.active) setUploads({ ...idle, failures: [] });
-  queue.push(...files);
+  queue.push(...files.map((file) => ({ file, tab })));
   setUploads("total", (n) => n + files.length);
   if (!uploads.active) run();
 }
@@ -35,10 +46,12 @@ async function run() {
   setUploads("active", true);
   let lastRefresh = Date.now();
   while (queue.length > 0) {
-    const file = queue.shift()!;
+    const { file, tab } = queue.shift()!;
     setUploads("progress", 0);
     try {
-      const result = await api.uploadFile(file, (fraction) => setUploads("progress", fraction));
+      const result = await api.uploadFile(file, tab, (fraction) =>
+        setUploads("progress", fraction),
+      );
       setUploads(result.duplicate ? "duplicates" : "added", (n) => n + 1);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);

@@ -88,7 +88,7 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
   });
 
   const activate = (index: number, item: Item) => {
-    if (item.kind === "collection") openTab(`in=${item.id} sort=position`);
+    if (item.kind === "collection") openTab("search", `in=${item.id} sort=position`);
     else props.onOpen(index);
   };
 
@@ -97,8 +97,10 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
       <Show when={search.ready && search.total === 0 && !search.error}>
         <p class="empty">
           {stats()?.files === 0 && stats()?.collections === 0
-            ? "The library is empty. Drop files here or use Upload."
-            : "No results."}
+            ? "The library is empty. Open an upload tab with +, or drop files here."
+            : search.scope !== null && search.query === ""
+              ? "Nothing uploaded in this tab yet."
+              : "No results."}
         </p>
       </Show>
       <div class="grid" style={{ height: `${rows() * rowHeight() + 2 * PADDING - GAP}px` }}>

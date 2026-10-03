@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
 import * as api from "./api";
-import type { Tab } from "./api";
+import type { Tab, TabKind } from "./api";
 
 // Tabs live on the server; which one is active is remembered per browser.
 const ACTIVE_KEY = "tagutils.activeTab";
@@ -44,18 +44,22 @@ async function guard(action: () => Promise<void>) {
 export const load = () =>
   guard(async () => {
     let list = await api.listTabs();
-    if (list.length === 0) list = [await api.createTab("")];
+    if (list.length === 0) list = [await api.createTab("search", "")];
     setTabs(list);
     const saved = savedActiveId();
     select(list.some((tab) => tab.id === saved) ? saved! : list[0].id);
   });
 
-export const open = (query = "") =>
-  guard(async () => {
-    const tab = await api.createTab(query);
+/** Opens a tab and switches to it. Resolves to the tab, if it was created. */
+export async function open(kind: TabKind, query = ""): Promise<Tab | undefined> {
+  let tab: Tab | undefined;
+  await guard(async () => {
+    tab = await api.createTab(kind, query);
     setTabs(tabs.length, tab);
     select(tab.id);
   });
+  return tab;
+}
 
 export const close = (id: number) =>
   guard(async () => {
@@ -63,7 +67,7 @@ export const close = (id: number) =>
     const index = tabs.findIndex((tab) => tab.id === id);
     const rest = tabs.filter((tab) => tab.id !== id);
     // There is always at least one tab.
-    if (rest.length === 0) rest.push(await api.createTab(""));
+    if (rest.length === 0) rest.push(await api.createTab("search", ""));
     setTabs(rest);
     if (activeId() === id) select(rest[Math.min(index, rest.length - 1)].id);
   });

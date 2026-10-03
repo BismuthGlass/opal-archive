@@ -41,6 +41,8 @@ struct FileEntity {
 struct UploadParams {
     /// Filename on the uploader's side; gives the extension.
     name: Option<String>,
+    /// Upload tab to list the file under.
+    tab: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -206,6 +208,19 @@ fn insert(conn: &mut Connection, new: &NewFile) -> rusqlite::Result<FileEntity> 
     Ok(file)
 }
 
+/// Lists a file under an upload tab. Does nothing if the tab is gone (it may
+/// have been closed mid-upload) or is not an upload tab.
+fn record(conn: &Connection, tab: Option<i64>, file: &FileEntity) -> rusqlite::Result<()> {
+    if let Some(tab) = tab {
+        conn.execute(
+            "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
+             SELECT id, ?2 FROM tab WHERE id = ?1 AND kind = 'upload'",
+            (tab, file.id),
+        )?;
+    }
+    Ok(())
+}
+
 /// Takes the file as the raw request body. Answers 201 with the new file, or
 /// 200 with the existing one if the same content is already in the library.
 async fn upload(
@@ -219,9 +234,12 @@ async fn upload(
         return Err(ApiError::bad_request("empty upload"));
     }
 
-    let existing = file_by_hash(&state.db.lock().unwrap(), &hash)?;
-    if let Some(existing) = existing {
-        return Ok((StatusCode::OK, Json(existing)));
+    {
+        let conn = state.db.lock().unwrap();
+        if let Some(existing) = file_by_hash(&conn, &hash)? {
+            record(&conn, params.tab, &existing)?;
+            return Ok((StatusCode::OK, Json(existing)));
+        }
     }
 
     let original_name = params.name.as_deref().and_then(base_name);
@@ -246,7 +264,10 @@ async fn upload(
     };
     let mut conn = state.db.lock().unwrap();
     match insert(&mut conn, &new) {
-        Ok(file) => Ok((StatusCode::CREATED, Json(file))),
+        Ok(file) => {
+            record(&conn, params.tab, &file)?;
+            Ok((StatusCode::CREATED, Json(file)))
+        }
         Err(err) => {
             // The same content may have been uploaded concurrently; if so the
             // other upload won and ours is the duplicate.
@@ -258,7 +279,10 @@ async fn upload(
                 let _ = std::fs::remove_file(&stored);
             }
             match winner {
-                Some(file) => Ok((StatusCode::OK, Json(file))),
+                Some(file) => {
+                    record(&conn, params.tab, &file)?;
+                    Ok((StatusCode::OK, Json(file)))
+                }
                 None => {
                     let _ = std::fs::remove_file(&thumbnail);
                     Err(err.into())

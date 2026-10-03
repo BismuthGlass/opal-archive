@@ -11,6 +11,8 @@ type SearchError = { message: string; position?: number };
 
 const [search, setSearch] = createStore({
   query: "",
+  /** Upload tab the results are limited to, if any. */
+  scope: null as number | null,
   total: 0,
   /** False until the first page of the current query has arrived. */
   ready: false,
@@ -41,7 +43,7 @@ function loadPage(page: number) {
   requested.add(page);
   const current = generation;
   api
-    .search(search.query, page * PAGE, PAGE, seed)
+    .search(search.query, page * PAGE, PAGE, seed, search.scope)
     .then((result) => {
       if (current !== generation) return;
       setPages(page, result.items);
@@ -62,14 +64,14 @@ export function ensureRange(first: number, last: number) {
 }
 
 /** Starts a new search, discarding results and selection. */
-export function runSearch(query: string) {
+export function runSearch(query: string, scope: number | null = null) {
   generation += 1;
   seed = Math.floor(Math.random() * 2 ** 31);
   requested = new Set();
   allIds = null;
   anchor = null;
   setPages(reconcile({}));
-  setSearch({ query, total: 0, ready: false, error: null });
+  setSearch({ query, scope, total: 0, ready: false, error: null });
   setSelected(new Set<number>());
   setSearchCount((n) => n + 1);
   loadPage(0);
@@ -88,7 +90,7 @@ export function changed() {
   refreshStats();
 }
 
-const resultIds = () => (allIds ??= api.searchIds(search.query, seed));
+const resultIds = () => (allIds ??= api.searchIds(search.query, seed, search.scope));
 
 export async function clickSelect(
   index: number,

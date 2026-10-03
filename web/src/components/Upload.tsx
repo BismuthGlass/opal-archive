@@ -1,14 +1,17 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { dismiss, enqueue, uploads } from "../uploads";
+import { dismiss, upload, uploads } from "../uploads";
 import Icon from "./Icon";
 
-export function UploadButton() {
+/** The box at the top of an upload tab: click to pick files, or drop them. */
+export function UploadBox() {
   let input!: HTMLInputElement;
   return (
     <>
-      <button class="upload-button" onClick={() => input.click()}>
+      <button class="upload-box" onClick={() => input.click()}>
         <Icon name="upload" />
-        Upload
+        <span>
+          <strong>Choose files</strong> or drop them anywhere
+        </span>
       </button>
       <input
         ref={input}
@@ -16,7 +19,7 @@ export function UploadButton() {
         multiple
         hidden
         onChange={() => {
-          enqueue([...(input.files ?? [])]);
+          upload([...(input.files ?? [])]);
           // Lets the same file be picked again later.
           input.value = "";
         }}
@@ -25,7 +28,10 @@ export function UploadButton() {
   );
 }
 
-/** Accepts files dropped anywhere on the window. */
+/**
+ * Accepts files dropped anywhere on the window. They go to the active tab
+ * if it is an upload tab, and open a new upload tab otherwise.
+ */
 export function DropTarget() {
   const [dragging, setDragging] = createSignal(false);
   // dragenter/dragleave fire for every element crossed, so count them.
@@ -52,7 +58,7 @@ export function DropTarget() {
     event.preventDefault();
     depth = 0;
     setDragging(false);
-    enqueue([...(event.dataTransfer?.files ?? [])]);
+    upload([...(event.dataTransfer?.files ?? [])]);
   };
 
   onMount(() => {

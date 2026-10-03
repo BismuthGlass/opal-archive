@@ -22,6 +22,8 @@ struct SearchParams {
     /// Fixes the order of `sort=random` across pages.
     #[serde(default)]
     seed: i64,
+    /// Upload tab to search within: only files uploaded through it match.
+    tab: Option<i64>,
 }
 
 /// What the results grid needs to draw one entity.
@@ -46,9 +48,27 @@ pub fn router() -> Router<AppState> {
         .route("/search/ids", get(search_ids))
 }
 
+/// Compiles `source`, narrowed to the uploads of `tab` if one is given.
+fn compile(source: &str, seed: i64, tab: Option<i64>) -> Result<query::Compiled, ApiError> {
+    let mut compiled = query::compile(source, seed)?;
+    if let Some(tab) = tab {
+        compiled.filter = format!(
+            "({}) AND e0.id IN (SELECT entity_id FROM tab_upload WHERE tab_id = ?)",
+            compiled.filter
+        );
+        compiled.filter_params.push(Value::Integer(tab));
+    }
+    Ok(compiled)
+}
+
 /// IDs of everything matching `source`, in the query's order.
-pub fn matching_ids(conn: &Connection, source: &str, seed: i64) -> Result<Vec<i64>, ApiError> {
-    let compiled = query::compile(source, seed)?;
+pub fn matching_ids(
+    conn: &Connection,
+    source: &str,
+    seed: i64,
+    tab: Option<i64>,
+) -> Result<Vec<i64>, ApiError> {
+    let compiled = compile(source, seed, tab)?;
     let sql = format!(
         "SELECT e0.id FROM {} WHERE {} ORDER BY {}",
         query::FROM,
@@ -67,7 +87,7 @@ async fn search(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let compiled = query::compile(&params.q, params.seed)?;
+    let compiled = compile(&params.q, params.seed, params.tab)?;
     let limit = params.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let offset = params.offset.max(0);
     let conn = state.db.lock().unwrap();
@@ -132,6 +152,6 @@ async fn search_ids(
     Query(params): Query<SearchParams>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let conn = state.db.lock().unwrap();
-    let ids = matching_ids(&conn, &params.q, params.seed)?;
+    let ids = matching_ids(&conn, &params.q, params.seed, params.tab)?;
     Ok(Json(json!({ "ids": ids })))
 }

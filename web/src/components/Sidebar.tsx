@@ -242,7 +242,7 @@ export default function Sidebar(props: { onGroup: () => void }) {
                           <dd>
                             <button
                               class="link"
-                              onClick={() => openTab(`in=${current().id} sort=position`)}
+                              onClick={() => openTab("search", `in=${current().id} sort=position`)}
                             >
                               {plural(collection().member_count, "item")}, open
                             </button>
@@ -281,7 +281,7 @@ export default function Sidebar(props: { onGroup: () => void }) {
                       <button
                         class="chip-label"
                         title="Open this collection"
-                        onClick={() => openTab(`in=${membership.id} sort=position`)}
+                        onClick={() => openTab("search", `in=${membership.id} sort=position`)}
                       >
                         {membership.title || `#${membership.id}`}
                       </button>
@@ -654,6 +654,7 @@ function TagField(props: FieldProps & { field: string }) {
                     title="Search for this"
                     onClick={() =>
                       openTab(
+                        "search",
                         props.field === "tags"
                           ? quoteValue(tag.value)
                           : `${props.field}=${quoteValue(tag.value)}`,

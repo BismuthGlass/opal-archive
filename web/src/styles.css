@@ -93,9 +93,14 @@ a {
   color: var(--muted);
 }
 
-.tabs {
+.tabstrip {
   display: flex;
   flex: 1;
+  min-width: 0;
+}
+
+.tabs {
+  display: flex;
   gap: 2px;
   min-width: 0;
   overflow-x: auto;
@@ -126,7 +131,7 @@ a {
 }
 
 .tab button,
-.tab-new {
+.tab-new > button {
   border: none;
   background: none;
 }
@@ -148,14 +153,42 @@ a {
 }
 
 .tab-close:hover,
-.tab-new:hover {
+.tab-new > button:hover {
   color: var(--text);
 }
 
+/* Outside the scrolling strip, so its menu is not clipped. */
 .tab-new {
+  position: relative;
   flex: none;
+}
+
+.tab-new > button {
   padding: 4px 8px;
   color: var(--muted);
+}
+
+.tab-new .suggestions {
+  right: auto;
+  z-index: 5;
+  min-width: 140px;
+}
+
+.tab-new .suggestions li {
+  display: block;
+  padding: 0;
+}
+
+.tab-new .suggestions button {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 4px 10px 4px 6px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
 }
 
 button.primary {
@@ -181,11 +214,43 @@ button.primary {
   min-height: 0;
 }
 
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .results {
   position: relative;
   flex: 1;
-  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
+}
+
+/* The box at the top of an upload tab. */
+.upload-box {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin: 12px 12px 0;
+  padding: 22px 12px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1.5px dashed var(--border);
+  border-radius: 8px;
+}
+
+.upload-box:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.upload-box strong {
+  font-weight: 600;
+  color: var(--text);
 }
 
 .empty {
@@ -393,7 +458,6 @@ button.primary {
 
 .actions button,
 .dialog button:not(.primary),
-.upload-button,
 .panel-toggle {
   padding: 4px 10px;
   background: var(--surface);
@@ -865,7 +929,6 @@ button.primary {
 
 /* Upload. */
 
-.upload-button,
 .panel-toggle {
   align-self: center;
   margin-bottom: 4px;

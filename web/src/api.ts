@@ -1,4 +1,6 @@
-export type Tab = { id: number; position: number; query: string };
+export type TabKind = "search" | "upload";
+
+export type Tab = { id: number; position: number; kind: TabKind; query: string };
 
 export type Stats = { files: number; collections: number };
 
@@ -110,15 +112,26 @@ const params = (values: Record<string, string | number>) =>
 export const getStats = () => request<Stats>("GET", "/stats");
 
 export const listTabs = () => request<Tab[]>("GET", "/tabs");
-export const createTab = (query: string) => request<Tab>("POST", "/tabs", { query });
+export const createTab = (kind: TabKind, query: string) =>
+  request<Tab>("POST", "/tabs", { kind, query });
 export const updateTab = (id: number, query: string) =>
   request<Tab>("PATCH", `/tabs/${id}`, { query });
 export const deleteTab = (id: number) => request<void>("DELETE", `/tabs/${id}`);
 
-export const search = (q: string, offset: number, limit: number, seed: number) =>
-  request<SearchPage>("GET", `/search?${params({ q, offset, limit, seed })}`);
-export const searchIds = (q: string, seed: number) =>
-  request<{ ids: number[] }>("GET", `/search/ids?${params({ q, seed })}`).then((r) => r.ids);
+/** `tab` narrows a search to the files uploaded through that upload tab. */
+const scoped = (tab: number | null): Record<string, number> => (tab === null ? {} : { tab });
+
+export const search = (
+  q: string,
+  offset: number,
+  limit: number,
+  seed: number,
+  tab: number | null = null,
+) => request<SearchPage>("GET", `/search?${params({ q, offset, limit, seed, ...scoped(tab) })}`);
+export const searchIds = (q: string, seed: number, tab: number | null) =>
+  request<{ ids: number[] }>("GET", `/search/ids?${params({ q, seed, ...scoped(tab) })}`).then(
+    (r) => r.ids,
+  );
 
 export const getEntity = (id: number) => request<Entity>("GET", `/entities/${id}`);
 export const getMetadata = (ids: number[]) =>
@@ -164,11 +177,12 @@ export function exportZip(ids: number[]) {
  */
 export function uploadFile(
   file: File,
+  tab: number,
   onProgress: (fraction: number) => void,
 ): Promise<{ file: FileEntity; duplicate: boolean }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `/api/files?name=${encodeURIComponent(file.name)}`);
+    xhr.open("POST", `/api/files?${params({ name: file.name, tab })}`);
     xhr.responseType = "json";
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(event.loaded / event.total);

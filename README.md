@@ -66,11 +66,11 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 
 | Method and path                  | Purpose                                                        |
 | -------------------------------- | -------------------------------------------------------------- |
-| `POST /files?name=<filename>`    | Upload; the file is the raw body. 201 if new, 200 if a duplicate |
+| `POST /files?name=<filename>`    | Upload; the file is the raw body. 201 if new, 200 if a duplicate. `tab=<id>` lists it under that upload tab |
 | `GET /files/{id}/content`        | The file. `?download=1` to save rather than display            |
 | `GET /files/{id}/thumbnail`      | JPEG thumbnail, 404 if the file has none                       |
-| `GET /search?q=&offset=&limit=`  | One page of results and the total. `seed` fixes `sort=random`  |
-| `GET /search/ids?q=`             | IDs of every result, in order                                  |
+| `GET /search?q=&offset=&limit=`  | One page of results and the total. `seed` fixes `sort=random`; `tab=<id>` searches only that upload tab's files |
+| `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed` and `tab` too      |
 | `GET /entities/{id}`             | Everything about one file or collection                        |
 | `POST /entities/metadata`        | `{ids}` → what those entities have in common                   |
 | `POST /entities/edit`            | `{ids, set, add, remove}` → the same edit applied to all       |
@@ -80,7 +80,7 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `POST /collections/{id}/members` | `{add, remove}` → change membership                            |
 | `PUT /collections/{id}/order`    | `{ids}` → set member positions                                 |
 | `POST /export`                   | Form field `ids=1,2,3` → zip of those files                    |
-| `GET /tabs`, `POST /tabs`        | List and create search tabs                                    |
+| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query}` → new tab, `kind` being `search` or `upload` |
 | `PATCH /tabs/{id}`, `DELETE …`   | Change a tab's query, close a tab                              |
 | `GET /stats`, `GET /health`      | Library counts; liveness and schema version                    |
 

@@ -3,7 +3,10 @@ use std::path::Path;
 use rusqlite::{Connection, functions::FunctionFlags};
 
 /// Applied in order; `PRAGMA user_version` records how many have run.
-const MIGRATIONS: &[&str] = &[include_str!("../migrations/0001_init.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/0001_init.sql"),
+    include_str!("../migrations/0002_tab_kinds.sql"),
+];
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let mut conn = Connection::open(path)?;
