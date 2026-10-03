@@ -15,6 +15,14 @@ import { AggregatedTags, filled, TagField, TagsModal } from "./Tags";
 
 const SCORES = [1, 2, 3, 4, 5, 6, 7];
 
+/**
+ * Whether the panel lists a plain list's values. Links are only listed for
+ * a single item: each of several has its own, and together they are a wall
+ * of addresses. "Add field" still opens them.
+ */
+const listed = (list: (typeof PLAIN_LISTS)[number], data: Metadata) =>
+  list.values(data).length > 0 && !(list.links && data.count > 1);
+
 type DetailField = {
   field: string;
   label: string;
@@ -283,7 +291,7 @@ export default function Sidebar(props: {
             </dl>
             <For each={PLAIN_LISTS}>
               {(list) => (
-                <Show when={list.values(data()).length > 0}>
+                <Show when={listed(list, data())}>
                   <PlainList
                     list={list}
                     data={data()}
@@ -302,7 +310,7 @@ export default function Sidebar(props: {
                     !isSet(data().scalars[detail.field]) &&
                     adding() !== detail.field,
                 ),
-                PLAIN_LISTS.filter((list) => list.values(data()).length === 0).map(
+                PLAIN_LISTS.filter((list) => !listed(list, data())).map(
                   ({ field, label }) => ({ field, label }),
                 ),
               ]}
