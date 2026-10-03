@@ -912,6 +912,11 @@ button.primary {
   outline: 1px solid var(--accent);
 }
 
+/* Already on the whole selection: listed, but not something to add. */
+.tag-suggestions li.has {
+  color: var(--muted);
+}
+
 .tag-suggestions .suggestion-count {
   overflow: hidden;
   text-overflow: ellipsis;

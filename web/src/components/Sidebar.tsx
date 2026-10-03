@@ -914,7 +914,16 @@ type RenameNamespace = (field: string, from: string, to: string) => void;
 /** One row of the tag editor's suggestions: a type, or a tag. */
 type Option =
   | { kind: "type"; field: string }
-  | { kind: "tag"; field: string; value: string; note: string; namespace: boolean; alias?: string };
+  | {
+      kind: "tag";
+      field: string;
+      value: string;
+      note: string;
+      namespace: boolean;
+      alias?: string;
+      /** Already on everything selected: shown, but there is nothing to add. */
+      has?: boolean;
+    };
 
 /**
  * The tag editor's text box and its list of suggestions, as two pieces to
@@ -964,21 +973,25 @@ function createTagBox(props: FieldProps & { initial?: string }) {
           note: tag.count < props.data.count ? `on ${tag.count} of ${props.data.count}` : "",
         }));
     }
-    // Tags the whole selection already has are not worth offering.
+    // Tags the whole selection already has are still listed, so that it is
+    // plain they exist, but marked: there is nothing to add.
     const complete = new Set(
       carried.filter((tag) => tag.count === props.data.count).map((tag) => tag.value.toLowerCase()),
     );
-    return (fetched.latest ?? [])
-      .filter((option) => option.namespace || !complete.has(option.value.toLowerCase()))
-      .slice(0, MAX_SUGGESTIONS)
-      .map((option) => ({
+    return (fetched.latest ?? []).slice(0, MAX_SUGGESTIONS).map((option) => {
+      const has = !option.namespace && complete.has(option.value.toLowerCase());
+      return {
         kind: "tag",
         field,
         value: option.value,
         namespace: option.namespace,
         alias: option.alias,
-        note: [String(option.count), option.description].filter(Boolean).join(" · "),
-      }));
+        has,
+        note: has
+          ? "already on it"
+          : [String(option.count), option.description].filter(Boolean).join(" · "),
+      };
+    });
   });
 
   const reset = (next = "") => {
@@ -1008,6 +1021,7 @@ function createTagBox(props: FieldProps & { initial?: string }) {
     // it; a tag is put on, or taken off.
     if (option.kind === "type") reset(`${removing() ? "-" : ""}@${prefixOf(option.field)}:`);
     else if (option.namespace) reset(lead() + option.value);
+    else if (option.has) reset();
     else commit(option.field, option.value);
   };
 
@@ -1082,12 +1096,26 @@ function createTagBox(props: FieldProps & { initial?: string }) {
     <section class="tag-suggestions" aria-label="Suggestions">
       <span class="label">{heading()}</span>
       <ul id="tag-suggestions" role="listbox">
-        <For each={options()} fallback={<li class="hint">Nothing to suggest.</li>}>
+        <For
+          each={options()}
+          fallback={
+            <li class="hint">
+              {read().field && read().value && !removing()
+                ? "No tag like that yet. Enter adds it as a new one."
+                : removing()
+                  ? "Nothing like that to take off."
+                  : "Nothing to suggest."}
+            </li>
+          }
+        >
           {(option, i) => (
             <li
               role="option"
               aria-selected={i() === active()}
-              classList={{ active: i() === active() }}
+              classList={{
+                active: i() === active(),
+                has: option.kind === "tag" && option.has,
+              }}
               // Keeps the cursor in the box.
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pick(option)}
