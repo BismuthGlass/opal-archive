@@ -247,6 +247,21 @@ export async function moveItems(moved: number[], before: number) {
   reload();
 }
 
+/**
+ * Takes results out of the view, and out of the selection. Nothing happens
+ * to the entities themselves: calculating the search again brings them
+ * back.
+ */
+export async function removeFromView(removed: number[]) {
+  const current = await resultIds();
+  const going = new Set(removed);
+  ids = current.filter((id) => !going.has(id));
+  anchor = null;
+  remember();
+  setSelected(new Set([...selected()].filter((id) => !going.has(id))));
+  reload();
+}
+
 /** Goes back to the order the query gives. */
 export function resetOrder() {
   if (!search.custom) return;

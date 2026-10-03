@@ -2,7 +2,7 @@ import { createResource, createSignal, onCleanup, onMount, Show } from "solid-js
 import * as api from "../api";
 import type { Item } from "../api";
 import { plural } from "../format";
-import { changed, clearSelection, selected } from "../search";
+import { changed, clearSelection, moveItems, removeFromView, search, selected } from "../search";
 import { showToast } from "../toast";
 import Icon from "./Icon";
 
@@ -64,6 +64,12 @@ function Menu(props: { at: Opened }) {
     } else {
       api.exportZip(ids);
     }
+  };
+
+  /** Does something to the view only, not to the entities. */
+  const arrange = (action: () => Promise<void>) => {
+    close();
+    action().catch((err) => showToast(err instanceof Error ? err.message : String(err)));
   };
 
   const remove = () => {
@@ -134,6 +140,37 @@ function Menu(props: { at: Opened }) {
         <button role="menuitem" onClick={download}>
           <Icon name="download" />
           Download
+        </button>
+      </li>
+      <li class="menu-divider" role="separator" />
+      <li role="none">
+        <button
+          role="menuitem"
+          title="Put at the start of this view"
+          onClick={() => arrange(() => moveItems(ids, 0))}
+        >
+          <Icon name="vertical-align-top" />
+          Move to start
+        </button>
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          title="Put at the end of this view"
+          onClick={() => arrange(() => moveItems(ids, search.total))}
+        >
+          <Icon name="vertical-align-bottom" />
+          Move to end
+        </button>
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          title="Take out of this view only. Nothing is trashed, and Refresh brings it back."
+          onClick={() => arrange(() => removeFromView(ids))}
+        >
+          <Icon name="visibility-off-outline" />
+          Remove from view
         </button>
       </li>
       <li class="menu-divider" role="separator" />
