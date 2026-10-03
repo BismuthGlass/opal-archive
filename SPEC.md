@@ -58,7 +58,7 @@ The exceptions are things that cannot or should not wait: a file deleted for goo
 
 Deleting is two steps. The first moves a file or collection to the trash: it keeps its file and all its metadata, but no longer shows up in searches. From the trash it can be restored, or deleted for good, which removes the file from storage. Uploading a trashed file again restores it.
 
-Being trashed is a state, not a tag. States are searched with `is=`: `is=trashed` lists the trash. It is the only state for now.
+Being trashed is a state, not a tag. States are searched with an `@`: `@trashed` lists the trash. It is the only state for now.
 
 ## Authentication
 
@@ -106,10 +106,15 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - By default the types that describe the work are aggregated (tags, creator, character, source work, person, genre, style, medium) and the rest are not (flaws, language, source, usage tags, AI usage tags).
 - The order the types are listed in is configurable too, by dragging them in the settings. By default plain tags come last among the aggregated types.
 
-### Adding tags
+### Writing tags
 
-- What is typed into the tag editor is a plain tag, unless a prefix says otherwise. Each type has a two-letter prefix: `@cr ` for creator, `@ch ` character, `@sw ` source work, `@pe ` person, `@ge ` genre, `@st ` style, `@me ` medium, `@fl ` flaws, `@la ` language, `@so ` source, `@us ` usage tags, `@ai ` AI usage tags, and `@ta ` for plain tags.
-- Typing the prefix and a space switches the editor to that type: the prefix leaves the text box, the type on show changes, and suggestions come from that type. It stays in force until another prefix is typed.
+- Wherever a tag is typed, to add it or to search for it, its type is written in front of it: `@cr:name` is the creator `name`. A tag with nothing in front is a plain tag.
+- Each type has a two-letter name: `@cr:` creator, `@ch:` character, `@sw:` source work, `@pe:` person, `@ge:` genre, `@st:` style, `@me:` medium, `@fl:` flaws, `@la:` language, `@so:` source, `@us:` usage tags, `@ai:` AI usage tags, and `@ta:` for plain tags. The full name works too (`@creator:`). Only the first colon ends the type; any after it belong to the tag's namespaces.
+- There is one place to add and remove tags, for every type. Typing `@` suggests the types; after the colon the suggestions are that type's tags.
+- The same goes for searching: `@us:wallpaper` finds that usage tag, `@us:*` everything with a usage tag. There is no other way to search tags by type.
+- No tag can start with `@`.
+- `@` is also how other things are told apart from plain tags. `@trashed` is the first: a state rather than a tag.
+- Tags are still shown without the `@`: as pills in their type's colours, in the aggregated list or in their type's section.
 
 ### Aliases
 
@@ -120,7 +125,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 
 ### Tag editor
 
-- A modal listing every tag of a type, with how many files carry it. The type is chosen from a row of the types or with its prefix (`@cr `) in the text box, which otherwise filters the list.
+- A modal listing every tag of a type, with how many files carry it. Its text box filters the plain tags, or with a type in front (`@us:`, `@us:*`, `@us:wall`) the tags of that type.
 - A tag can be created here before any file carries it, by typing a name that does not exist yet. It is then offered as a suggestion when tagging.
 - Selecting a tag in the list shows its details beside it: its description, its aliases, and the buttons to rename, merge and delete it.
 - A tag's description can be long, for instance a few paragraphs about an author. Its start is shown in the list and with the tag's suggestions, and the whole of it in the tooltip of the tag's pill.

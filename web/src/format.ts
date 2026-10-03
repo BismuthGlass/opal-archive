@@ -1,3 +1,5 @@
+import { tagText } from "./tagTypes";
+
 /** `83` → `1:23`, `3723` → `1:02:03`. */
 export function duration(seconds: number): string {
   const total = Math.round(seconds);
@@ -34,12 +36,10 @@ export function quoteValue(value: string): string {
 
 /** A query term for a tag, or with `under`, for every tag in a namespace. */
 export function tagQuery(field: string, value: string, under = false): string {
-  let term = quoteValue(value);
-  if (under) {
-    // The wildcard has to stay unescaped, inside the quotes if there are any.
-    term = term.endsWith('"') ? `${term.slice(0, -1)}:*"` : `${term}:*`;
-  }
-  return field === "tags" ? term : `${field}=${term}`;
+  const term = quoteValue(tagText(field, value));
+  if (!under) return term;
+  // The wildcard has to stay unescaped, inside the quotes if there are any.
+  return term.endsWith('"') ? `${term.slice(0, -1)}:*"` : `${term}:*`;
 }
 
 /**

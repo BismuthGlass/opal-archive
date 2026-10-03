@@ -235,7 +235,7 @@ export default function App() {
                 <button
                   class="link"
                   title="Show what is in the trash"
-                  onClick={() => open("gallery", "is=trashed")}
+                  onClick={() => open("gallery", "@trashed")}
                 >
                   {counts().trashed} in the trash
                 </button>

@@ -3,8 +3,35 @@
 
 use rusqlite::types::Value;
 
-/// States an entity can be in, for `is=`.
+/// States an entity can be in, searched as `@trashed`.
 pub const STATES: &[&str] = &["trashed"];
+
+/// The tag types with the short name each goes by after an `@`: `@cr:name`
+/// is the creator `name`. A tag with no `@` is a plain one, of type `tags`.
+pub const TAG_PREFIXES: &[(&str, &str)] = &[
+    ("tags", "ta"),
+    ("creator", "cr"),
+    ("character", "ch"),
+    ("source_work", "sw"),
+    ("person", "pe"),
+    ("genre", "ge"),
+    ("style", "st"),
+    ("medium", "me"),
+    ("flaws", "fl"),
+    ("language", "la"),
+    ("source", "so"),
+    ("usage_tags", "us"),
+    ("ai_usage_tags", "ai"),
+];
+
+/// The tag type an `@` name stands for: its short name or its full one.
+pub fn tag_type(name: &str) -> Option<&'static str> {
+    let name = name.to_ascii_lowercase();
+    TAG_PREFIXES
+        .iter()
+        .find(|(field, prefix)| *prefix == name || *field == name)
+        .map(|(field, _)| *field)
+}
 
 pub const TAG_FIELDS: &[&str] = &[
     "creator",
@@ -102,7 +129,6 @@ enum Unit {
 /// or `c`) and column name; the nesting depth completes the alias.
 #[derive(Clone, Copy)]
 enum Field {
-    Tag(&'static str),
     /// A plain list of values kept in a table of its own (table, column):
     /// multi-valued like a tag field, but not tags.
     List(&'static str, &'static str),
@@ -113,7 +139,6 @@ enum Field {
     Date { added: bool },
     Bool(char, &'static str),
     Has,
-    Is,
     Id,
     In,
     Contains,
@@ -121,9 +146,6 @@ enum Field {
 }
 
 fn lookup(name: &str) -> Option<Field> {
-    if let Some(tag) = TAG_FIELDS.iter().find(|field| **field == name) {
-        return Some(Field::Tag(tag));
-    }
     Some(match name {
         "source_url" => Field::List("source_url", "url"),
         "identifier" => Field::List("identifier", "value"),
@@ -149,7 +171,6 @@ fn lookup(name: &str) -> Option<Field> {
         "added" => Field::Date { added: true },
         "looping" => Field::Bool('f', "looping"),
         "has" => Field::Has,
-        "is" => Field::Is,
         "id" => Field::Id,
         "in" => Field::In,
         "contains" => Field::Contains,
@@ -459,9 +480,45 @@ impl Parser<'_> {
             self.pos = end + len;
             return self.field_term(&name, field, op, start);
         }
-        // A plain value searches the general tags.
-        let values = self.parse_values()?;
-        Ok(self.tag_term("tags", Op::Eq, &values))
+        // Anything else is a tag: a plain one, or with `@type:` in front one
+        // of another type. `@name` alone is a state.
+        let mut values = self.parse_values()?;
+        let Some(marked) = values[0].text.strip_prefix('@') else {
+            return Ok(self.tag_term("tags", Op::Eq, &values));
+        };
+        let Some((name, rest)) = marked.split_once(':') else {
+            let state = marked.to_ascii_lowercase();
+            if values.len() > 1 || !STATES.contains(&state.as_str()) {
+                return error(
+                    format!(
+                        "`@{marked}` is neither a state ({}) nor a tag type followed by `:`, \
+                         as in `@cr:name`",
+                        STATES.iter().map(|s| format!("@{s}")).collect::<Vec<_>>().join(", ")
+                    ),
+                    start,
+                );
+            }
+            // Asking about the trash is what lets trashed entities through;
+            // see `compile`.
+            if self.depth == 0 {
+                self.asks_trashed = true;
+            }
+            // `trashed` is the only state so far.
+            return Ok(format!("({} = 1)", self.column('e', "trashed")));
+        };
+        let Some(field) = tag_type(name) else {
+            let known: Vec<String> = TAG_PREFIXES.iter().map(|(_, p)| format!("@{p}")).collect();
+            return error(
+                format!("`@{name}` is not a tag type (expected one of {})", known.join(", ")),
+                start,
+            );
+        };
+        if rest.is_empty() {
+            return error(format!("nothing after `@{name}:`"), start);
+        }
+        // In a list, the type given to the first value holds for them all.
+        values[0].text = rest.to_string();
+        Ok(self.tag_term(field, Op::Eq, &values))
     }
 
     fn parse_values(&mut self) -> Res<Vec<Val>> {
@@ -546,10 +603,6 @@ impl Parser<'_> {
         let values = self.parse_values()?;
 
         let sql = match field {
-            Field::Tag(tag) => {
-                allow(STRING)?;
-                return Ok(self.tag_term(tag, op, &values));
-            }
             Field::List(table, column) => {
                 allow(STRING)?;
                 let matches = self.string_match(&format!("l.{column}"), op, &values);
@@ -631,29 +684,6 @@ impl Parser<'_> {
                     alternatives.push(self.presence(value)?);
                 }
                 format!("({})", alternatives.join(" OR "))
-            }
-            Field::Is => {
-                allow(EQUALITY)?;
-                for value in &values {
-                    let state = value.text.to_ascii_lowercase();
-                    if !STATES.contains(&state.as_str()) {
-                        return error(
-                            format!(
-                                "`{}` is not a state (expected {})",
-                                value.text,
-                                STATES.join(", ")
-                            ),
-                            value.pos,
-                        );
-                    }
-                }
-                // Asking about the trash is what lets trashed entities
-                // through; see `compile`.
-                if self.depth == 0 {
-                    self.asks_trashed = true;
-                }
-                // `trashed` is the only state so far.
-                format!("({} = 1)", self.column('e', "trashed"))
             }
             Field::Id => {
                 allow(EQUALITY)?;
@@ -906,10 +936,6 @@ impl Parser<'_> {
         let entity = self.column('e', "id");
         let set = |column: String| format!("{column} IS NOT NULL");
         Ok(match lookup(&name) {
-            Some(Field::Tag(tag)) => format!(
-                "EXISTS (SELECT 1 FROM entity_tag et JOIN tag t ON t.id = et.tag_id
-                 WHERE et.entity_id = {entity} AND t.field = '{tag}')"
-            ),
             Some(Field::List(table, _)) => {
                 format!("EXISTS (SELECT 1 FROM {table} l WHERE l.entity_id = {entity})")
             }

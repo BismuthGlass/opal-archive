@@ -103,6 +103,12 @@ pub fn normalize(field: &str, value: &str) -> Result<String, ApiError> {
     if value.is_empty() {
         return Err(ApiError::BadRequest(format!("empty value for `{field}`")));
     }
+    // An @ at the start is how a tag's type is written, so no tag has one.
+    if value.starts_with('@') {
+        return Err(ApiError::BadRequest(format!(
+            "`{value}`: a tag cannot start with @"
+        )));
+    }
     let parts: Vec<&str> = value.split(':').map(str::trim).collect();
     if parts.iter().any(|part| part.is_empty()) {
         return Err(ApiError::BadRequest(format!(

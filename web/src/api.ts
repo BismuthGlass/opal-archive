@@ -155,7 +155,7 @@ export const search = (
   limit: number,
   seed: number,
   tab: number | null = null,
-  /** Without this, trashed entities only match a query with `is=trashed`. */
+  /** Without this, trashed entities only match a query with `@trashed`. */
   withTrashed = false,
 ) =>
   request<SearchPage>(

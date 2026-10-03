@@ -871,6 +871,11 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
   outline-offset: 1px;
 }
 
+.suggest .form-error {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
 .type-prefix {
   margin-left: 5px;
   font-size: 11px;

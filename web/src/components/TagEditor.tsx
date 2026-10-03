@@ -3,7 +3,7 @@ import * as api from "../api";
 import type { TagEntry } from "../api";
 import { fieldLabel, plural } from "../format";
 import { changed } from "../search";
-import { orderedTypes, pillStyle, prefixOf, splitPrefix } from "../tagTypes";
+import { pillStyle, prefixOf, readTag, typesStarting } from "../tagTypes";
 import Icon from "./Icon";
 import Modal from "./Modal";
 
@@ -52,13 +52,16 @@ const normalized = (name: string) =>
 /**
  * Every tag of one type, as a list beside the details of the one selected:
  * its description, its aliases, and the buttons to rename, merge and
- * delete it. The type is chosen from the row of pills or, in the box, with
- * its prefix (`@cr `); a name typed there that does not exist yet can be
- * created.
+ * delete it. The box filters the plain tags, or those of the type written
+ * in front (`@cr:`), as it would a namespace; a name typed there that does
+ * not exist yet can be created. While only `@…` is typed the list is of the
+ * types.
  */
 export default function TagEditor(props: { onClose: () => void }) {
-  const [field, setField] = createSignal<string>("tags");
   const [filter, setFilter] = createSignal("");
+  const read = createMemo(() => readTag(filter()));
+  /** The type on show: the one last written, while another is being typed. */
+  const field = createMemo<string>((shown) => read().field ?? shown, "tags");
   const [error, setError] = createSignal<string | null>(null);
   /** The tag whose details are on show, by its lowercased name. */
   const [chosen, setChosen] = createSignal<string | null>(null);
@@ -69,7 +72,10 @@ export default function TagEditor(props: { onClose: () => void }) {
 
   const tags = () => data.latest?.tags ?? [];
   const pending = () => data.latest?.pending ?? 0;
-  const typed = () => filter().trim();
+  // `@us:*` is every usage tag, as it would be in a search.
+  const typed = () => read().value.replace(/\*+$/, "");
+  /** The types on offer, while one is being named. */
+  const types = () => (read().naming === null ? [] : typesStarting(read().naming!));
   const selected = createMemo(() => tags().find((tag) => tag.value.toLowerCase() === chosen()));
   const unsaved = () => selected() !== undefined && draft() !== (selected()!.description ?? "");
 
@@ -92,7 +98,7 @@ export default function TagEditor(props: { onClose: () => void }) {
   /** Whether what is typed names no tag or alias yet, and so could be one. */
   const creatable = () => {
     const name = normalized(typed());
-    if (!name || name.startsWith("@")) return false;
+    if (!name || read().field === null) return false;
     return !tags().some(
       (tag) =>
         tag.value.toLowerCase() === name ||
@@ -105,21 +111,14 @@ export default function TagEditor(props: { onClose: () => void }) {
     setRenaming(false);
   };
 
-  const choose = (next: string) => {
-    setField(next);
-    select(null);
-  };
+  // The details belong to a tag of the type on show.
+  createEffect(on(field, () => select(null), { defer: true }));
 
-  const onInput = (box: HTMLInputElement) => {
-    // "@cr " at the start switches to that type and leaves the box.
-    const prefixed = splitPrefix(box.value);
-    if (prefixed) {
-      choose(prefixed.field);
-      // Written to the box itself: if the filter was already this, setting
-      // it again would not redraw the box.
-      box.value = prefixed.rest;
-    }
-    setFilter(box.value);
+  let box!: HTMLInputElement;
+  /** Writes a type into the box, ready for a name. */
+  const chooseType = (type: string) => {
+    setFilter(type === "tags" ? "" : `@${prefixOf(type)}:`);
+    box.focus();
   };
 
   /** Runs a change, then reloads the list and everything showing tags. */
@@ -178,33 +177,17 @@ export default function TagEditor(props: { onClose: () => void }) {
 
   return (
     <Modal title="Tags" wide tall onClose={props.onClose}>
-      <div class="type-picker" role="radiogroup" aria-label="Tag type">
-        <For each={orderedTypes()}>
-          {(type) => (
-            <button
-              class="chip tinted"
-              role="radio"
-              aria-checked={type === field()}
-              style={pillStyle(type)}
-              // Not on mouse down, so the box keeps the cursor.
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => choose(type)}
-            >
-              {fieldLabel(type)}
-              <span class="type-prefix">@{prefixOf(type)}</span>
-            </button>
-          )}
-        </For>
-      </div>
       <div class="tag-editor-bar">
         <input
           type="text"
           autofocus
+          ref={box}
           aria-label="Filter or create tags"
-          placeholder={`Filter ${fieldLabel(field()).toLowerCase()}, name a new one, or @ for another type`}
+          placeholder="Filter tags or name a new one. @cr: for creators, @ for all the types"
           autocomplete="off"
+          spellcheck={false}
           value={filter()}
-          onInput={(event) => onInput(event.currentTarget)}
+          onInput={(event) => setFilter(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") create();
           }}
@@ -230,6 +213,24 @@ export default function TagEditor(props: { onClose: () => void }) {
       </Show>
       <div class="tag-editor">
         <ul class="tag-list" role="listbox" aria-label="Tags">
+          <For each={types()}>
+            {(type) => (
+              <li>
+                <button class="plain tag-row" onClick={() => chooseType(type)}>
+                  <span class="chip tinted type-sample" style={pillStyle(type)}>
+                    {fieldLabel(type)}
+                  </span>
+                  <span class="tag-note">
+                    {type === "tags" ? "no @ needed" : `@${prefixOf(type)}:`}
+                  </span>
+                </button>
+              </li>
+            )}
+          </For>
+          <Show when={read().field === null && read().naming === null}>
+            <li class="hint">{read().lead.slice(0, -1)} is not a tag type. Type @ to see them.</li>
+          </Show>
+          <Show when={read().field !== null}>
           <Show when={creatable()}>
             <li>
               <button class="plain tag-row" onClick={create}>
@@ -249,7 +250,7 @@ export default function TagEditor(props: { onClose: () => void }) {
                 <li class="hint">
                   {data.loading
                     ? "Loading…"
-                    : "No tags of this type yet. Type a name to create one."}
+                    : `No ${fieldLabel(field()).toLowerCase()} yet. Type a name to create one.`}
                 </li>
               </Show>
             }
@@ -284,6 +285,7 @@ export default function TagEditor(props: { onClose: () => void }) {
             <li class="hint">
               Showing {MAX_ROWS} of {matching().length} tags. Filter to see the rest.
             </li>
+          </Show>
           </Show>
         </ul>
         <section class="tag-details" aria-label="Details of the selected tag">

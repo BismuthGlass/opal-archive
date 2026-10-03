@@ -7,6 +7,7 @@ import {
   isCustomOrder,
   orderedTypes,
   pillStyle,
+  prefixOf,
   setTagType,
   setTagTypeOrder,
   tagType,
@@ -76,8 +77,10 @@ function TagTypes() {
     <>
       <h3>Tag types</h3>
       <p class="hint">
-        Tags are shown as pills in the colours of their type. The types ticked as aggregated share
-        one list in the side panel; the others each get a section of their own. Drag a row by its
+        A tag is of a type, written in front of it wherever tags are typed: <code>@cr:name</code>{" "}
+        is a creator, and a tag with no @ is a plain one. Tags are shown as pills in the colours of
+        their type. The types ticked as aggregated share one list in the side panel; the others
+        each get a section of their own. Drag a row by its
         handle to change the order the types are listed in.
         <Show when={isCustomOrder()}>
           {" "}
@@ -104,7 +107,8 @@ function TagTypes() {
                 <span>
                   <span class="chip tinted type-sample" style={pillStyle(field)}>
                     {fieldLabel(field)}
-                  </span>
+                  </span>{" "}
+                  <code class="hint">@{prefixOf(field)}:</code>
                 </span>
               </div>
               <Show when={isCustom(field)}>

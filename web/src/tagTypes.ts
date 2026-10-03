@@ -33,8 +33,8 @@ const DEFAULTS: Record<(typeof TAG_FIELDS)[number], TagType> = {
 };
 
 /**
- * What to type, after an @, to say which type a tag is: `@cr name` is a
- * creator. Two letters each.
+ * The short name each type goes by after an @: `@cr:name` is the creator
+ * `name`. A tag written without an @ is a plain one, of type `tags`.
  */
 export const TAG_PREFIXES: Record<(typeof TAG_FIELDS)[number], string> = {
   tags: "ta",
@@ -54,19 +54,55 @@ export const TAG_PREFIXES: Record<(typeof TAG_FIELDS)[number], string> = {
 
 export const prefixOf = (field: string) => TAG_PREFIXES[field as keyof typeof TAG_PREFIXES];
 
-/** The type a prefix stands for, without its @. */
-export const typeOfPrefix = (prefix: string): string | undefined =>
-  TAG_FIELDS.find((field) => TAG_PREFIXES[field] === prefix.toLowerCase());
+/** The type an @ name stands for: its short name or its full one. */
+export const typeNamed = (name: string): string | undefined => {
+  const wanted = name.trim().toLowerCase();
+  return TAG_FIELDS.find((field) => TAG_PREFIXES[field] === wanted || field === wanted);
+};
+
+/** The types whose short or full name starts with what has been typed. */
+export const typesStarting = (typed: string): string[] => {
+  const start = typed.trim().toLowerCase();
+  return orderedTypes().filter(
+    (field) => prefixOf(field).startsWith(start) || field.startsWith(start),
+  );
+};
+
+/** What a tag is, read from how it was typed. */
+export type TypedTag = {
+  /** Its type; null if the name after the @ is not one. */
+  field: string | null;
+  /** The tag itself, without the type. */
+  value: string;
+  /** What was typed in front of the value: `@cr:`, or nothing. */
+  lead: string;
+  /**
+   * Set while only `@…` has been typed and no colon yet: the start of a
+   * type's name.
+   */
+  naming: string | null;
+};
 
 /**
- * If `typed` starts with a type's prefix and a space (`@cr name`), the
- * type and what follows the prefix.
+ * Reads a tag as typed: `name` is a plain tag, `@cr:name` a creator. The
+ * first colon ends the type; any after it belong to the tag's namespaces.
  */
-export function splitPrefix(typed: string): { field: string; rest: string } | null {
-  const match = /^@(\S+)\s(.*)$/.exec(typed);
-  const field = match && typeOfPrefix(match[1]);
-  return field ? { field, rest: match![2] } : null;
+export function readTag(text: string): TypedTag {
+  const typed = text.trimStart();
+  if (!typed.startsWith("@")) return { field: "tags", value: typed.trim(), lead: "", naming: null };
+  const colon = typed.indexOf(":");
+  if (colon < 0) return { field: null, value: "", lead: "", naming: typed.slice(1) };
+  return {
+    field: typeNamed(typed.slice(1, colon)) ?? null,
+    value: typed.slice(colon + 1).trim(),
+    lead: typed.slice(0, colon + 1),
+    naming: null,
+  };
 }
+
+/** A tag as it is typed and searched: `name`, or `@cr:name`. */
+export const tagText = (field: string, value: string) =>
+  field === "tags" ? value : `@${prefixOf(field)}:${value}`;
 
 export const defaultTagType = (field: string): TagType =>
   DEFAULTS[field as keyof typeof DEFAULTS] ?? DEFAULTS.tags;

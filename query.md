@@ -10,12 +10,13 @@ bulk downloads and the future CLI.
 cat                                   has the tag "cat"
 cat -dog                              has "cat", does not have "dog"
 metroid:samus                         has the tag "metroid:samus"
-character=metroid:samus               that character
-character=metroid:*                   any character from metroid
-creator="John Smith" score>=5         by that creator, scored 5 or more
-genre=horror,scifi                    horror or scifi
+@ch:metroid:samus                     that character
+@ch:metroid:*                         any character from metroid
+"@cr:John Smith" score>=5             by that creator, scored 5 or more
+@ge:horror,scifi                      horror or scifi
 (cat or dog) rating=safe              grouping and alternatives
-media=video -has=creator              videos with no creator set
+media=video -@cr:*                    videos with no creator
+@trashed                              what is in the trash
 in=(type=sequence title~holiday)      members of matching collections
 width>=1920 length<30s sort=-score    attribute filters and ordering
 ```
@@ -56,6 +57,8 @@ Lexical rules:
   immediately followed by an operator**. Anything else is a plain value.
 - The colon is an ordinary character, so `metroid:samus` and
   `https://example.com/a` are plain values.
+- A plain value is a tag. One that starts with `@` says what kind: a tag of
+  another type (`@cr:name`) or a state (`@trashed`); see below.
 - In a field term the name must be a known field. `socre>=5` is an error
   ("unknown field `socre`"), not a tag search. To search for a tag that looks
   like a field term, quote it: `"a=b"`.
@@ -66,24 +69,75 @@ Lexical rules:
 
 ## Terms
 
-A plain value is shorthand for the `tags` field: `cat` means `tags=cat`.
+A comma-separated list matches if **any** value matches: `cat,dog` is
+`(cat or dog)`, and `media=image,video` is either. Lists work with `=`, `!=`
+and `~`.
 
-A comma-separated list matches if **any** value matches: `genre=horror,scifi`
-is `(genre=horror or genre=scifi)`, and `cat,dog` is `(cat or dog)`. Lists
-work with `=`, `!=` and `~`.
-
-`!=` is the negation of `=`: `genre!=horror` is the same as `-genre=horror`.
+`!=` is the negation of `=`: `media!=video` is the same as `-media=video`.
 
 Which operators a field accepts depends on its type.
 
+### Tags
+
+A plain value is a tag, matched whole; `*` stands for any run of characters.
+Tags have types. A tag with nothing in front is a plain one; a tag of
+another type has `@`, the type and a colon in front:
+
+| Written  | Type          | Written  | Type          |
+| -------- | ------------- | -------- | ------------- |
+| `@cr:`   | creator       | `@me:`   | medium        |
+| `@ch:`   | character     | `@fl:`   | flaws         |
+| `@sw:`   | source work   | `@la:`   | language      |
+| `@pe:`   | person        | `@so:`   | source        |
+| `@ge:`   | genre         | `@us:`   | usage tags    |
+| `@st:`   | style         | `@ai:`   | AI usage tags |
+| `@ta:`   | plain tags    |          |               |
+
+The type's full name works too (`@creator:`, `@source_work:`). Only the first
+colon ends the type; the rest is the tag, namespaces and all.
+
+```
+cat                         the plain tag cat
+@cr:rico                    the creator rico
+"@cr:John Smith"            quoted as a whole, for the space
+@cr:*                       has any creator
+-@cr:*                      has no creator
+@ge:horror,scifi            either genre: the type holds for the whole list
+c*t                         cat, coat, cut…
+```
+
+Tags may sit in namespaces, written `namespace:tag` and nested to any depth.
+A namespace is part of the tag, so the wildcard is how to search one:
+
+```
+@ch:metroid:samus           that tag exactly
+@ch:metroid:*               everything under metroid, at any depth
+@ch:*:samus                 samus in any namespace
+@ch:samus                   only the samus that has no namespace
+```
+
+A tag can be an alias of another tag. Searching for an alias searches for the
+tag it stands for, so if `kitty` is an alias of `cat`, `kitty` and `-kitty`
+mean `cat` and `-cat`. Only whole tags are replaced: a pattern (`kit*`)
+matches the tags that are actually stored. Write `\*` for a literal asterisk.
+
+### States
+
+`@` with a single word and no colon is a state. The only one so far is
+`@trashed`: deleted once, and not yet for good.
+
+```
+@trashed                    what is in the trash
+@trashed media=video        trashed videos
+cat (@trashed or -@trashed) cats, trashed or not
+```
+
+Trashed entities are left out of every search that does not mention
+`@trashed`, so plain searches never show them.
+
 ### String fields
 
-Multi-valued: `creator` `medium` `genre` `style` `flaws` `person`
-`source_work` `character` `language` `tags` `identifier` `usage_tags`
-`ai_usage_tags` `source` `source_url`
-
-(`identifier` and `source_url` are plain lists rather than tag fields: they
-are searched the same way, but have no namespaces or aliases.)
+Multi-valued: `identifier` `source_url`. These are plain lists, not tags.
 
 Single-valued: `title` `description` `ai_description` `version` `name` `ext`
 `hash`
@@ -94,30 +148,14 @@ Single-valued: `title` `description` `ai_description` `version` `name` `ext`
 | `~`      | the text appears anywhere in the value                     |
 
 ```
-character=metroid:samus     exactly that value
-character=metroid:*         starts with "metroid:"
-character~samus             contains "samus"
+title=Sunset                exactly that title
 title~holiday               title contains "holiday"
+identifier=pixiv:*          starts with "pixiv:"
 hash=3fa9*                  hash prefix
 ```
 
 For multi-valued fields the term matches if any one of the entity's values
 matches. Write `\*` for a literal asterisk.
-
-Tags may sit in namespaces, written `namespace:tag` and nested to any depth.
-A namespace is part of the tag's value, so the wildcard is how to search one:
-
-```
-character=metroid:samus     that tag exactly
-character=metroid:*         everything under metroid, at any depth
-character=*:samus           samus in any namespace
-character=samus             only the samus that has no namespace
-```
-
-A tag can be an alias of another tag. Searching for an alias searches for the
-tag it stands for, so if `kitty` is an alias of `cat`, `kitty` and `-kitty`
-mean `cat` and `-cat`. Only whole values are replaced: patterns (`kit*`,
-`tags~kit`) match the tags that are actually stored.
 
 `name` is the filename the file was uploaded with, and `ext` its extension
 without the dot.
@@ -183,22 +221,8 @@ A work dated just `2024` therefore matches `date=2024` but not
 
 `has=<field>` matches entities where the field is set (for multi-valued
 fields, has at least one value). Any field above except `kind`, `media`,
-`added`, `hash`, `ext` and `size` can be used. `-has=creator` finds entities
-with no creator.
-
-### States
-
-`is=<state>` matches entities in that state. The only state so far is
-`trashed`: deleted once, and not yet for good.
-
-```
-is=trashed                  what is in the trash
-is=trashed media=video      trashed videos
-cat (is=trashed or -is=trashed)   cats, trashed or not
-```
-
-Trashed entities are left out of every search that has no `is=` term, so
-plain searches never show them.
+`added`, `hash`, `ext` and `size` can be used. `-has=title` finds entities
+with no title. For tags, use the wildcard instead: `@cr:*` has a creator.
 
 ### Relations
 
