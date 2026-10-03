@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, Show } from "solid-js";
 import * as api from "../api";
-import { AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS } from "../api";
+import { COLLECTION_TYPES, CONTENT_RATINGS } from "../api";
 import type { Changes, Metadata, Scalar } from "../api";
 import { dateTime, duration, errorMessage, fileSize, plural } from "../format";
 import { changed, dataVersion, selected } from "../search";
@@ -41,7 +41,6 @@ const DETAIL_FIELDS: DetailField[] = [
   { field: "content_rating", label: "Rating", options: CONTENT_RATINGS },
   { field: "description", label: "Description", long: true },
   { field: "version", label: "Version" },
-  { field: "ai_content", label: "AI content", options: AI_CONTENT },
   { field: "ai_description", label: "AI description", long: true },
   // Only used to name the file again on download.
   { field: "original_name", label: "Filename", fileOnly: true },

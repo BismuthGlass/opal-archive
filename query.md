@@ -169,7 +169,6 @@ Only `=` and `!=`. A value outside the list is an error.
 | `kind`  | Entity kind                         | `file`, `collection`                                        |
 | `media` | Media type (`media_type`)           | `image`, `video`, `audio`, `book`, `other`                  |
 | `type`  | Collection type (`collection_type`) | `variant`, `set`, `sourceset`, `sequence`, `usercollection` |
-| `ai`    | AI content (`ai_content`)           | `none`, `partial`, `full`, `unknown`                        |
 
 ### Number fields
 

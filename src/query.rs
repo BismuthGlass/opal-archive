@@ -53,7 +53,6 @@ pub const MEDIA_TYPES: &[&str] = &["image", "video", "audio", "book", "other"];
 pub const COLLECTION_TYPES: &[&str] =
     &["variant", "set", "sourceset", "sequence", "usercollection"];
 pub const CONTENT_RATINGS: &[&str] = &["safe", "risky", "nsfw"];
-pub const AI_CONTENT: &[&str] = &["none", "partial", "full", "unknown"];
 
 const SORT_KEYS: &[&str] = &[
     "added", "date", "score", "title", "name", "size", "width", "height", "length", "pages", "id",
@@ -161,7 +160,6 @@ fn lookup(name: &str) -> Option<Field> {
         "kind" => Field::Choice('e', "kind", KINDS),
         "media" => Field::Choice('f', "media_type", MEDIA_TYPES),
         "type" => Field::Choice('c', "collection_type", COLLECTION_TYPES),
-        "ai" => Field::Choice('e', "ai_content", AI_CONTENT),
         "score" => Field::Number('e', "score", Unit::Plain),
         "width" => Field::Number('f', "width", Unit::Plain),
         "height" => Field::Number('f', "height", Unit::Plain),

@@ -152,7 +152,6 @@ export const TAG_FIELDS = [
 
 export const COLLECTION_TYPES = ["usercollection", "set", "sequence", "variant", "sourceset"];
 export const CONTENT_RATINGS = ["safe", "risky", "nsfw"];
-export const AI_CONTENT = ["none", "partial", "full", "unknown"];
 
 export class ApiError extends Error {
   /** Character offset into the query, for query errors. */

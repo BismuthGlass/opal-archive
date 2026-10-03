@@ -18,7 +18,7 @@ use crate::{
     AppState,
     error::ApiError,
     files::{stored_name, thumbnail_name},
-    query::{AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS, valid_date},
+    query::{COLLECTION_TYPES, CONTENT_RATINGS, valid_date},
     tags,
 };
 
@@ -30,7 +30,6 @@ const SCALARS: &[&str] = &[
     "version",
     "content_rating",
     "description",
-    "ai_content",
     "ai_description",
 ];
 
@@ -390,7 +389,6 @@ fn scalar_value(field: &str, value: &Value) -> Result<SqlValue, ApiError> {
             _ => invalid("YYYY, YYYY-MM or YYYY-MM-DD"),
         },
         "content_rating" => choice(CONTENT_RATINGS),
-        "ai_content" => choice(AI_CONTENT),
         "original_name" => match text {
             Some(text) if !text.contains(['/', '\\']) => Ok(SqlValue::Text(text.to_string())),
             _ => invalid("a filename without a path"),

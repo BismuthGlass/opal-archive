@@ -10,7 +10,6 @@ Both files and collections share the same metadata format. Field names are lower
 
 ```ts
 type ContentRating = "safe" | "risky" | "nsfw";
-type AiContent = "none" | "partial" | "full" | "unknown";
 type CollectionType = "variant" | "set" | "sourceset" | "sequence" | "usercollection";
 type MetadataType = "file" | "collection";
 
@@ -90,9 +89,6 @@ interface FileMetadata {
 
   // Other IDs, e.g. a website ID.
   identifier?: string[];
-
-  // Extent to which the content is AI-generated.
-  ai_content?: AiContent;
 
   // Description provided to an AI to identify the file.
   ai_description?: string;
