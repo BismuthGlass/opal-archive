@@ -209,9 +209,8 @@ pub async fn thumbnail(
 ) -> bool {
     let size = THUMBNAIL_SIZE;
     // min() keeps small sources at their own size instead of enlarging them.
-    let scale = format!(
-        "scale='min({size},iw)':'min({size},ih)':force_original_aspect_ratio=decrease"
-    );
+    let scale =
+        format!("scale='min({size},iw)':'min({size},ih)':force_original_aspect_ratio=decrease");
     match media_type {
         "image" => image_thumbnail(source, dest).await,
         "video" => {
@@ -220,7 +219,16 @@ pub async fn thumbnail(
             let mut args = os(&["-v", "error", "-y", "-ss", &format!("{offset:.3}"), "-i"]);
             args.push(source.into());
             args.extend(os(&[
-                "-frames:v", "1", "-vf", &scale, "-f", "image2", "-update", "1", "-q:v", "4",
+                "-frames:v",
+                "1",
+                "-vf",
+                &scale,
+                "-f",
+                "image2",
+                "-update",
+                "1",
+                "-q:v",
+                "4",
             ]));
             args.push(dest.into());
             run("ffmpeg", &args, false).await;
@@ -230,7 +238,16 @@ pub async fn thumbnail(
             let mut args = os(&["-v", "error", "-y", "-i"]);
             args.push(source.into());
             args.extend(os(&[
-                "-an", "-frames:v", "1", "-vf", &scale, "-f", "image2", "-update", "1", "-q:v",
+                "-an",
+                "-frames:v",
+                "1",
+                "-vf",
+                &scale,
+                "-f",
+                "image2",
+                "-update",
+                "1",
+                "-q:v",
                 "4",
             ]));
             args.push(dest.into());

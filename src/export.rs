@@ -65,7 +65,11 @@ impl Write for ChannelWriter {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        if self.buffer.is_empty() { Ok(()) } else { self.send() }
+        if self.buffer.is_empty() {
+            Ok(())
+        } else {
+            self.send()
+        }
     }
 }
 

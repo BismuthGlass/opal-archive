@@ -76,7 +76,11 @@ fn comic_pages(archive: &Archive) -> Vec<String> {
         .file_names()
         .filter(|name| IMAGE_EXTENSIONS.contains(&extension_of(name).as_str()))
         // Finder's resource forks and other hidden files are not pages.
-        .filter(|name| !name.split('/').any(|part| part.starts_with('.') || part == "__MACOSX"))
+        .filter(|name| {
+            !name
+                .split('/')
+                .any(|part| part.starts_with('.') || part == "__MACOSX")
+        })
         .map(str::to_string)
         .collect();
     names.sort_by(|a, b| natural(a, b));
@@ -91,7 +95,10 @@ fn natural(a: &str, b: &str) -> Ordering {
         let digits = |s: &str| s.len() - s.trim_start_matches(|c: char| c.is_ascii_digit()).len();
         let (da, db) = (digits(a), digits(b));
         if da > 0 && db > 0 {
-            let (na, nb) = (a[..da].trim_start_matches('0'), b[..db].trim_start_matches('0'));
+            let (na, nb) = (
+                a[..da].trim_start_matches('0'),
+                b[..db].trim_start_matches('0'),
+            );
             let order = na.len().cmp(&nb.len()).then_with(|| na.cmp(nb));
             if order != Ordering::Equal {
                 return order;
@@ -158,7 +165,9 @@ fn elements(xml: &str) -> Vec<Element> {
             if rest.is_empty() || rest.starts_with('>') || rest.starts_with("/>") {
                 break;
             }
-            let Some(equals) = rest.find(['=', '>']).filter(|&at| rest.as_bytes()[at] == b'=')
+            let Some(equals) = rest
+                .find(['=', '>'])
+                .filter(|&at| rest.as_bytes()[at] == b'=')
             else {
                 break;
             };
@@ -173,7 +182,11 @@ fn elements(xml: &str) -> Vec<Element> {
             attributes.push((key, unescape(&value[1..1 + length])));
             i = xml.len() - value.len() + length + 2;
         }
-        found.push(Element { name, attributes, start });
+        found.push(Element {
+            name,
+            attributes,
+            start,
+        });
     }
     found
 }
@@ -208,7 +221,9 @@ fn percent_decode(text: &str) -> String {
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
-        let hex = bytes.get(i + 1..i + 3).and_then(|pair| std::str::from_utf8(pair).ok());
+        let hex = bytes
+            .get(i + 1..i + 3)
+            .and_then(|pair| std::str::from_utf8(pair).ok());
         match hex.and_then(|pair| u8::from_str_radix(pair, 16).ok()) {
             Some(byte) if bytes[i] == b'%' => {
                 decoded.push(byte);
@@ -250,7 +265,11 @@ fn package(archive: &mut Archive) -> Option<Package> {
         .to_string();
     let opf = read_text(archive, &opf_path)?;
 
-    let mut package = Package { manifest: Vec::new(), spine: Vec::new(), cover_id: None };
+    let mut package = Package {
+        manifest: Vec::new(),
+        spine: Vec::new(),
+        cover_id: None,
+    };
     let mut spine_ids = Vec::new();
     for element in elements(&opf) {
         match element.name.as_str() {
@@ -284,7 +303,12 @@ fn has_property(item: &Item, property: &str) -> bool {
 
 fn epub_cover(archive: &mut Archive) -> Option<String> {
     let package = package(archive)?;
-    let images = || package.manifest.iter().filter(|item| item.media_type.starts_with("image/"));
+    let images = || {
+        package
+            .manifest
+            .iter()
+            .filter(|item| item.media_type.starts_with("image/"))
+    };
     let named_cover = |item: &&Item| {
         item.id.to_lowercase().contains("cover") || item.path.to_lowercase().contains("cover")
     };
@@ -314,22 +338,37 @@ fn epub_pages(archive: &mut Archive) -> Option<u64> {
 /// Number of print pages the book marks in its navigation, if it does: the
 /// page list of an EPUB 3 navigation document or of an EPUB 2 NCX.
 fn marked_pages(archive: &mut Archive, package: &Package) -> u64 {
-    let nav = package.manifest.iter().find(|item| has_property(item, "nav"));
+    let nav = package
+        .manifest
+        .iter()
+        .find(|item| has_property(item, "nav"));
     if let Some(text) = nav.and_then(|item| read_text(archive, &item.path)) {
         let tags = elements(&text);
         let list = tags.iter().find(|tag| {
             tag.name == "nav"
-                && tag.get("epub:type").is_some_and(|kinds| kinds.split(' ').any(|k| k == "page-list"))
+                && tag
+                    .get("epub:type")
+                    .is_some_and(|kinds| kinds.split(' ').any(|k| k == "page-list"))
         });
         if let Some(list) = list {
-            let end = text[list.start..].find("</nav").map_or(text.len(), |at| list.start + at);
-            let links = tags.iter().filter(|tag| tag.name == "a" && (list.start..end).contains(&tag.start));
+            let end = text[list.start..]
+                .find("</nav")
+                .map_or(text.len(), |at| list.start + at);
+            let links = tags
+                .iter()
+                .filter(|tag| tag.name == "a" && (list.start..end).contains(&tag.start));
             return links.count() as u64;
         }
     }
-    let ncx = package.manifest.iter().find(|item| item.media_type == "application/x-dtbncx+xml");
+    let ncx = package
+        .manifest
+        .iter()
+        .find(|item| item.media_type == "application/x-dtbncx+xml");
     if let Some(text) = ncx.and_then(|item| read_text(archive, &item.path)) {
-        return elements(&text).iter().filter(|tag| tag.name == "pageTarget").count() as u64;
+        return elements(&text)
+            .iter()
+            .filter(|tag| tag.name == "pageTarget")
+            .count() as u64;
     }
     0
 }

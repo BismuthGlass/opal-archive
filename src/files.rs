@@ -113,7 +113,9 @@ pub fn thumbnail_name(hash: &str) -> String {
 
 /// The last path component of an uploaded name, if there is one.
 fn base_name(name: &str) -> Option<&str> {
-    name.rsplit(['/', '\\']).next().filter(|base| !base.is_empty())
+    name.rsplit(['/', '\\'])
+        .next()
+        .filter(|base| !base.is_empty())
 }
 
 /// Lowercased extension without the dot, or empty if the name has none worth
@@ -239,10 +241,7 @@ async fn upload(
         if let Some(existing) = file_by_hash(&conn, &hash)? {
             // Uploading a file again takes it back out of the trash. Nothing
             // else about the existing file changes.
-            conn.execute(
-                "UPDATE entity SET trashed = 0 WHERE id = ?1",
-                [existing.id],
-            )?;
+            conn.execute("UPDATE entity SET trashed = 0 WHERE id = ?1", [existing.id])?;
             record(&conn, params.tab, &existing)?;
             return Ok((StatusCode::OK, Json(existing)));
         }
@@ -256,8 +255,14 @@ async fn upload(
     let media_type = media::media_type(&stored, &extension).await;
     let attributes = media::probe(&stored, media_type, &extension).await;
     let thumbnail = state.thumbnails.join(thumbnail_name(&hash));
-    let has_thumbnail =
-        media::thumbnail(&stored, media_type, &extension, attributes.length, &thumbnail).await;
+    let has_thumbnail = media::thumbnail(
+        &stored,
+        media_type,
+        &extension,
+        attributes.length,
+        &thumbnail,
+    )
+    .await;
 
     let new = NewFile {
         hash: &hash,
@@ -329,7 +334,11 @@ async fn content(
     let mut response = serve(&state.storage.join(&stored), request).await?;
 
     let headers = response.headers_mut();
-    let disposition = if params.download.is_some() { "attachment" } else { "inline" };
+    let disposition = if params.download.is_some() {
+        "attachment"
+    } else {
+        "inline"
+    };
     let name = encode_filename(file.original_name.as_deref().unwrap_or(&stored));
     if let Ok(value) = HeaderValue::from_str(&format!("{disposition}; filename*=UTF-8''{name}")) {
         headers.insert(header::CONTENT_DISPOSITION, value);
