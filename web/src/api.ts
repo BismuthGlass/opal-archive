@@ -72,6 +72,7 @@ export type Metadata = {
   ordered: { value: boolean | null; mixed: boolean };
   tags: Record<string, { value: string; count: number }[]>;
   source_urls: { value: string; count: number }[];
+  identifiers: { value: string; count: number }[];
   memberships: { id: number; title: string | null; collection_type: string; count: number }[];
 };
 
@@ -82,6 +83,9 @@ export type Changes = {
   /** Source URLs, which are a list of their own rather than tags. */
   add_urls?: string[];
   remove_urls?: string[];
+  /** Identifiers, likewise a list of their own. */
+  add_identifiers?: string[];
+  remove_identifiers?: string[];
 };
 
 export const TAG_FIELDS = [
@@ -96,7 +100,6 @@ export const TAG_FIELDS = [
   "flaws",
   "language",
   "source",
-  "identifier",
   "usage_tags",
   "ai_usage_tags",
 ] as const;

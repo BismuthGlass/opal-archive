@@ -19,8 +19,6 @@ import Icon from "./Icon";
 import { createStoredFlag } from "./Panel";
 
 const SCORES = [1, 2, 3, 4, 5, 6, 7];
-/** Names the source URL list where it sits among the tag fields. */
-const SOURCE_URLS = "source_url";
 
 type DetailField = {
   field: string;
@@ -108,13 +106,17 @@ export default function Sidebar(props: { onGroup: () => void }) {
     const data = metadata.latest;
     if (!data || data.of !== ids()) return;
     const filled: string[] = TAG_FIELDS.filter((field) => (data.tags[field]?.length ?? 0) > 0);
-    if (data.source_urls.length > 0) filled.push(SOURCE_URLS);
+    for (const list of PLAIN_LISTS) {
+      if (list.values(data).length > 0) filled.push(list.field);
+    }
     if (filled.some((field) => !shownTags().has(field))) {
       setShownTags(new Set([...shownTags(), ...filled]));
     }
   });
   const pick = (field: string) => {
-    const list = field === SOURCE_URLS || (TAG_FIELDS as readonly string[]).includes(field);
+    const list =
+      PLAIN_LISTS.some((list) => list.field === field) ||
+      (TAG_FIELDS as readonly string[]).includes(field);
     if (!list) return setAdding(field);
     // Before the field is shown, which is when it looks at this.
     setPickedTag(field);
@@ -345,9 +347,18 @@ export default function Sidebar(props: { onGroup: () => void }) {
                 </Show>
               )}
             </For>
-            <Show when={shownTags().has(SOURCE_URLS)}>
-              <UrlField data={data()} apply={apply} autofocus={pickedTag() === SOURCE_URLS} />
-            </Show>
+            <For each={PLAIN_LISTS}>
+              {(list) => (
+                <Show when={shownTags().has(list.field)}>
+                  <PlainList
+                    list={list}
+                    data={data()}
+                    apply={apply}
+                    autofocus={pickedTag() === list.field}
+                  />
+                </Show>
+              )}
+            </For>
 
             <AddField
               groups={[
@@ -357,12 +368,10 @@ export default function Sidebar(props: { onGroup: () => void }) {
                     !isSet(data().scalars[detail.field]) &&
                     adding() !== detail.field,
                 ),
-                [...TAG_FIELDS, SOURCE_URLS]
-                  .filter((field) => !shownTags().has(field))
-                  .map((field) => ({
-                    field,
-                    label: field === SOURCE_URLS ? "Source URLs" : fieldLabel(field),
-                  })),
+                [
+                  ...TAG_FIELDS.map((field) => ({ field, label: fieldLabel(field) })),
+                  ...PLAIN_LISTS.map(({ field, label }) => ({ field, label })),
+                ].filter((entry) => !shownTags().has(entry.field)),
               ]}
               onPick={pick}
             />
@@ -697,28 +706,82 @@ const MAX_SUGGESTIONS = 8;
 const isWebAddress = (url: string) => /^https?:\/\//i.test(url);
 
 /**
- * The addresses a file came from: a list of links. Unlike tags there are
- * no suggestions, namespaces or aliases.
+ * The lists a file has that are not tags: plain values with no
+ * suggestions, namespaces or aliases. Source URLs are shown as links, one
+ * to a line; identifiers as chips.
  */
-function UrlField(props: FieldProps & { autofocus?: boolean }) {
+const PLAIN_LISTS = [
+  {
+    field: "identifier",
+    label: "Identifiers",
+    placeholder: "Add…",
+    links: false,
+    values: (data: Metadata) => data.identifiers,
+    add: (value: string): Changes => ({ add_identifiers: [value] }),
+    remove: (value: string): Changes => ({ remove_identifiers: [value] }),
+  },
+  {
+    field: "source_url",
+    label: "Source URLs",
+    placeholder: "Add a link…",
+    links: true,
+    values: (data: Metadata) => data.source_urls,
+    add: (value: string): Changes => ({ add_urls: [value] }),
+    remove: (value: string): Changes => ({ remove_urls: [value] }),
+  },
+];
+
+function PlainList(
+  props: FieldProps & { list: (typeof PLAIN_LISTS)[number]; autofocus?: boolean },
+) {
   const [text, setText] = createSignal("");
-  const urls = () => props.data.source_urls;
+  const values = () => props.list.values(props.data);
 
   const add = () => {
-    const url = text().trim();
-    if (!url) return;
+    const value = text().trim();
+    if (!value) return;
     setText("");
-    props.apply({ add_urls: [url] });
+    props.apply(props.list.add(value));
   };
+
+  /** How many of the selection have a value, and the buttons acting on it. */
+  const controls = (entry: { value: string; count: number }) => (
+    <>
+      <Show when={entry.count < props.data.count}>
+        <span class="chip-count" title={`On ${entry.count} of ${props.data.count} selected`}>
+          ({entry.count})
+        </span>
+      </Show>
+      <span class="chip-actions">
+        <Show when={entry.count < props.data.count}>
+          <button
+            class="chip-add"
+            aria-label={`Add ${entry.value} to all selected`}
+            title="Add to all selected"
+            onClick={() => props.apply(props.list.add(entry.value))}
+          >
+            <Icon name="add" />
+          </button>
+        </Show>
+        <button
+          class="chip-remove"
+          aria-label={`Remove ${entry.value}`}
+          title="Remove"
+          onClick={() => props.apply(props.list.remove(entry.value))}
+        >
+          <Icon name="close" />
+        </button>
+      </span>
+    </>
+  );
 
   return (
     <div class="field">
-      <span class="label">Source URLs</span>
+      <span class="label">{props.list.label}</span>
       <input
         type="text"
-        inputmode="url"
-        aria-label="Add a source URL"
-        placeholder="Add a link…"
+        aria-label={`Add to ${props.list.label}`}
+        placeholder={props.list.placeholder}
         autocomplete="off"
         spellcheck={false}
         value={text()}
@@ -731,53 +794,46 @@ function UrlField(props: FieldProps & { autofocus?: boolean }) {
           }
         }}
       />
-      <Show when={urls().length > 0}>
-        <ul class="links">
-          <For each={urls()}>
-            {(url) => {
-              const partial = () => url.count < props.data.count;
-              return (
+      <Show when={values().length > 0}>
+        <Show
+          when={props.list.links}
+          fallback={
+            <div class="chips plain-chips">
+              <For each={values()}>
+                {(entry) => (
+                  <span class="chip" classList={{ partial: entry.count < props.data.count }}>
+                    <span class="chip-label">{entry.value}</span>
+                    {controls(entry)}
+                  </span>
+                )}
+              </For>
+            </div>
+          }
+        >
+          <ul class="links">
+            <For each={values()}>
+              {(entry) => (
                 <li>
                   <Show
-                    when={isWebAddress(url.value)}
-                    fallback={<span class="link-text">{url.value}</span>}
+                    when={isWebAddress(entry.value)}
+                    fallback={<span class="link-text">{entry.value}</span>}
                   >
                     <a
                       class="link-text"
-                      href={url.value}
+                      href={entry.value}
                       target="_blank"
                       rel="noopener noreferrer"
-                      title={url.value}
+                      title={entry.value}
                     >
-                      {url.value}
+                      {entry.value}
                     </a>
                   </Show>
-                  <Show when={partial()}>
-                    <span class="chip-count" title={`On ${url.count} of ${props.data.count} selected`}>
-                      ({url.count})
-                    </span>
-                    <button
-                      class="chip-add"
-                      aria-label={`Add ${url.value} to all selected`}
-                      title="Add to all selected"
-                      onClick={() => props.apply({ add_urls: [url.value] })}
-                    >
-                      <Icon name="add" />
-                    </button>
-                  </Show>
-                  <button
-                    class="chip-remove"
-                    aria-label={`Remove ${url.value}`}
-                    title="Remove"
-                    onClick={() => props.apply({ remove_urls: [url.value] })}
-                  >
-                    <Icon name="close" />
-                  </button>
+                  {controls(entry)}
                 </li>
-              );
-            }}
-          </For>
-        </ul>
+              )}
+            </For>
+          </ul>
+        </Show>
       </Show>
     </div>
   );

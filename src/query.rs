@@ -17,7 +17,6 @@ pub const TAG_FIELDS: &[&str] = &[
     "character",
     "language",
     "tags",
-    "identifier",
     "usage_tags",
     "ai_usage_tags",
     "source",
@@ -104,8 +103,9 @@ enum Unit {
 #[derive(Clone, Copy)]
 enum Field {
     Tag(&'static str),
-    /// An entity's source URLs: a list, but of addresses rather than tags.
-    SourceUrl,
+    /// A plain list of values kept in a table of its own (table, column):
+    /// multi-valued like a tag field, but not tags.
+    List(&'static str, &'static str),
     Text(char, &'static str),
     Choice(char, &'static str, &'static [&'static str]),
     Number(char, &'static str, Unit),
@@ -125,7 +125,8 @@ fn lookup(name: &str) -> Option<Field> {
         return Some(Field::Tag(tag));
     }
     Some(match name {
-        "source_url" => Field::SourceUrl,
+        "source_url" => Field::List("source_url", "url"),
+        "identifier" => Field::List("identifier", "value"),
         "title" => Field::Text('e', "title"),
         "description" => Field::Text('e', "description"),
         "ai_description" => Field::Text('e', "ai_description"),
@@ -549,12 +550,12 @@ impl Parser<'_> {
                 allow(STRING)?;
                 return Ok(self.tag_term(tag, op, &values));
             }
-            Field::SourceUrl => {
+            Field::List(table, column) => {
                 allow(STRING)?;
-                let matches = self.string_match("u.url", op, &values);
+                let matches = self.string_match(&format!("l.{column}"), op, &values);
                 format!(
-                    "(EXISTS (SELECT 1 FROM source_url u
-                      WHERE u.entity_id = {} AND {matches}))",
+                    "(EXISTS (SELECT 1 FROM {table} l
+                      WHERE l.entity_id = {} AND {matches}))",
                     self.column('e', "id")
                 )
             }
@@ -909,8 +910,8 @@ impl Parser<'_> {
                 "EXISTS (SELECT 1 FROM entity_tag et JOIN tag t ON t.id = et.tag_id
                  WHERE et.entity_id = {entity} AND t.field = '{tag}')"
             ),
-            Some(Field::SourceUrl) => {
-                format!("EXISTS (SELECT 1 FROM source_url u WHERE u.entity_id = {entity})")
+            Some(Field::List(table, _)) => {
+                format!("EXISTS (SELECT 1 FROM {table} l WHERE l.entity_id = {entity})")
             }
             Some(Field::In) => {
                 format!("EXISTS (SELECT 1 FROM membership m WHERE m.member_id = {entity})")

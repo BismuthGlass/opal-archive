@@ -778,6 +778,20 @@ button.primary {
   border-radius: 4px;
 }
 
+.links .chip-actions {
+  margin-left: 0;
+  border-left: none;
+}
+
+.plain-chips {
+  margin-top: 6px;
+}
+
+/* These chips are not searches, so their label is not a button. */
+span.chip-label:hover {
+  text-decoration: none;
+}
+
 /* "Add field" and its menu. */
 
 .add-field {

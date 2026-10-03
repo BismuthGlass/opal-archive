@@ -57,6 +57,12 @@ struct EditInput {
     /// Source URLs to detach.
     #[serde(default)]
     remove_urls: Vec<String>,
+    /// Identifiers to attach.
+    #[serde(default)]
+    add_identifiers: Vec<String>,
+    /// Identifiers to detach.
+    #[serde(default)]
+    remove_identifiers: Vec<String>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -122,6 +128,13 @@ async fn entity(
         .query_map([id], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     result.insert("source_urls".into(), json!(urls));
+
+    let mut stmt =
+        conn.prepare("SELECT value FROM identifier WHERE entity_id = ?1 ORDER BY value")?;
+    let identifiers = stmt
+        .query_map([id], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    result.insert("identifiers".into(), json!(identifiers));
 
     let file = conn
         .query_row(
@@ -274,6 +287,16 @@ async fn metadata(
         .collect::<rusqlite::Result<Vec<_>>>()?;
 
     let mut stmt = conn.prepare(&format!(
+        "SELECT value, count(*) FROM identifier WHERE entity_id {IN_IDS}
+         GROUP BY value ORDER BY value"
+    ))?;
+    let identifiers = stmt
+        .query_map([&ids], |row| {
+            Ok(json!({ "value": row.get::<_, String>(0)?, "count": row.get::<_, i64>(1)? }))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    let mut stmt = conn.prepare(&format!(
         "SELECT c.entity_id, e.title, c.collection_type, count(*)
          FROM membership m
          JOIN collection c ON c.entity_id = m.collection_id
@@ -301,6 +324,7 @@ async fn metadata(
         "ordered": ordered,
         "tags": tags,
         "source_urls": source_urls,
+        "identifiers": identifiers,
         "memberships": memberships,
     })))
 }
@@ -442,6 +466,14 @@ async fn edit(
         .iter()
         .map(|url| source_url(url))
         .collect::<Result<Vec<_>, _>>()?;
+    let added_identifiers = input
+        .add_identifiers
+        .iter()
+        .map(|value| match value.trim() {
+            "" => Err(ApiError::bad_request("empty identifier")),
+            value => Ok(value),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let ids = ids_json(&input.ids);
 
     let mut conn = state.db.lock().unwrap();
@@ -528,6 +560,21 @@ async fn edit(
         tx.execute(
             &format!("DELETE FROM source_url WHERE entity_id {IN_IDS} AND url = ?2"),
             params![ids, url.trim()],
+        )?;
+    }
+    for value in &added_identifiers {
+        tx.execute(
+            &format!(
+                "INSERT OR IGNORE INTO identifier (entity_id, value)
+                 SELECT id, ?2 FROM entity WHERE id {IN_IDS}"
+            ),
+            params![ids, value],
+        )?;
+    }
+    for value in &input.remove_identifiers {
+        tx.execute(
+            &format!("DELETE FROM identifier WHERE entity_id {IN_IDS} AND value = ?2"),
+            params![ids, value.trim()],
         )?;
     }
     let count: i64 = tx.query_row(

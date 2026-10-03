@@ -82,7 +82,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - A namespace is not a separate thing to create or manage. It exists as long as some tag is written under it.
 - The parts between colons can't be empty and have no spaces around them: `metroid: samus` is stored as `metroid:samus`, and `metroid::samus` is not a valid tag.
 - Namespaces apply within a type. `metroid:samus` as a `character` says nothing about a `metroid` namespace in `tags`.
-- Source URLs are not tags. They are a plain list of web addresses on a file, shown as links, with no namespaces, aliases or suggestions. They can still be searched with `source_url=` and `source_url~`.
+- Source URLs and identifiers are not tags. Each is a plain list on a file, with no namespaces, aliases or suggestions: source URLs are web addresses shown as links, identifiers are shown as chips. They can still be searched, with `source_url=`, `identifier=` and the `~` forms.
 
 ### Searching
 
