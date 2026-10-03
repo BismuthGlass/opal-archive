@@ -379,7 +379,7 @@ function TagChip(
  * suggestions for what is being typed. `initial` starts the box with a
  * type already written.
  */
-function TagsEditor(props: FieldProps & { initial?: string }) {
+export function TagsEditor(props: FieldProps & { initial?: string }) {
   const box = createTagBox(props);
   const untagged = () => orderedTypes().every((field) => !filled(props.data, field));
   return (

@@ -2106,7 +2106,8 @@ kbd {
   border-radius: 8px;
 }
 
-.download-panel p {
+.download-panel > p,
+.download-progress p {
   margin: 0;
 }
 
@@ -2116,8 +2117,9 @@ kbd {
   align-items: center;
 }
 
-.download-panel input[type="text"],
-.download-panel select {
+/* Named by where they sit: the panel's dialogs keep the dialog's own look. */
+.download-row input[type="text"],
+.download-login select {
   padding: 4px 8px;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -2129,18 +2131,20 @@ kbd {
   min-width: 0;
 }
 
-.download-panel button:not(.primary, .link, .chip-remove) {
+.download-row > button:not(.primary),
+.download-login > button:not(.link) {
   padding: 4px 10px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
 }
 
-.download-panel button.primary {
+.download-row > button.primary {
   padding: 5px 14px;
 }
 
-.download-panel button:disabled {
+.download-row > button:disabled,
+.download-login > button:disabled {
   cursor: default;
   opacity: 0.5;
 }
@@ -2212,7 +2216,6 @@ kbd {
   align-items: center;
 }
 
-.download-tags,
 .download-login {
   display: flex;
   flex-wrap: wrap;
@@ -2220,12 +2223,8 @@ kbd {
   align-items: center;
 }
 
-.download-tags input {
-  width: 24ch;
-}
-
-.download-tags .form-error {
-  flex-basis: 100%;
+.download-tags .chip.tinted .chip-label {
+  padding-right: 8px;
 }
 
 .download-tags .chip.tinted .chip-label:hover {

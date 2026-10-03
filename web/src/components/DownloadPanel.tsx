@@ -1,13 +1,14 @@
 import { createResource, createSignal, For, onMount, Show } from "solid-js";
 import * as api from "../api";
-import type { DownloadJob, DownloadState } from "../api";
+import type { Changes, DownloadJob, DownloadState, Metadata } from "../api";
 import { downloadState, loadDownload, startDownload } from "../downloads";
 import type { PanelProps } from "../downloaders";
 import { dateTime, errorMessage, fieldLabel, plural } from "../format";
-import { pillStyle, readTag } from "../tagTypes";
+import { pillStyle } from "../tagTypes";
 import Icon from "./Icon";
 import Modal from "./Modal";
 import { createStoredFlag } from "./Panel";
+import { TagsEditor } from "./Tags";
 
 /** How a download went, or is going, in a sentence. */
 function summary(job: DownloadJob) {
@@ -126,6 +127,7 @@ export default function DownloadPanel(props: PanelProps) {
               </div>
               <BaseTags
                 data={data()}
+                error={error()}
                 onChange={(tags) => attempt(() => api.configureDownload(props.tab, { tags }))}
               />
               <Show when={data().downloader.cookies}>
@@ -212,35 +214,55 @@ function Progress(props: { job: DownloadJob }) {
 }
 
 /**
- * The tags given to everything the tab downloads: the downloader's own
- * source tag, which is always there, and any the user adds. They are typed
- * as anywhere else: `name` for a plain tag, `@cr:name` for a creator.
+ * The tags given to everything the tab downloads, besides the downloader's
+ * own source tag, which is implied. They are shown as pills and edited in
+ * the same editor as a file's tags.
  */
 function BaseTags(props: {
   data: DownloadState;
+  /** What went wrong with the last change, if anything. */
+  error: string | null;
   onChange: (tags: Record<string, string[]>) => void;
 }) {
-  const [text, setText] = createSignal("");
-  const [problem, setProblem] = createSignal<string | null>(null);
+  const [editing, setEditing] = createSignal(false);
   const entries = () =>
     Object.entries(props.data.tags).flatMap(([field, values]) =>
       values.map((value) => ({ field, value })),
     );
 
-  const add = () => {
-    const { field, value } = readTag(text());
-    if (!value) return;
-    if (!field) return setProblem("That is not a tag type. Write @cr:name, @ch:name and so on.");
-    const tags = { ...props.data.tags, [field]: [...(props.data.tags[field] ?? []), value] };
-    setText("");
-    setProblem(null);
+  /** The tab's tags as the editor reads a selection's: one item with them all. */
+  const asSelection = (): Metadata => ({
+    count: 1,
+    files: 0,
+    collections: 0,
+    trashed: 0,
+    scalars: {},
+    collection_type: { value: null, mixed: false },
+    ordered: { value: null, mixed: false },
+    tags: Object.fromEntries(
+      Object.entries(props.data.tags).map(([field, values]) => [
+        field,
+        values.map((value) => ({ value, count: 1, description: null })),
+      ]),
+    ),
+    source_urls: [],
+    identifiers: [],
+    memberships: [],
+  });
+
+  /** The editor's changes, made to the tab's tags. */
+  const apply = (changes: Changes) => {
+    const tags = { ...props.data.tags };
+    const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+    for (const [field, values] of Object.entries(changes.add ?? {})) {
+      const fresh = values.filter((value) => !(tags[field] ?? []).some((had) => same(had, value)));
+      tags[field] = [...(tags[field] ?? []), ...fresh];
+    }
+    for (const [field, values] of Object.entries(changes.remove ?? {})) {
+      tags[field] = (tags[field] ?? []).filter((had) => !values.some((value) => same(had, value)));
+    }
     props.onChange(tags);
   };
-  const remove = (field: string, value: string) =>
-    props.onChange({
-      ...props.data.tags,
-      [field]: props.data.tags[field].filter((other) => other !== value),
-    });
 
   return (
     <>
@@ -250,20 +272,7 @@ function BaseTags(props: {
       >
         Tags to add
       </span>
-      <div class="download-tags">
-        <input
-          type="text"
-          aria-label="Add a tag given to everything downloaded"
-          placeholder="wallpaper, @cr:name…"
-          autocomplete="off"
-          spellcheck={false}
-          value={text()}
-          onInput={(event) => {
-            setText(event.currentTarget.value);
-            setProblem(null);
-          }}
-          onKeyDown={(event) => event.key === "Enter" && add()}
-        />
+      <div class="chips download-tags">
         <For each={entries()}>
           {(entry) => (
             <span
@@ -272,23 +281,31 @@ function BaseTags(props: {
               title={`${fieldLabel(entry.field)}: ${entry.value}`}
             >
               <span class="chip-label">{entry.value}</span>
-              <span class="chip-actions">
-                <button
-                  class="chip-remove"
-                  aria-label={`Remove ${entry.value}`}
-                  title="Remove"
-                  onClick={() => remove(entry.field, entry.value)}
-                >
-                  <Icon name="close" />
-                </button>
-              </span>
             </span>
           )}
         </For>
-        <Show when={problem()}>
-          <p class="form-error">{problem()}</p>
-        </Show>
+        <button
+          class="chip chip-edit"
+          aria-label="Edit the tags to add"
+          title="Add or remove tags given to everything downloaded"
+          onClick={() => setEditing(true)}
+        >
+          <Icon name="add" />
+          <Show when={entries().length === 0}>Tags</Show>
+        </button>
       </div>
+      <Show when={editing()}>
+        <Modal title="Tags to add to everything downloaded" medium onClose={() => setEditing(false)}>
+          <div class="field-editor">
+            <TagsEditor data={asSelection()} apply={apply} />
+          </div>
+          <Show when={props.error}>
+            <p class="form-error" role="alert">
+              {props.error}
+            </p>
+          </Show>
+        </Modal>
+      </Show>
     </>
   );
 }

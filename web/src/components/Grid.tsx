@@ -14,6 +14,7 @@ import {
   searchCount,
   selected,
 } from "../search";
+import { activeTab } from "../tabs";
 import { stats } from "../stats";
 import { openCollection } from "../tabs";
 import { openContextMenu } from "./ContextMenu";
@@ -54,6 +55,13 @@ function badge(item: Item): string | null {
  * whole selection if it is part of one. Holding the drag over a pager
  * button turns the page, so an item can be carried to any other page.
  */
+/** What a tab that holds things says while it holds none, by its kind. */
+const EMPTY: Record<string, string> = {
+  upload: "Nothing uploaded in this tab yet.",
+  download: "Nothing downloaded in this tab yet.",
+  collection: "This collection is empty.",
+};
+
 export default function Grid(props: { onOpen: (index: number) => void }) {
   let scroller!: HTMLDivElement;
   const [width, setWidth] = createSignal(0);
@@ -221,7 +229,7 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
           {stats()?.files === 0 && stats()?.collections === 0
             ? "The library is empty. Open an upload tab with +, or drop files here."
             : search.scope !== null && search.query === ""
-              ? "Nothing uploaded in this tab yet."
+              ? EMPTY[activeTab()?.kind ?? "upload"]
               : "No results."}
         </p>
       </Show>
