@@ -1,5 +1,6 @@
 import { createEffect, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import CollectionDialog from "./components/CollectionDialog";
+import ContextMenu, { contextMenuOpen } from "./components/ContextMenu";
 import Grid from "./components/Grid";
 import { modalOpen } from "./components/Modal";
 import QuickTagModal from "./components/QuickTagModal";
@@ -104,6 +105,8 @@ export default function App() {
   const onKeyDown = (event: KeyboardEvent) => {
     const target = event.target as HTMLElement;
     if (target.matches("input, textarea, select, [contenteditable]") || modalOpen()) return;
+    // The menu from a right click has the keyboard while it is open.
+    if (contextMenuOpen()) return;
 
     // After the quick-rate key, the next key is the score, or calls it off.
     const rated = rating();
@@ -265,6 +268,7 @@ export default function App() {
           />
         )}
       </Show>
+      <ContextMenu />
       <Show when={toast()}>
         <div class="toast" role="status">
           {toast()}

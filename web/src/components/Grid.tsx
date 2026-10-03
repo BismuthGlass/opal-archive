@@ -16,6 +16,7 @@ import {
 } from "../search";
 import { stats } from "../stats";
 import { openCollection } from "../tabs";
+import { openContextMenu } from "./ContextMenu";
 import Icon from "./Icon";
 
 // Layout constants, in pixels. Every tile has the same size, which is what
@@ -262,6 +263,16 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                   });
                 }}
                 onDblClick={() => item() && activate(index, item()!)}
+                onContextMenu={(event) => {
+                  const current = item();
+                  if (!current) return;
+                  // A right click acts on the selection if the tile is part
+                  // of it, and otherwise on the tile alone.
+                  if (!selected().has(current.id)) {
+                    clickSelect(index, current.id, { shift: false, toggle: false });
+                  }
+                  openContextMenu(event, current);
+                }}
               >
                 <div class="thumb" style={{ height: `${tile()}px` }}>
                   <Show when={item()}>

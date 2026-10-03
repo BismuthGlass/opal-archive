@@ -280,6 +280,54 @@ button.primary {
   overflow-y: auto;
 }
 
+/* The menu a right click on the grid brings up. */
+.context-menu {
+  position: fixed;
+  z-index: 35;
+  min-width: 170px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.25);
+}
+
+.context-menu-title {
+  padding: 3px 8px 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.context-menu button {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 5px 10px 5px 6px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 5px;
+}
+
+.context-menu button:hover,
+.context-menu button:focus-visible {
+  background: var(--bg);
+  outline: none;
+}
+
+.context-menu button.danger {
+  color: var(--danger-text);
+}
+
+.context-menu .menu-divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
 /* Dragging tiles to reorder them. */
 
 .tile {

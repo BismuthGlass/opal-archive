@@ -136,38 +136,6 @@ export default function Sidebar(props: { onGroup: () => void }) {
   const set = (field: string) => (value: string | number | null) =>
     apply({ set: { [field]: value } });
 
-  /** Whether everything selected is already in the trash. */
-  const allTrashed = () => meta() !== undefined && meta()!.trashed === meta()!.count;
-
-  /** Trashes, restores or deletes the selection. */
-  const dispose = async (action: (ids: number[]) => Promise<unknown>, gone = false) => {
-    try {
-      await action(ids());
-      // Trashed and restored items stay listed, and selected; deleted ones
-      // are gone.
-      if (gone) clearSelection();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-    changed();
-  };
-  // Deleting is two steps: to the trash, and from there for good.
-  const trash = () => dispose(api.trashEntities);
-  const restore = () => dispose(api.restoreEntities);
-  const remove = () => {
-    const count = ids().length;
-    if (confirm(`Delete ${plural(count, "item")} for good? This cannot be undone.`)) {
-      dispose(api.deleteEntities, true);
-    }
-  };
-
-  const download = () => {
-    const file = single()?.file;
-    // One file downloads as itself; anything else as a zip.
-    if (file) location.href = api.contentUrl(ids()[0], true);
-    else api.exportZip(ids());
-  };
-
   const leave = async (collection: number) => {
     try {
       await api.changeMembers(collection, { remove: ids() });
@@ -190,30 +158,6 @@ export default function Sidebar(props: { onGroup: () => void }) {
           </>
         )}
       </Show>
-      <div class="actions">
-        <button onClick={download}>
-          <Icon name="download" />
-          Download
-        </button>
-        <Show
-          when={allTrashed()}
-          fallback={
-            <button class="danger" title="Move to the trash" onClick={trash}>
-              <Icon name="delete-outline" />
-              Trash
-            </button>
-          }
-        >
-          <button title="Take out of the trash" onClick={restore}>
-            <Icon name="restore-from-trash-outline" />
-            Restore
-          </button>
-          <button class="danger" title="Delete for good" onClick={remove}>
-            <Icon name="delete-forever-outline" />
-            Delete
-          </button>
-        </Show>
-      </div>
       <Show when={meta()}>
         {(data) => <Collections data={data()} onAdd={props.onGroup} onLeave={leave} />}
       </Show>
