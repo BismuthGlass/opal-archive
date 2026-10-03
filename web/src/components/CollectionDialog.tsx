@@ -1,7 +1,7 @@
 import { createResource, createSignal, For, Show } from "solid-js";
 import * as api from "../api";
 import { COLLECTION_TYPES } from "../api";
-import { plural, quoteValue } from "../format";
+import { errorMessage, plural, quoteValue } from "../format";
 import { addedTo, changed } from "../search";
 import { tabs } from "../tabs";
 import Modal from "./Modal";
@@ -61,7 +61,7 @@ export default function CollectionDialog(props: {
       changed();
       props.onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     }
   };
 

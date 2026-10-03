@@ -212,9 +212,6 @@ export type TagEntry = {
 
 export const suggestTags = (field: string, q: string) =>
   request<Suggestion[]>("GET", `/tags?${params({ field, q })}`);
-/** Renames a namespace on every tag under it; an empty `to` removes it. */
-export const renameNamespace = (field: string, from: string, to: string) =>
-  request<{ renamed: number }>("POST", "/tags/rename", { field, from, to, namespace: true });
 /** Renames a tag; if a tag named `to` exists the two are merged. */
 export const renameTag = (field: string, from: string, to: string) =>
   request<{ renamed: number }>("POST", "/tags/rename", { field, from, to });

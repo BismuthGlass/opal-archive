@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import * as api from "./api";
+import { errorMessage } from "./format";
 import type { Tab, TabKind } from "./api";
 
 // Tabs live on the server; which one is active is remembered per browser.
@@ -37,7 +38,7 @@ async function guard(action: () => Promise<void>) {
     await action();
     setError(null);
   } catch (err) {
-    setError(err instanceof Error ? err.message : String(err));
+    setError(errorMessage(err));
   }
 }
 

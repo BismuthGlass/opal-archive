@@ -1,5 +1,6 @@
 import { createStore } from "solid-js/store";
 import * as api from "./api";
+import { errorMessage } from "./format";
 import { addedTo } from "./search";
 import { activeTab, open } from "./tabs";
 
@@ -56,7 +57,7 @@ async function run() {
       );
       setUploads(result.duplicate ? "duplicates" : "added", (n) => n + 1);
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
+      const reason = errorMessage(err);
       setUploads("failures", (list) => [...list, { name: file.name, reason }]);
     }
     setUploads("done", (n) => n + 1);

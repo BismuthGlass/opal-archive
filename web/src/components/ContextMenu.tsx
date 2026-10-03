@@ -1,7 +1,7 @@
 import { createResource, createSignal, onCleanup, onMount, Show } from "solid-js";
 import * as api from "../api";
 import type { Item } from "../api";
-import { plural } from "../format";
+import { errorMessage, plural } from "../format";
 import { changed, clearSelection, moveItems, removeFromView, search, selected } from "../search";
 import { showToast } from "../toast";
 import Icon from "./Icon";
@@ -56,7 +56,7 @@ function Menu(props: { at: Opened }) {
       // are gone.
       if (gone) clearSelection();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err));
+      showToast(errorMessage(err));
     }
     changed();
   };
@@ -74,7 +74,7 @@ function Menu(props: { at: Opened }) {
   /** Does something to the view only, not to the entities. */
   const arrange = (action: () => Promise<void>) => {
     close();
-    action().catch((err) => showToast(err instanceof Error ? err.message : String(err)));
+    action().catch((err) => showToast(errorMessage(err)));
   };
 
   const remove = () => {

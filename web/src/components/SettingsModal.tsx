@@ -1,7 +1,7 @@
 import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { ACTIONS, bind, isDefault, keyFor, keyLabel, keyOf } from "../hotkeys";
 import type { Action } from "../hotkeys";
-import { fieldLabel } from "../format";
+import { errorMessage, fieldLabel } from "../format";
 import {
   isCustom,
   isCustomOrder,
@@ -31,7 +31,7 @@ function TagTypes() {
   const [dragging, setDragging] = createSignal<string | null>(null);
   const order = () => dragOrder() ?? orderedTypes();
 
-  const report = (err: unknown) => setError(err instanceof Error ? err.message : String(err));
+  const report = (err: unknown) => setError(errorMessage(err));
 
   // A row is dragged by its handle. It moves in the list as the pointer
   // passes the other rows, and the order is saved on release.
@@ -166,7 +166,7 @@ function Hotkeys() {
     try {
       setError(await bind(action, key));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     }
   };
 

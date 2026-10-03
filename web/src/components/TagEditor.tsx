@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, Show } from "solid-js";
 import * as api from "../api";
 import type { TagEntry } from "../api";
-import { fieldLabel, plural } from "../format";
+import { errorMessage, fieldLabel, plural } from "../format";
 import { changed } from "../search";
 import { pillStyle, prefixOf, readTag, typesStarting } from "../tagTypes";
 import Icon from "./Icon";
@@ -127,7 +127,7 @@ export default function TagEditor(props: { onClose: () => void }) {
       await action();
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     }
     await refetch();
     changed();

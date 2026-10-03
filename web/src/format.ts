@@ -53,3 +53,6 @@ export function dateTime(timestamp: string): string {
   const day = `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
   return `${day} ${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`;
 }
+
+/** What went wrong, in words, whatever was thrown. */
+export const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));

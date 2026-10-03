@@ -7,14 +7,15 @@ import Icon from "./components/Icon";
 import { createStoredFlag, Module } from "./components/Panel";
 import QueryBar from "./components/QueryBar";
 import SettingsModal from "./components/SettingsModal";
-import Sidebar, { TagsModal } from "./components/Sidebar";
+import Sidebar from "./components/Sidebar";
 import TabBar from "./components/TabBar";
+import { TagsModal } from "./components/Tags";
 import TagEditor from "./components/TagEditor";
 import Toolbar from "./components/Toolbar";
 import { DropTarget, UploadBox, UploadPanel } from "./components/Upload";
 import Viewer from "./components/Viewer";
 import * as api from "./api";
-import { plural } from "./format";
+import { errorMessage, plural } from "./format";
 import { actionFor } from "./hotkeys";
 import {
   PAGE,
@@ -105,7 +106,7 @@ export default function App() {
         score === null ? `Cleared the score of ${target.name}` : `Rated ${target.name} ${score}`,
       );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err));
+      showToast(errorMessage(err));
     }
     changed();
   };
