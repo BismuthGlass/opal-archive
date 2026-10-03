@@ -12,7 +12,7 @@ import {
 import * as api from "../api";
 import { AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS, FLAT_TAG_FIELDS, TAG_FIELDS } from "../api";
 import type { Changes, Metadata, Scalar } from "../api";
-import { duration, fieldLabel, fileSize, plural, tagQuery } from "../format";
+import { dateTime, duration, fieldLabel, fileSize, plural, tagQuery } from "../format";
 import { changed, clearSelection, dataVersion, selected } from "../search";
 import { open as openTab, openCollection } from "../tabs";
 import Icon from "./Icon";
@@ -270,7 +270,7 @@ export default function Sidebar(props: { onGroup: () => void }) {
                       )}
                     </Show>
                     <dt>Added</dt>
-                    <dd>{current().date_added.slice(0, 10)}</dd>
+                    <dd title={current().date_added}>{dateTime(current().date_added)}</dd>
                     <dt>ID</dt>
                     <dd>{current().id}</dd>
                   </>

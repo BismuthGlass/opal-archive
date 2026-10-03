@@ -41,3 +41,15 @@ export function tagQuery(field: string, value: string, under = false): string {
   }
   return field === "tags" ? term : `${field}=${term}`;
 }
+
+/**
+ * A stored timestamp (ISO 8601, UTC) as local date and time to the second,
+ * `2026-10-03 14:20:37`.
+ */
+export function dateTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  const two = (n: number) => String(n).padStart(2, "0");
+  const day = `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
+  return `${day} ${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`;
+}

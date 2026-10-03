@@ -40,6 +40,8 @@ Thumbnails should also be stored for each file (in a separate dir).
 
 The metastasis v1.0 format describes a system using sidecar files. This should not be the case in our application. Instead the metadata should be stored in the SQLite database. Fields should be appropriately constrained to possible values, and no custom fields are allowed.
 
+Every file and collection records when it was added to the library, as a date and time to the second in ISO 8601 format, in UTC: `2026-10-03T12:20:37Z`. The application sets it; it is not editable. The interface shows it in local time.
+
 Collections should behave as their own entities that may also be categorized and searched in the same way as files. The hierarchical directory concept of categories does not apply, as the system isn't directory based. Groups can still belong to other groups, however.
 
 There is no need to support injesting existing sidecar files on file upload for now. We will also support exporting sidecar files, but that's in the future.
