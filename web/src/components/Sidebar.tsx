@@ -155,19 +155,34 @@ export default function Sidebar(props: {
 
   return (
     <>
+      {/* From the top: the score, the collections, then the tags, the
+          aggregated ones first and each other type under them. What is
+          about the file itself comes after. */}
       <Show when={meta()}>
         {(data) => (
           <>
             <Stars scalar={data().scalars.score} onChange={set("score")} />
-            {/* The aggregated tags, straight under the score. */}
+            <Collections data={data()} onAdd={() => props.onGroup(ids())} onLeave={leave} />
             <Show when={aggregatedTypes().length > 0}>
               <AggregatedTags data={data()} apply={apply} onEdit={() => editTags()} />
             </Show>
+            <div class="tag-sections">
+              <For each={orderedTypes().filter((field) => !tagType(field).aggregate)}>
+                {(field) => (
+                  <Show when={filled(data(), field)}>
+                    <TagField
+                      field={field}
+                      data={data()}
+                      apply={apply}
+                      // The editor opens ready for a tag of this type.
+                      onEdit={() => editTags(`@${prefixOf(field)}:`)}
+                    />
+                  </Show>
+                )}
+              </For>
+            </div>
           </>
         )}
-      </Show>
-      <Show when={meta()}>
-        {(data) => <Collections data={data()} onAdd={() => props.onGroup(ids())} onLeave={leave} />}
       </Show>
       <Show when={error()}>
         <p class="form-error dismissible" role="alert">
@@ -285,19 +300,6 @@ export default function Sidebar(props: {
                 )}
               </Show>
             </dl>
-            <For each={orderedTypes().filter((field) => !tagType(field).aggregate)}>
-              {(field) => (
-                <Show when={filled(data(), field)}>
-                  <TagField
-                    field={field}
-                    data={data()}
-                    apply={apply}
-                    // The editor opens ready for a tag of this type.
-                    onEdit={() => editTags(`@${prefixOf(field)}:`)}
-                  />
-                </Show>
-              )}
-            </For>
             <For each={PLAIN_LISTS}>
               {(list) => (
                 <Show when={list.values(data()).length > 0}>

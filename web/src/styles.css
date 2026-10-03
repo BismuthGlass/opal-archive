@@ -876,6 +876,19 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
   margin-top: 10px;
 }
 
+/* The other tag types, each in its section, under the aggregated tags. */
+.tag-sections {
+  margin: -4px 0 12px;
+}
+
+.tag-sections:empty {
+  display: none;
+}
+
+.tag-sections .field:first-child {
+  margin-top: 0;
+}
+
 /* The aggregated tags in the panel, under the score. */
 .aggregate {
   margin-bottom: 12px;
