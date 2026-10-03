@@ -70,7 +70,9 @@ fn api() -> Router<AppState> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let data_dir = PathBuf::from(env_or("TAGUTILS_DATA", "data"));
+    // Made absolute: downloaders are handed paths under the data directory,
+    // and run from folders of their own.
+    let data_dir = std::path::absolute(env_or("TAGUTILS_DATA", "data"))?;
     let web_dir = PathBuf::from(env_or("TAGUTILS_WEB", "web/dist"));
     let addr: SocketAddr = env_or("TAGUTILS_ADDR", "127.0.0.1:7878").parse()?;
 
@@ -89,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         storage,
         thumbnails,
         tmp,
-        downloaders: PathBuf::from(env_or("TAGUTILS_DOWNLOADERS", "downloaders")),
+        downloaders: std::path::absolute(env_or("TAGUTILS_DOWNLOADERS", "downloaders"))?,
         cookies: data_dir.join("cookies"),
         downloads: Default::default(),
     };
