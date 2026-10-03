@@ -1095,13 +1095,31 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
   background: var(--bg);
 }
 
-/* The editor: room below the box for its suggestions. */
-.field-editor {
-  min-height: 260px;
+/* The editor of one field keeps its height whatever it holds: the values
+   scroll, under a box whose suggestions have room to open. */
+.field-editor .field {
+  display: flex;
+  flex-direction: column;
+  height: 340px;
+  margin-top: 0;
 }
 
-.field-editor .field {
-  margin-top: 0;
+.field-editor .field > * {
+  flex: none;
+}
+
+.field-editor .tag-groups,
+.field-editor .chips,
+.field-editor .links {
+  flex: 1 1 0;
+  min-height: 0;
+  align-content: flex-start;
+  overflow-y: auto;
+}
+
+.field-editor .tag-groups .chips {
+  flex: none;
+  overflow: visible;
 }
 
 .field-editor .suggest + .tag-groups,
@@ -1474,6 +1492,11 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
   padding: 16px;
 }
 
+/* A modal of fixed height: what is inside scrolls, the modal stays put. */
+.dialog.tall .dialog-box {
+  height: min(680px, calc(100dvh - 64px));
+}
+
 .dialog-header {
   display: flex;
   flex: none;
@@ -1515,7 +1538,6 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
   gap: 20px;
   /* A long section scrolls inside the pane, not the whole modal. */
   min-height: 0;
-  height: 520px;
 }
 
 .settings-nav {
@@ -1685,10 +1707,10 @@ kbd {
 /* The list of tags beside the details of the one selected. */
 .tag-editor {
   display: flex;
+  /* Takes what is left of the modal's fixed height. */
   flex: 1;
   gap: 12px;
   min-height: 0;
-  height: 60vh;
   margin-top: 10px;
 }
 
@@ -1852,7 +1874,11 @@ kbd {
   /* Too narrow for two columns: the details go under the list. */
   .tag-editor {
     flex-direction: column;
-    height: 75vh;
+  }
+
+  .tag-list,
+  .tag-details {
+    flex-basis: 50%;
   }
 }
 

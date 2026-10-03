@@ -233,7 +233,7 @@ function Hotkeys() {
 export default function SettingsModal(props: { onClose: () => void }) {
   const [section, setSection] = createSignal<(typeof SECTIONS)[number]["id"]>(SECTIONS[0].id);
   return (
-    <Modal title="Settings" wide onClose={props.onClose}>
+    <Modal title="Settings" wide tall onClose={props.onClose}>
       <div class="settings">
         <nav class="settings-nav" aria-label="Settings sections">
           <For each={SECTIONS}>

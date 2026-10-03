@@ -177,7 +177,7 @@ export default function TagEditor(props: { onClose: () => void }) {
   };
 
   return (
-    <Modal title="Tags" wide onClose={props.onClose}>
+    <Modal title="Tags" wide tall onClose={props.onClose}>
       <div class="type-picker" role="radiogroup" aria-label="Tag type">
         <For each={orderedTypes()}>
           {(type) => (

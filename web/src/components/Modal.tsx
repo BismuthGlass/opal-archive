@@ -16,6 +16,11 @@ export default function Modal(props: {
   title: string;
   /** For content that needs room, such as a list with actions. */
   wide?: boolean;
+  /**
+   * A fixed height, for content that comes and goes (lists, panes): the
+   * modal stays the size it is and the content scrolls inside it.
+   */
+  tall?: boolean;
   onClose: () => void;
   children: JSX.Element;
 }) {
@@ -31,7 +36,7 @@ export default function Modal(props: {
     <dialog
       ref={dialog}
       class="dialog"
-      classList={{ wide: props.wide }}
+      classList={{ wide: props.wide, tall: props.tall }}
       onClose={props.onClose}
       // The dialog element itself is only hit through its backdrop.
       onClick={(event) => event.target === dialog && dialog.close()}
