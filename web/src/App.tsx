@@ -72,7 +72,6 @@ export default function App() {
         >
           <Icon name={panelOpen() ? "left-panel-close-outline" : "left-panel-open-outline"} />
         </button>
-        <span class="brand">tagutils</span>
         <TabBar />
         <button
           class="icon-button"

@@ -77,7 +77,7 @@ a {
   height: 100dvh;
 }
 
-/* Top bar: brand and the tab strip. */
+/* Top bar: the tab strip between the panel toggle and the tools. */
 
 .topbar {
   display: flex;
@@ -85,12 +85,6 @@ a {
   gap: 12px;
   padding: 6px 12px 0;
   border-bottom: 1px solid var(--border);
-}
-
-.brand {
-  padding-bottom: 7px;
-  font-weight: 600;
-  color: var(--muted);
 }
 
 .tabstrip {
