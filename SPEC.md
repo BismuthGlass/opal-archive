@@ -105,6 +105,11 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - The settings also say which types are aggregated. The aggregated types share one list on a file, told apart only by colour; each of the others has a section of its own.
 - By default the types that describe the work are aggregated (tags, creator, character, source work, person, genre, style, medium) and the rest are not (flaws, language, source, usage tags, AI usage tags).
 
+### Adding tags
+
+- What is typed into the tag editor is a plain tag, unless a prefix says otherwise. Each type has a two-letter prefix: `@cr ` for creator, `@ch ` character, `@sw ` source work, `@pe ` person, `@ge ` genre, `@st ` style, `@me ` medium, `@fl ` flaws, `@la ` language, `@so ` source, `@us ` usage tags, `@ai ` AI usage tags, and `@ta ` for plain tags.
+- Typing the prefix and a space switches the editor to that type: the prefix leaves the text box, the type on show changes, and suggestions come from that type. It stays in force until another prefix is typed.
+
 ### Aliases
 
 - A tag can be an alias of another tag of the same type. The alias defers to that tag: wherever the alias is added to a file or searched for, the tag it defers to is used instead.

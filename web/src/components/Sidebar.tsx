@@ -14,7 +14,7 @@ import { AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS, TAG_FIELDS } from "../ap
 import type { Changes, Metadata, Scalar } from "../api";
 import { dateTime, duration, fieldLabel, fileSize, plural, tagQuery } from "../format";
 import { changed, clearSelection, dataVersion, selected } from "../search";
-import { aggregatedTypes, pillStyle, tagType } from "../tagTypes";
+import { aggregatedTypes, pillStyle, prefixOf, tagType, typeOfPrefix } from "../tagTypes";
 import { open as openTab, openCollection } from "../tabs";
 import Icon from "./Icon";
 import Modal from "./Modal";
@@ -974,8 +974,15 @@ function Namespace(props: { field: string; name: string; rename?: RenameNamespac
 
 type RenameNamespace = (field: string, from: string, to: string) => void;
 
-/** The box that adds tags to one field, with suggestions while typing. */
-function TagInput(props: FieldProps & { field: string }) {
+/**
+ * The box that adds tags to one field, with suggestions while typing.
+ *
+ * With `onType`, the field can be changed from the box itself: `@cr ` at
+ * the start switches to creators, and so on for each type's prefix. The
+ * prefix leaves the box once it has been understood, and what follows is a
+ * tag of that type. While only `@…` is typed the suggestions are the types.
+ */
+function TagInput(props: FieldProps & { field: string; onType?: (field: string) => void }) {
   const [text, setText] = createSignal("");
   const [open, setOpen] = createSignal(false);
   /** Highlighted suggestion; -1 means the typed text itself. */
@@ -983,12 +990,23 @@ function TagInput(props: FieldProps & { field: string }) {
   const values = () => props.data.tags[props.field] ?? [];
   const listId = `suggest-${props.field}`;
 
+  /** The letters typed after an @, while a type is still being named. */
+  const naming = () => (props.onType && text().startsWith("@") ? text().slice(1).toLowerCase() : null);
+  const types = createMemo(() => {
+    const typed = naming();
+    if (typed === null) return [];
+    return TAG_FIELDS.filter(
+      (field) => prefixOf(field).startsWith(typed) || field.replaceAll("_", " ").startsWith(typed),
+    );
+  });
+
   // With nothing typed this returns the field's most used values.
   const [fetched] = createResource(
-    () => (open() ? { field: props.field, typed: text().trim() } : null),
+    () => (open() && naming() === null ? { field: props.field, typed: text().trim() } : null),
     ({ field, typed }) => api.suggestTags(field, typed),
   );
   const suggestions = createMemo(() => {
+    if (naming() !== null) return [];
     // Values the whole selection already has are not worth offering.
     const complete = new Set(
       values()
@@ -999,6 +1017,8 @@ function TagInput(props: FieldProps & { field: string }) {
       .filter((option) => option.namespace || !complete.has(option.value.toLowerCase()))
       .slice(0, MAX_SUGGESTIONS);
   });
+  /** How many rows the list has, of whichever kind it is showing. */
+  const rows = () => (naming() !== null ? types().length : suggestions().length);
 
   const add = (value: string) => {
     const trimmed = value.trim();
@@ -1018,8 +1038,25 @@ function TagInput(props: FieldProps & { field: string }) {
     }
   };
 
+  /** Goes over to another type, keeping what was typed after its prefix. */
+  const switchTo = (field: string, rest = "") => {
+    props.onType?.(field);
+    setText(rest);
+    setActive(-1);
+  };
+
+  const onInput = (typed: string) => {
+    setOpen(true);
+    setActive(-1);
+    // "@cr " at the start: a prefix, finished by the space.
+    const prefixed = props.onType ? /^@(\S+)\s(.*)$/.exec(typed) : null;
+    const field = prefixed && typeOfPrefix(prefixed[1]);
+    if (field) switchTo(field, prefixed![2]);
+    else setText(typed);
+  };
+
   const onKeyDown = (event: KeyboardEvent) => {
-    const count = suggestions().length;
+    const count = rows();
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setOpen(true);
@@ -1029,11 +1066,21 @@ function TagInput(props: FieldProps & { field: string }) {
       setActive((i) => (i < 0 ? count - 1 : i - 1));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      if (active() >= 0) pick(suggestions()[active()]);
-      else add(text());
+      if (naming() !== null) {
+        // An unfinished prefix names a type; it is never a tag.
+        const field = types()[Math.max(0, active())];
+        if (field) switchTo(field);
+      } else if (active() >= 0) {
+        pick(suggestions()[active()]);
+      } else {
+        add(text());
+      }
+    } else if (event.key === "Backspace" && text() === "" && props.field !== "tags") {
+      // Deleting past the start goes back to plain tags.
+      props.onType?.("tags");
     } else if (event.key === "Escape") {
       // With suggestions showing, Escape puts them away and no more.
-      if (open() && suggestions().length > 0) event.preventDefault();
+      if (open() && count > 0) event.preventDefault();
       setOpen(false);
       setActive(-1);
     }
@@ -1046,17 +1093,13 @@ function TagInput(props: FieldProps & { field: string }) {
         role="combobox"
         autofocus
         aria-label={`Add to ${fieldLabel(props.field)}`}
-        aria-expanded={open() && suggestions().length > 0}
+        aria-expanded={open() && rows() > 0}
         aria-controls={listId}
         aria-autocomplete="list"
         autocomplete="off"
-        placeholder="Add…"
+        placeholder={props.onType ? `Add to ${fieldLabel(props.field)}, or @ for another type` : "Add…"}
         value={text()}
-        onInput={(e) => {
-          setText(e.currentTarget.value);
-          setOpen(true);
-          setActive(-1);
-        }}
+        onInput={(e) => onInput(e.currentTarget.value)}
         onFocus={() => setOpen(true)}
         onBlur={() => {
           setOpen(false);
@@ -1064,8 +1107,24 @@ function TagInput(props: FieldProps & { field: string }) {
         }}
         onKeyDown={onKeyDown}
       />
-      <Show when={open() && suggestions().length > 0}>
+      <Show when={open() && rows() > 0}>
         <ul class="suggestions" id={listId} role="listbox">
+          <For each={types()}>
+            {(field, i) => (
+              <li
+                role="option"
+                aria-selected={i() === active()}
+                classList={{ active: i() === active() }}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => switchTo(field)}
+              >
+                <span class="chip tinted type-sample" style={pillStyle(field)}>
+                  {fieldLabel(field)}
+                </span>
+                <span class="suggestion-count">@{prefixOf(field)}</span>
+              </li>
+            )}
+          </For>
           <For each={suggestions()}>
             {(option, i) => (
               <li
@@ -1234,12 +1293,20 @@ function TagField(props: FieldProps & ListMode & { field: string; rename: Rename
 /**
  * The tags of every aggregated type in one list, told apart by the colour
  * of their pills. In the panel the list has no heading, and ends in the
- * button that opens its editor. In the editor, a row of the types picks
- * which one what is typed goes to.
+ * button that opens its editor. In the editor what is typed is a plain tag
+ * unless a type is chosen, with its prefix (`@cr `) or from the row of
+ * types above the box, which also shows the one in force.
  */
 function AggregatedTags(props: FieldProps & ListMode) {
-  const types = createMemo(aggregatedTypes);
-  const [target, setTarget] = createSignal(types()[0]);
+  /** The type what is typed goes to: plain tags, until a prefix says otherwise. */
+  const [target, setTarget] = createSignal<string>("tags");
+  // In the editor a type reached by its prefix is listed too, even if it
+  // is not one of the aggregated ones, so that what is added can be seen.
+  const types = createMemo(() =>
+    TAG_FIELDS.filter(
+      (field) => tagType(field).aggregate || (props.editing && field === target()),
+    ),
+  );
   const entries = () =>
     types().flatMap((field) => (props.data.tags[field] ?? []).map((tag) => ({ field, tag })));
 
@@ -1254,17 +1321,17 @@ function AggregatedTags(props: FieldProps & ListMode) {
                 role="radio"
                 aria-checked={field === target()}
                 style={pillStyle(field)}
+                // Not on mouse down, so the box keeps the cursor.
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => setTarget(field)}
               >
                 {fieldLabel(field)}
+                <span class="type-prefix">@{prefixOf(field)}</span>
               </button>
             )}
           </For>
         </div>
-        {/* Keyed, so changing the type starts the box and its suggestions afresh. */}
-        <Show when={target()} keyed>
-          {(field) => <TagInput field={field} data={props.data} apply={props.apply} />}
-        </Show>
+        <TagInput field={target()} data={props.data} apply={props.apply} onType={setTarget} />
       </Show>
       <div class="chips aggregate-chips">
         <For each={entries()}>

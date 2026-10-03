@@ -32,6 +32,32 @@ const DEFAULTS: Record<(typeof TAG_FIELDS)[number], TagType> = {
   ai_usage_tags: { bg: "#d8d5e8", fg: "#2e2949", aggregate: false }, // machine grey
 };
 
+/**
+ * What to type, after an @, to say which type a tag is: `@cr name` is a
+ * creator. Two letters each.
+ */
+export const TAG_PREFIXES: Record<(typeof TAG_FIELDS)[number], string> = {
+  tags: "ta",
+  creator: "cr",
+  character: "ch",
+  source_work: "sw",
+  person: "pe",
+  genre: "ge",
+  style: "st",
+  medium: "me",
+  flaws: "fl",
+  language: "la",
+  source: "so",
+  usage_tags: "us",
+  ai_usage_tags: "ai",
+};
+
+export const prefixOf = (field: string) => TAG_PREFIXES[field as keyof typeof TAG_PREFIXES];
+
+/** The type a prefix stands for, without its @. */
+export const typeOfPrefix = (prefix: string): string | undefined =>
+  TAG_FIELDS.find((field) => TAG_PREFIXES[field] === prefix.toLowerCase());
+
 export const defaultTagType = (field: string): TagType =>
   DEFAULTS[field as keyof typeof DEFAULTS] ?? DEFAULTS.tags;
 
