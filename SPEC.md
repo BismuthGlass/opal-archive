@@ -97,7 +97,6 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 
 - When typing a tag, suggestions complete one level at a time: first the namespaces, then what is inside the chosen one. A bare name typed at the top level also suggests tags of that name inside namespaces.
 - Tags on a file are shown grouped by namespace, so a long list stays readable.
-- A namespace can be renamed or merged as a whole, which renames every tag under it.
 
 ### Showing tags
 

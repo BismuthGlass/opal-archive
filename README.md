@@ -99,7 +99,7 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `POST /tags/describe`            | `{field, value, description}` → set a tag's description; empty clears it |
 | `POST /tags/delete`              | `{field, value}` → delete a tag nothing carries                |
 | `GET /tags/all?field=`           | Every tag of a field with its aliases, and how many alias uses await updating |
-| `POST /tags/rename`              | `{field, from, to}` → rename a tag, merging it into `to` if that exists. With `namespace: true`, rename a namespace on every tag under it; an empty `to` removes it |
+| `POST /tags/rename`              | `{field, from, to}` → rename a tag, merging it into `to` if that exists |
 | `POST /tags/alias`               | `{field, alias, target}` → make `alias` stand for `target`; an empty `target` removes the alias |
 | `POST /tags/aliases/apply`       | Replace aliases still on entities with the tags they stand for |
 | `POST /collections`              | `{collection_type, title, members, ordered, parent}` → new collection, put inside `parent` if given. Without a title it is named after its type (`Sequence`, `User Collection`…) |

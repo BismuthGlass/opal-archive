@@ -664,42 +664,6 @@ async fn renaming_a_tag_merges_into_one_of_that_name() {
 }
 
 #[tokio::test]
-async fn a_namespace_is_renamed_with_everything_under_it() {
-    let api = Api::new();
-    let a = api.file("a.png");
-    let rename = |from: &str, to: &str| json!({ "field": "tags", "from": from, "to": to, "namespace": true });
-    api.edit(
-        &[a],
-        json!({ "add": { "tags": ["art:ink", "art:pen:fine", "artist", "ink"] } }),
-    )
-    .await;
-
-    assert_eq!(
-        api.post("/tags/rename", rename("art", "medium")).await["renamed"],
-        2
-    );
-    assert_eq!(
-        api.tags("tags").await,
-        [
-            tag("artist", 1),
-            tag("ink", 1),
-            tag("medium:ink", 1),
-            tag("medium:pen:fine", 1)
-        ]
-    );
-    // Moved out of the namespace, a tag joins one already there.
-    api.post("/tags/rename", rename("medium", "")).await;
-    assert_eq!(
-        api.tags("tags").await,
-        [tag("artist", 1), tag("ink", 1), tag("pen:fine", 1)]
-    );
-    assert_eq!(
-        api.refused("/tags/rename", rename("art", "x")).await,
-        StatusCode::NOT_FOUND
-    );
-}
-
-#[tokio::test]
 async fn aliases_wait_to_be_applied() {
     let api = Api::new();
     let (a, b) = (api.file("a.png"), api.file("b.png"));

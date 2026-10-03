@@ -67,14 +67,8 @@ struct AliasInput {
 #[derive(Deserialize)]
 struct RenameInput {
     field: String,
-    /// The tag to rename, or the namespace, without a trailing colon.
     from: String,
-    /// Its new name. For a namespace, empty moves its tags out of it.
-    #[serde(default)]
     to: String,
-    /// Whether `from` names a namespace rather than a tag.
-    #[serde(default)]
-    namespace: bool,
 }
 
 pub fn router() -> Router<AppState> {
@@ -387,56 +381,8 @@ fn rename_tag(conn: &Connection, field: &str, from: &str, to: &str) -> Result<()
     }
 }
 
-/// Renames a namespace: every tag under it moves to the new one, or with
-/// an empty `to`, out of it. Returns how many tags moved.
-fn rename_namespace(
-    conn: &Connection,
-    field: &str,
-    from: &str,
-    to: &str,
-) -> Result<usize, ApiError> {
-    let from = normalize(field, from)?;
-    let to = match to.trim() {
-        "" => String::new(),
-        to => format!("{}:", normalize(field, to)?),
-    };
-    let pattern = &contains_pattern(&format!("{from}:"))[1..];
-    let renamed = |value: &str| format!("{to}{}", &value[from.len() + 1..]);
-
-    let tags = {
-        let mut stmt = conn
-            .prepare("SELECT id, value FROM tag WHERE field = ?1 AND value LIKE ?2 ESCAPE '\\'")?;
-        stmt.query_map([field, pattern], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?
-    };
-    let targets = {
-        let mut stmt = conn.prepare(
-            "SELECT DISTINCT target FROM tag_alias
-             WHERE field = ?1 AND target LIKE ?2 ESCAPE '\\'",
-        )?;
-        stmt.query_map([field, pattern], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
-    };
-    if tags.is_empty() && targets.is_empty() {
-        return Err(ApiError::NotFound);
-    }
-    for (id, value) in &tags {
-        move_tag(conn, field, *id, &renamed(value))?;
-    }
-    for target in &targets {
-        conn.execute(
-            "UPDATE tag_alias SET target = ?3 WHERE field = ?1 AND target = ?2",
-            [field, target, &renamed(target)],
-        )?;
-    }
-    Ok(tags.len())
-}
-
-/// Renames a tag, or with `namespace` a whole namespace. Where a tag of
-/// the new name already exists the two are merged. Aliases follow the tags
-/// they defer to.
+/// Renames a tag. Where a tag of the new name already exists the two are
+/// merged. Aliases follow the tag they defer to.
 async fn rename(
     State(state): State<AppState>,
     Json(input): Json<RenameInput>,
@@ -444,14 +390,9 @@ async fn rename(
     check_field(&input.field)?;
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
-    let renamed = if input.namespace {
-        rename_namespace(&tx, &input.field, &input.from, &input.to)?
-    } else {
-        rename_tag(&tx, &input.field, &input.from, &input.to)?;
-        1
-    };
+    rename_tag(&tx, &input.field, &input.from, &input.to)?;
     tx.commit()?;
-    Ok(Json(json!({ "renamed": renamed })))
+    Ok(Json(json!({ "renamed": 1 })))
 }
 
 /// Every tag of a field with the aliases that defer to it, for the tag
