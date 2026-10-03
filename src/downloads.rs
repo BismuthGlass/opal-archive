@@ -135,19 +135,31 @@ struct ForgetInput {
     keys: Option<Vec<String>>,
 }
 
+/// One thing a downloader fetched, and what it knows of it.
+#[derive(Deserialize)]
+struct Item {
+    /// What tells it from everything else on the site.
+    key: String,
+    source_url: Option<String>,
+    /// Its files, in order, in the folder the script was given.
+    #[serde(default)]
+    files: Vec<PathBuf>,
+    /// Given to the files if they have none of their own.
+    title: Option<String>,
+    description: Option<String>,
+    /// Tags of its own, by field, besides the source and the tab's.
+    #[serde(default)]
+    tags: BaseTags,
+}
+
 /// One line of a downloader's output.
 #[derive(Deserialize)]
 #[serde(tag = "event", rename_all = "lowercase")]
 enum Event {
     /// More things to download have been found: the total so far.
     Found { total: u64 },
-    /// One thing has been fetched, as the files named.
-    Item {
-        key: String,
-        source_url: Option<String>,
-        #[serde(default)]
-        files: Vec<PathBuf>,
-    },
+    /// One thing has been fetched.
+    Item(Item),
     /// One thing was passed over, having been seen before.
     Skipped {},
     /// Something went wrong; with a key, with that one thing.
@@ -628,18 +640,14 @@ impl Download {
             Event::Log { message } => self.status.lock().unwrap().message = message,
             Event::Skipped {} => self.status.lock().unwrap().skipped += 1,
             Event::Error { message } => self.problem(message),
-            Event::Item {
-                key,
-                source_url,
-                files,
-            } => match self.take_in(&key, source_url.as_deref(), &files).await {
+            Event::Item(item) => match self.take_in(&item).await {
                 Ok((added, existing)) => {
                     let mut status = self.status.lock().unwrap();
                     status.downloaded += 1;
                     status.added += added;
                     status.existing += existing;
                 }
-                Err(err) => self.problem(format!("{key}: {}", reason(err))),
+                Err(err) => self.problem(format!("{}: {}", item.key, reason(err))),
             },
         }
     }
@@ -653,18 +661,23 @@ impl Download {
     }
 
     /// Takes one downloaded thing into the library: its files go in, are
-    /// listed under the tab, and get the source URL and the tags; several
-    /// files are also put in a set. Then the thing is remembered as seen.
-    /// Returns how many files were new, and how many the library had.
-    async fn take_in(
-        &self,
-        key: &str,
-        source_url: Option<&str>,
-        paths: &[PathBuf],
-    ) -> Result<(u64, u64), ApiError> {
+    /// listed under the tab, and get the source URL, the tags, and the
+    /// title and description where they have none; several files are also
+    /// put in a set. Then the thing is remembered as seen. Returns how many
+    /// files were new, and how many the library had.
+    async fn take_in(&self, item: &Item) -> Result<(u64, u64), ApiError> {
+        let source_url = item.source_url.as_deref();
+        let text = |text: &Option<String>| {
+            let text = text
+                .as_deref()
+                .map(str::trim)
+                .filter(|text| !text.is_empty());
+            text.map(str::to_string)
+        };
+        let (title, description) = (text(&item.title), text(&item.description));
         let mut ids = Vec::new();
         let (mut added, mut existing) = (0, 0);
-        for path in paths {
+        for path in &item.files {
             // Only what is in the folder it was given; a script has no
             // business handing over anything else.
             let inside = path.starts_with(&self.out)
@@ -691,26 +704,51 @@ impl Download {
         let tx = conn.transaction()?;
         let mut tagged = ids.clone();
         if ids.len() > 1 {
-            tagged.push(set_of(&tx, source_url, &ids)?);
+            tagged.push(set_of(&tx, source_url, title.as_deref(), &ids)?);
         }
         let tagged = entities::ids_json(&tagged);
+        // What the user has written is never written over.
+        for (column, value) in [("title", &title), ("description", &description)] {
+            if let Some(value) = value {
+                tx.execute(
+                    &format!(
+                        "UPDATE entity SET {column} = ?2 WHERE {column} IS NULL
+                         AND id IN (SELECT value FROM json_each(?1))"
+                    ),
+                    params![tagged, value],
+                )?;
+            }
+        }
         if let Some(url) = source_url {
             entities::add_to_list(&tx, &tagged, SOURCE_URLS, url)?;
         }
-        let source = [("source", &self.manifest.source)];
-        let base = self
-            .base
-            .iter()
-            .flat_map(|(field, values)| values.iter().map(move |value| (field.as_str(), value)));
-        for (field, value) in source.into_iter().chain(base) {
+        let source = [("source", self.manifest.source.clone())];
+        let each = |tags: &BaseTags| {
+            let tags = tags.clone().into_iter();
+            tags.flat_map(|(field, values)| {
+                values.into_iter().map(move |value| (field.clone(), value))
+            })
+        };
+        // The tab's tags were checked when they were set. The script's own
+        // are checked here, and one that is not a tag is passed over.
+        let own = each(&item.tags).filter_map(|(field, value)| {
+            tags::check_field(&field).ok()?;
+            Some((field.clone(), tags::normalize(&field, &value).ok()?))
+        });
+        let given = source
+            .into_iter()
+            .map(|(field, value)| (field.to_string(), value))
+            .chain(each(&self.base))
+            .chain(own);
+        for (field, value) in given {
             // An alias stands for the tag it defers to.
-            let value = tags::resolve(&tx, field, value.clone())?;
-            entities::attach_tag(&tx, &tagged, field, &value)?;
+            let value = tags::resolve(&tx, &field, value)?;
+            entities::attach_tag(&tx, &tagged, &field, &value)?;
         }
         tx.execute(
             "INSERT OR IGNORE INTO tab_download_seen (tab_id, key)
              SELECT id, ?2 FROM tab WHERE id = ?1",
-            params![self.tab, key],
+            params![self.tab, item.key],
         )?;
         if !ids.is_empty() {
             // The view saved for the tab is of what it held before; without
@@ -723,8 +761,14 @@ impl Download {
 }
 
 /// The set holding the files of one downloaded thing, in their order:
-/// the one already made for its source URL, or a new one.
-fn set_of(conn: &Connection, source_url: Option<&str>, files: &[i64]) -> Result<i64, ApiError> {
+/// the one already made for its source URL, or a new one, with the title
+/// given or named for its type.
+fn set_of(
+    conn: &Connection,
+    source_url: Option<&str>,
+    title: Option<&str>,
+    files: &[i64],
+) -> Result<i64, ApiError> {
     let made = match source_url {
         Some(url) => conn
             .query_row(
@@ -741,8 +785,8 @@ fn set_of(conn: &Connection, source_url: Option<&str>, files: &[i64]) -> Result<
         Some(set) => set,
         None => {
             conn.execute(
-                "INSERT INTO entity (kind, title) VALUES ('collection', 'Set')",
-                [],
+                "INSERT INTO entity (kind, title) VALUES ('collection', ?1)",
+                [title.unwrap_or("Set")],
             )?;
             let set = conn.last_insert_rowid();
             conn.execute(

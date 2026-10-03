@@ -2183,11 +2183,27 @@ kbd {
 }
 
 .download-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 8px;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 14px;
+  align-items: center;
+  padding-top: 10px;
   border-top: 1px solid var(--border);
+}
+
+.download-settings .label {
+  margin: 0;
+}
+
+.download-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
+/* With no options there is no label either; the empty cell takes no row. */
+.download-options:empty {
+  display: none;
 }
 
 .download-option {
@@ -2196,33 +2212,36 @@ kbd {
   align-items: center;
 }
 
-.download-line .label {
-  margin-bottom: 3px;
-}
-
-.download-line .chips {
-  align-items: center;
-}
-
-.download-line .chip.tinted .chip-label:hover {
-  text-decoration: none;
-}
-
-.download-line .chip.tinted .chip-label:only-child {
-  padding-right: 8px;
-}
-
-.download-panel input.download-tag {
-  width: 22ch;
-  padding: 1px 8px;
-  border-radius: 12px;
-}
-
+.download-tags,
 .download-login {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 8px;
   align-items: center;
+}
+
+.download-tags input {
+  width: 24ch;
+}
+
+.download-tags .form-error {
+  flex-basis: 100%;
+}
+
+.download-tags .chip.tinted .chip-label:hover {
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  /* Too narrow for labels at the side: each goes over its setting. */
+  .download-settings {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .download-settings > :not(.label) {
+    margin-bottom: 8px;
+  }
 }
 
 /* What a download tab has seen, in its modal. */

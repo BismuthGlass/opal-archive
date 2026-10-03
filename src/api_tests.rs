@@ -817,7 +817,8 @@ for n in 1 2; do
     printf 'file %s b' "$n" > "$out/$n-b.txt"
     files="$files,\"$out/$n-b.txt\""
   fi
-  echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":\"$key\",\"files\":[$files]}"
+  more='"title":" Thing '$n' ","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]}'
+  echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":\"$key\",\"files\":[$files],$more}"
 done
 echo '{"event":"error","message":"one thing could not be had"}'
 "#;
@@ -936,8 +937,29 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     assert_eq!(api.get(&format!("/tabs/{tab}/view")).await, Value::Null);
     let all = api.metadata(&files).await;
     assert_eq!(carried(&all, "source"), [tag("fakesite", 3)]);
-    assert_eq!(carried(&all, "tags"), [tag("wall:paper", 3)]);
-    assert_eq!(carried(&all, "creator"), [tag("Someone", 3)]);
+    // With the tags the downloader made of each thing itself; what is not
+    // a tag is passed over.
+    assert_eq!(
+        carried(&all, "tags"),
+        [tag("from:site", 3), tag("wall:paper", 3)]
+    );
+    assert_eq!(
+        carried(&all, "creator"),
+        [tag("Its Maker", 3), tag("Someone", 3)]
+    );
+    // And the title it has on the site; an empty description is none.
+    assert_eq!(
+        api.get(&format!("/entities/{}", files[0])).await["title"],
+        "Thing 1"
+    );
+    assert_eq!(
+        api.metadata(&files[1..]).await["scalars"]["title"]["value"],
+        "Thing 2"
+    );
+    assert_eq!(
+        all["scalars"]["description"],
+        json!({ "value": null, "mixed": false })
+    );
     assert_eq!(
         carried(&all, "source_urls"),
         [
@@ -954,6 +976,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         [(files[1], Some(0)), (files[2], Some(1))]
     );
     let set = api.metadata(&sets).await;
+    assert_eq!(set["scalars"]["title"]["value"], "Thing 2");
     assert_eq!(carried(&set, "source"), [tag("fakesite", 1)]);
     assert_eq!(
         carried(&set, "source_urls"),
@@ -975,7 +998,14 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         )
         .await;
     assert_eq!(forgotten["forgotten"], 1);
+    // A title the user wrote stays when the thing is fetched again.
+    api.edit(&files[1..2], json!({ "set": { "title": "Mine" } }))
+        .await;
     let third = api.download(tab, "https://example.test/board").await;
+    assert_eq!(
+        api.get(&format!("/entities/{}", files[1])).await["title"],
+        "Mine"
+    );
     assert_eq!(counts(&third), [2, 1, 0, 2, 1, 1]);
     assert_eq!(api.in_tab(tab).await, files);
     assert_eq!(api.found("type=set").await, sets);

@@ -100,24 +100,30 @@ export default function DownloadPanel(props: PanelProps) {
           </Show>
           <Show when={data().job}>{(job) => <Progress job={job()} />}</Show>
           <Show when={settingsOpen()}>
+            {/* A label beside each setting. */}
             <div class="download-settings">
-              <For each={data().downloader.options}>
-                {(option) => (
-                  <label class="download-option">
-                    <input
-                      type="checkbox"
-                      checked={data().options[option.key] ?? option.default}
-                      onChange={(event) => {
-                        const value = event.currentTarget.checked;
-                        attempt(() =>
-                          api.configureDownload(props.tab, { options: { [option.key]: value } }),
-                        );
-                      }}
-                    />
-                    {option.label}
-                  </label>
-                )}
-              </For>
+              <Show when={data().downloader.options.length > 0}>
+                <span class="label">Options</span>
+              </Show>
+              <div class="download-options">
+                <For each={data().downloader.options}>
+                  {(option) => (
+                    <label class="download-option">
+                      <input
+                        type="checkbox"
+                        checked={data().options[option.key] ?? option.default}
+                        onChange={(event) => {
+                          const value = event.currentTarget.checked;
+                          attempt(() =>
+                            api.configureDownload(props.tab, { options: { [option.key]: value } }),
+                          );
+                        }}
+                      />
+                      {option.label}
+                    </label>
+                  )}
+                </For>
+              </div>
               <BaseTags
                 data={data()}
                 onChange={(tags) => attempt(() => api.configureDownload(props.tab, { tags }))}
@@ -125,17 +131,21 @@ export default function DownloadPanel(props: PanelProps) {
               <Show when={data().downloader.cookies}>
                 <Login data={data()} attempt={attempt} />
               </Show>
-              <p class="download-line">
-                <span class="label">Seen before</span>
+              <span class="label">Seen before</span>
+              <div>
                 <Show
                   when={data().seen > 0}
-                  fallback={<span class="hint">Nothing yet. What this tab downloads is skipped the next time.</span>}
+                  fallback={
+                    <span class="hint">
+                      Nothing yet. What this tab downloads is skipped the next time.
+                    </span>
+                  }
                 >
                   <button class="link" onClick={() => setShowSeen(true)}>
                     {plural(data().seen, "item")}, skipped when met again
                   </button>
                 </Show>
-              </p>
+              </div>
             </div>
           </Show>
           <Show when={showSeen()}>
@@ -233,16 +243,27 @@ function BaseTags(props: {
     });
 
   return (
-    <div class="download-line">
-      <span class="label">Tags given</span>
-      <div class="chips">
-        <span
-          class="chip tinted"
-          style={pillStyle("source")}
-          title="Source: given to everything this downloader fetches"
-        >
-          <span class="chip-label">{props.data.downloader.source}</span>
-        </span>
+    <>
+      <span
+        class="label"
+        title={`Given to everything downloaded, besides the source tag ${props.data.downloader.source}`}
+      >
+        Tags to add
+      </span>
+      <div class="download-tags">
+        <input
+          type="text"
+          aria-label="Add a tag given to everything downloaded"
+          placeholder="wallpaper, @cr:name…"
+          autocomplete="off"
+          spellcheck={false}
+          value={text()}
+          onInput={(event) => {
+            setText(event.currentTarget.value);
+            setProblem(null);
+          }}
+          onKeyDown={(event) => event.key === "Enter" && add()}
+        />
         <For each={entries()}>
           {(entry) => (
             <span
@@ -264,25 +285,11 @@ function BaseTags(props: {
             </span>
           )}
         </For>
-        <input
-          type="text"
-          class="download-tag"
-          aria-label="Add a tag given to everything downloaded"
-          placeholder="Add a tag, or @cr:name…"
-          autocomplete="off"
-          spellcheck={false}
-          value={text()}
-          onInput={(event) => {
-            setText(event.currentTarget.value);
-            setProblem(null);
-          }}
-          onKeyDown={(event) => event.key === "Enter" && add()}
-        />
+        <Show when={problem()}>
+          <p class="form-error">{problem()}</p>
+        </Show>
       </div>
-      <Show when={problem()}>
-        <p class="form-error">{problem()}</p>
-      </Show>
-    </div>
+    </>
   );
 }
 
@@ -304,9 +311,9 @@ function Login(props: { data: DownloadState; attempt: (action: () => Promise<unk
   };
 
   return (
-    <div class="download-line">
+    <>
       <span class="label">Login</span>
-      <span class="download-login">
+      <div class="download-login">
         <Show
           when={saved()}
           fallback={
@@ -341,8 +348,8 @@ function Login(props: { data: DownloadState; attempt: (action: () => Promise<unk
             Forget
           </button>
         </Show>
-      </span>
-    </div>
+      </div>
+    </>
   );
 }
 

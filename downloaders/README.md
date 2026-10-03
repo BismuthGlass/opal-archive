@@ -67,7 +67,7 @@ The script answers on standard output, one JSON object per line:
 | Event     | Fields                       | Meaning                                                   |
 | --------- | ---------------------------- | --------------------------------------------------------- |
 | `found`   | `total`                      | How many things there are to download, as far as is known |
-| `item`    | `key`, `source_url`, `files` | One thing has been fetched, as these files, in order      |
+| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `tags` | One thing has been fetched, as these files, in order |
 | `skipped` | `key`                        | One thing was passed over because its key is in `seen`    |
 | `error`   | `message`, optionally `key`  | Something failed; the download goes on                    |
 | `log`     | `message`                    | What the script is doing, shown while it runs             |
@@ -77,6 +77,13 @@ the tab remembers; for Pinterest it is the pin's URL. For each `item` the
 server takes in the files, lists them under the tab, adds `source_url` and
 the tags, and remembers the key. An item with several files also gets a
 `set` collection holding them in order.
+
+The tags are the manifest's `source`, the ones the user gave the tab, and
+any the item brings itself in `tags`: an object of tag field to values,
+`{"creator": ["Someone"], "tags": ["cat"]}`. A file that already has a tag
+is left as it is, and a value that is not a valid tag is passed over.
+`title` and `description` are given to the files, and the set, that have
+none; one the user wrote is never replaced.
 
 Lines that are not one of these events are ignored. The script ends with
 status 0 when it is done. Any other status means the download failed, and

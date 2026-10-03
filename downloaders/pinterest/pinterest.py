@@ -306,7 +306,14 @@ def download() -> int:
             if err:
                 emit("error", key=key, message=f"{key}: {err}")
             else:
-                emit("item", key=key, source_url=key, files=files)
+                emit(
+                    "item",
+                    key=key,
+                    source_url=key,
+                    files=files,
+                    title=(pin.get("title") or pin.get("grid_title") or "").strip(),
+                    description=(pin.get("description") or "").strip(),
+                )
     return 0
 
 
