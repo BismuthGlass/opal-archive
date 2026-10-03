@@ -839,8 +839,100 @@ button.primary {
   margin-top: 6px;
 }
 
-/* These chips are not searches, so their label is not a button. */
-span/* A pill in its tag type's colours, which come inline from the settings. */
+/* The tag editor: the box, then the tags beside the suggestions. It keeps
+   its height whatever it holds. */
+.tags-editor {
+  display: flex;
+  flex-direction: column;
+  height: 380px;
+}
+
+.tag-box .form-error {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.tags-editor-body {
+  display: flex;
+  flex: 1;
+  gap: 14px;
+  min-height: 0;
+  margin-top: 12px;
+}
+
+.tags-editor-tags {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.tags-editor-tags .aggregate {
+  margin-bottom: 0;
+}
+
+.tag-suggestions {
+  display: flex;
+  flex: 0 0 230px;
+  flex-direction: column;
+  min-width: 0;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+}
+
+.tag-suggestions ul {
+  flex: 1;
+  min-height: 0;
+  margin: 4px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.tag-suggestions li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.tag-suggestions li.hint {
+  cursor: default;
+}
+
+.tag-suggestions li[role="option"]:hover,
+.tag-suggestions li.active {
+  background: var(--bg);
+}
+
+.tag-suggestions li.active {
+  outline: 1px solid var(--accent);
+}
+
+.tag-suggestions .suggestion-count {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  /* Too narrow for two columns: suggestions go above the tags. */
+  .tags-editor-body {
+    flex-direction: column-reverse;
+  }
+
+  .tag-suggestions {
+    flex-basis: 40%;
+    padding: 0 0 8px;
+    border-bottom: 1px solid var(--border);
+    border-left: none;
+  }
+}
+
+/* A pill in its tag type's colours, which come inline from the settings. */
 .chip.tinted {
   border-color: transparent;
 }
@@ -873,10 +965,6 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
 /* In the editor a pill's label is a disabled button; it should not fade. */
 .dialog .chip-label:disabled {
   opacity: 1;
-}
-
-.field-editor .aggregate-chips {
-  margin-top: 10px;
 }
 
 /* The other tag types, each in its section, under the aggregated tags. */
@@ -985,7 +1073,8 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
   padding-right: 8px;
 }
 
-.chip-label:hover {
+/* A label that is not a button does not search, so it has no underline. */
+span.chip-label:hover {
   text-decoration: none;
 }
 
@@ -1170,27 +1259,27 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
 
 /* The editor of one field keeps its height whatever it holds: the values
    scroll, under a box whose suggestions have room to open. */
-.field-editor .field {
+.field-editor > .field {
   display: flex;
   flex-direction: column;
   height: 340px;
   margin-top: 0;
 }
 
-.field-editor .field > * {
+.field-editor > .field > * {
   flex: none;
 }
 
-.field-editor .tag-groups,
-.field-editor .chips,
-.field-editor .links {
+.field-editor > .field > .tag-groups,
+.field-editor > .field > .chips,
+.field-editor > .field > .links {
   flex: 1 1 0;
   min-height: 0;
   align-content: flex-start;
   overflow-y: auto;
 }
 
-.field-editor .tag-groups .chips {
+.field-editor > .field > .tag-groups .chips {
   flex: none;
   overflow: visible;
 }
@@ -1548,6 +1637,10 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
+}
+
+.dialog.medium {
+  width: min(640px, calc(100vw - 32px));
 }
 
 .dialog.wide {

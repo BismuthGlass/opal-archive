@@ -20,6 +20,7 @@ import {
   pillStyle,
   prefixOf,
   readTag,
+  tagText,
   tagType,
   typesStarting,
 } from "../tagTypes";
@@ -338,6 +339,7 @@ export default function Sidebar(props: {
                     title={`${plain()?.label ?? "Tags"} of ${
                       data().count === 1 ? "this item" : plural(data().count, "item")
                     }`}
+                    medium={!plain()}
                     onClose={() => setEditingList(null)}
                   >
                     <div class="field-editor">
@@ -909,112 +911,149 @@ function Namespace(props: { field: string; name: string; rename?: RenameNamespac
 
 type RenameNamespace = (field: string, from: string, to: string) => void;
 
+/** One row of the tag editor's suggestions: a type, or a tag. */
+type Option =
+  | { kind: "type"; field: string }
+  | { kind: "tag"; field: string; value: string; note: string; namespace: boolean; alias?: string };
+
 /**
- * The box that adds tags, with suggestions while typing. What is typed is
- * a plain tag unless it says otherwise: `@cr:name` is a creator, and so on
- * for each type, by its short name or its full one. While only `@…` has
- * been typed the suggestions are the types; after the colon they are that
- * type's tags.
+ * The tag editor's text box and its list of suggestions, as two pieces to
+ * be placed apart: the list has a section of its own rather than dropping
+ * down from the box.
+ *
+ * What is typed is a plain tag unless it says otherwise: `@cr:name` is a
+ * creator, and so on for each type, by its short name or its full one. A
+ * `-` in front takes the tag off instead of putting it on. The suggestions
+ * follow: the types while only `@…` is typed, a type's tags after its
+ * colon, and after a `-` the tags the selection has.
  */
-function TagInput(props: FieldProps & { initial?: string }) {
+function createTagBox(props: FieldProps & { initial?: string }) {
   const [text, setText] = createSignal(props.initial ?? "");
-  const [open, setOpen] = createSignal(false);
   /** Highlighted suggestion; -1 means the typed text itself. */
   const [active, setActive] = createSignal(-1);
-  const read = createMemo(() => readTag(text()));
-  const listId = "suggest-tags";
-
-  /** The types on offer, while one is being named. */
-  const types = createMemo(() => {
-    const naming = read().naming;
-    return naming === null ? [] : typesStarting(naming);
-  });
+  const [problem, setProblem] = createSignal<string | null>(null);
+  const removing = () => text().trimStart().startsWith("-");
+  const read = createMemo(() => readTag(removing() ? text().trimStart().slice(1) : text()));
+  /** What goes in front of a tag in the box: `-`, `@cr:`, both or neither. */
+  const lead = () => (removing() ? "-" : "") + read().lead;
 
   // With nothing typed this returns the type's most used tags.
   const [fetched] = createResource(
     () => {
       const { field, value } = read();
-      return open() && field ? { field, typed: value } : null;
+      return field && !removing() ? { field, typed: value } : null;
     },
     ({ field, typed }) => api.suggestTags(field, typed),
   );
-  const suggestions = createMemo(() => {
-    const field = read().field;
+
+  const options = createMemo<Option[]>(() => {
+    const { field, value, naming } = read();
+    if (naming !== null) return typesStarting(naming).map((field) => ({ kind: "type", field }));
     if (!field) return [];
+    const carried = props.data.tags[field] ?? [];
+    if (removing()) {
+      // To take off: the tags of that type the selection carries.
+      const typed = value.toLowerCase();
+      return carried
+        .filter((tag) => tag.value.toLowerCase().includes(typed))
+        .map((tag) => ({
+          kind: "tag",
+          field,
+          value: tag.value,
+          namespace: false,
+          note: tag.count < props.data.count ? `on ${tag.count} of ${props.data.count}` : "",
+        }));
+    }
     // Tags the whole selection already has are not worth offering.
     const complete = new Set(
-      (props.data.tags[field] ?? [])
-        .filter((tag) => tag.count === props.data.count)
-        .map((tag) => tag.value.toLowerCase()),
+      carried.filter((tag) => tag.count === props.data.count).map((tag) => tag.value.toLowerCase()),
     );
     return (fetched.latest ?? [])
       .filter((option) => option.namespace || !complete.has(option.value.toLowerCase()))
-      .slice(0, MAX_SUGGESTIONS);
+      .slice(0, MAX_SUGGESTIONS)
+      .map((option) => ({
+        kind: "tag",
+        field,
+        value: option.value,
+        namespace: option.namespace,
+        alias: option.alias,
+        note: [String(option.count), option.description].filter(Boolean).join(" · "),
+      }));
   });
-  /** How many rows the list has, of whichever kind it is showing. */
-  const rows = () => (read().naming !== null ? types().length : suggestions().length);
 
   const reset = (next = "") => {
     setText(next);
     setActive(-1);
+    setProblem(null);
   };
 
-  const add = (field: string | null, value: string) => {
-    if (!field || !value.trim()) return;
+  /** Puts the tag on the selection, or with a `-` typed, takes it off. */
+  const commit = (field: string | null, value: string) => {
+    const name = value.trim();
+    if (!field || !name) return;
+    if (!removing()) {
+      reset();
+      return props.apply({ add: { [field]: [name] } });
+    }
+    const carried = (props.data.tags[field] ?? []).find(
+      (tag) => tag.value.toLowerCase() === name.toLowerCase(),
+    );
+    if (!carried) return setProblem(`${tagText(field, name)} is not on the selection.`);
     reset();
-    props.apply({ add: { [field]: [value.trim()] } });
+    props.apply({ remove: { [field]: [carried.value] } });
   };
 
-  /** Choosing a namespace steps into it; choosing a tag adds it. */
-  const pick = (option: api.Suggestion) => {
-    if (option.namespace) reset(read().lead + option.value);
-    else add(read().field, option.value);
+  const pick = (option: Option) => {
+    // A type writes its prefix, ready for the tag; a namespace steps into
+    // it; a tag is put on, or taken off.
+    if (option.kind === "type") reset(`${removing() ? "-" : ""}@${prefixOf(option.field)}:`);
+    else if (option.namespace) reset(lead() + option.value);
+    else commit(option.field, option.value);
   };
-
-  /** Choosing a type writes its prefix, ready for the tag. */
-  const pickType = (field: string) => reset(`@${prefixOf(field)}:`);
 
   const onKeyDown = (event: KeyboardEvent) => {
-    const count = rows();
+    const count = options().length;
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setOpen(true);
       setActive((i) => (i + 1 >= count ? -1 : i + 1));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActive((i) => (i < 0 ? count - 1 : i - 1));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      if (read().naming !== null) {
+      if (active() >= 0) {
+        pick(options()[active()]);
+      } else if (read().naming !== null) {
         // An unfinished `@…` names a type; it is never a tag.
-        const field = types()[Math.max(0, active())];
-        if (field) pickType(field);
-      } else if (active() >= 0) {
-        pick(suggestions()[active()]);
+        if (count > 0) pick(options()[0]);
       } else {
-        add(read().field, read().value);
+        commit(read().field, read().value);
       }
-    } else if (event.key === "Escape") {
-      // With suggestions showing, Escape puts them away and no more.
-      if (open() && count > 0) event.preventDefault();
-      setOpen(false);
-      setActive(-1);
     }
   };
 
-  return (
-    <div class="suggest">
+  const heading = () =>
+    read().naming !== null
+      ? "Types"
+      : removing()
+        ? "Take off"
+        : read().field
+          ? `Suggested ${fieldLabel(read().field!).toLowerCase()}`
+          : "Suggestions";
+
+  const input = () => (
+    <div class="tag-box">
       <input
         type="text"
         role="combobox"
         autofocus
-        aria-label="Add a tag"
-        aria-expanded={open() && rows() > 0}
-        aria-controls={listId}
+        aria-label="Add or remove a tag"
+        aria-expanded="true"
+        aria-controls="tag-suggestions"
         aria-autocomplete="list"
         autocomplete="off"
         spellcheck={false}
-        placeholder="Add a tag, or @cr:name for another type"
+        placeholder="Add a tag. @cr:name for another type, -name to take one off"
         value={text()}
         // The box takes the cursor when it appears, which may be after its
         // modal opened; with a type written in ahead, the cursor goes after it.
@@ -1026,71 +1065,69 @@ function TagInput(props: FieldProps & { initial?: string }) {
         }
         onInput={(e) => {
           setText(e.currentTarget.value);
-          setOpen(true);
           setActive(-1);
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => {
-          setOpen(false);
-          setActive(-1);
+          setProblem(null);
         }}
         onKeyDown={onKeyDown}
       />
-      <Show when={read().field === null && read().naming === null}>
+      <Show when={problem() ?? (read().field === null && read().naming === null)}>
         <p class="form-error">
-          {read().lead.slice(0, -1)} is not a tag type. Type @ to see them.
+          {problem() ?? `${read().lead.slice(0, -1)} is not a tag type. Type @ to see them.`}
         </p>
-      </Show>
-      <Show when={open() && rows() > 0}>
-        <ul class="suggestions" id={listId} role="listbox">
-          <For each={types()}>
-            {(field, i) => (
-              <li
-                role="option"
-                aria-selected={i() === active()}
-                classList={{ active: i() === active() }}
-                // Keeps focus in the input, so the list stays open to click.
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pickType(field)}
-              >
-                <span class="chip tinted type-sample" style={pillStyle(field)}>
-                  {fieldLabel(field)}
-                </span>
-                <span class="suggestion-count">@{prefixOf(field)}:</span>
-              </li>
-            )}
-          </For>
-          <For each={suggestions()}>
-            {(option, i) => (
-              <li
-                role="option"
-                aria-selected={i() === active()}
-                classList={{ active: i() === active() }}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(option)}
-              >
-                <span class="suggestion-value">
-                  <Show when={option.alias}>
-                    <span class="suggestion-alias">{option.alias} → </span>
-                  </Show>
-                  {option.value}
-                  <Show when={option.description}>
-                    <span class="suggestion-note"> {option.description}</span>
-                  </Show>
-                </span>
-                <span class="suggestion-count">
-                  {option.count}
-                  <Show when={option.namespace}>
-                    <Icon name="chevron-right" />
-                  </Show>
-                </span>
-              </li>
-            )}
-          </For>
-        </ul>
       </Show>
     </div>
   );
+
+  const suggestions = () => (
+    <section class="tag-suggestions" aria-label="Suggestions">
+      <span class="label">{heading()}</span>
+      <ul id="tag-suggestions" role="listbox">
+        <For each={options()} fallback={<li class="hint">Nothing to suggest.</li>}>
+          {(option, i) => (
+            <li
+              role="option"
+              aria-selected={i() === active()}
+              classList={{ active: i() === active() }}
+              // Keeps the cursor in the box.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => pick(option)}
+            >
+              <Show
+                when={option.kind === "tag" && option}
+                fallback={
+                  <>
+                    <span class="chip tinted type-sample" style={pillStyle(option.field)}>
+                      {fieldLabel(option.field)}
+                    </span>
+                    <span class="suggestion-count">@{prefixOf(option.field)}:</span>
+                  </>
+                }
+              >
+                {(tag) => (
+                  <>
+                    <span class="suggestion-value">
+                      <Show when={tag().alias}>
+                        <span class="suggestion-alias">{tag().alias} → </span>
+                      </Show>
+                      {tag().value}
+                    </span>
+                    <span class="suggestion-count">
+                      {tag().note}
+                      <Show when={tag().namespace}>
+                        <Icon name="chevron-right" />
+                      </Show>
+                    </span>
+                  </>
+                )}
+              </Show>
+            </li>
+          )}
+        </For>
+      </ul>
+    </section>
+  );
+
+  return { input, suggestions };
 }
 
 type Tag = Metadata["tags"][string][number];
@@ -1172,29 +1209,32 @@ function TagChip(
 
 /**
  * Where every tag of the selection is added and removed, whatever its
- * type: the box, and under it all the tags as pills in their type's
- * colours. `initial` starts the box with a type already written.
+ * type: the box on top, then the tags as the panel shows them (the
+ * aggregated ones together, the other types in their sections) beside the
+ * suggestions for what is being typed. `initial` starts the box with a
+ * type already written.
  */
 function TagsEditor(props: FieldProps & { initial?: string }) {
-  const entries = () =>
-    orderedTypes().flatMap((field) =>
-      (props.data.tags[field] ?? []).map((tag) => ({ field, tag })),
-    );
+  const box = createTagBox(props);
+  const untagged = () => orderedTypes().every((field) => !filled(props.data, field));
   return (
-    <div class="field">
-      <TagInput data={props.data} apply={props.apply} initial={props.initial} />
-      <div class="chips aggregate-chips">
-        <For each={entries()}>
-          {(entry) => (
-            <TagChip
-              field={entry.field}
-              tag={entry.tag}
-              data={props.data}
-              apply={props.apply}
-              editing
-            />
-          )}
-        </For>
+    <div class="tags-editor">
+      {box.input()}
+      <div class="tags-editor-body">
+        <div class="tags-editor-tags">
+          <Show when={untagged()}>
+            <p class="hint">No tags yet.</p>
+          </Show>
+          <AggregatedTags data={props.data} apply={props.apply} editing />
+          <For each={orderedTypes().filter((field) => !tagType(field).aggregate)}>
+            {(field) => (
+              <Show when={filled(props.data, field)}>
+                <TagField field={field} data={props.data} apply={props.apply} editing />
+              </Show>
+            )}
+          </For>
+        </div>
+        {box.suggestions()}
       </div>
     </div>
   );
@@ -1225,7 +1265,7 @@ export function TagsModal(props: {
     changed();
   };
   return (
-    <Modal title={`Tags of ${props.target}`} onClose={props.onClose}>
+    <Modal title={`Tags of ${props.target}`} medium onClose={props.onClose}>
       <div class="field-editor">
         {/* `latest` keeps the tags on screen while a change reloads them. */}
         <Show when={metadata.latest} fallback={<div class="field" />}>
@@ -1243,9 +1283,9 @@ export function TagsModal(props: {
 
 /**
  * The tags of one type that is not aggregated, in a section of their own,
- * grouped by namespace. The label opens the tag editor.
+ * grouped by namespace. In the panel the label opens the tag editor.
  */
-function TagField(props: FieldProps & { field: string; onEdit: () => void }) {
+function TagField(props: FieldProps & ListMode & { field: string }) {
   const values = () => props.data.tags[props.field] ?? [];
 
   /** The values by namespace: those without one first, then by name. */
@@ -1266,13 +1306,25 @@ function TagField(props: FieldProps & { field: string; onEdit: () => void }) {
 
   return (
     <div class="field">
-      <ListLabel label={fieldLabel(props.field)} onEdit={props.onEdit} />
+      <Show
+        when={props.editing}
+        fallback={<ListLabel label={fieldLabel(props.field)} onEdit={props.onEdit} />}
+      >
+        <span class="label">{fieldLabel(props.field)}</span>
+      </Show>
       <div class="tag-groups">
         <For each={groups()}>
           {(group) => (
             <div class="chips">
               <Show when={group.namespace}>
-                <Namespace field={props.field} name={group.namespace} />
+                {/* In the editor the heading is only a heading; in the panel
+                    it searches the namespace. */}
+                <Show
+                  when={props.editing}
+                  fallback={<Namespace field={props.field} name={group.namespace} />}
+                >
+                  <span class="namespace">{group.namespace}:</span>
+                </Show>
               </Show>
               <For each={group.tags}>
                 {(tag) => (
@@ -1282,6 +1334,7 @@ function TagField(props: FieldProps & { field: string; onEdit: () => void }) {
                     under={group.namespace}
                     data={props.data}
                     apply={props.apply}
+                    editing={props.editing}
                   />
                 )}
               </For>
@@ -1295,10 +1348,10 @@ function TagField(props: FieldProps & { field: string; onEdit: () => void }) {
 
 /**
  * The tags of every aggregated type in one list with no heading, told
- * apart by the colour of their pills. It ends in the button that opens the
- * tag editor.
+ * apart by the colour of their pills. In the panel it ends in the button
+ * that opens the tag editor; in the editor each pill can be taken off.
  */
-function AggregatedTags(props: FieldProps & { onEdit: () => void }) {
+function AggregatedTags(props: FieldProps & ListMode) {
   const entries = () =>
     aggregatedTypes().flatMap((field) =>
       (props.data.tags[field] ?? []).map((tag) => ({ field, tag })),
@@ -1308,18 +1361,26 @@ function AggregatedTags(props: FieldProps & { onEdit: () => void }) {
       <div class="chips aggregate-chips">
         <For each={entries()}>
           {(entry) => (
-            <TagChip field={entry.field} tag={entry.tag} data={props.data} apply={props.apply} />
+            <TagChip
+              field={entry.field}
+              tag={entry.tag}
+              data={props.data}
+              apply={props.apply}
+              editing={props.editing}
+            />
           )}
         </For>
-        <button
-          class="chip chip-edit"
-          aria-label="Edit tags"
-          title="Add or remove tags"
-          onClick={props.onEdit}
-        >
-          <Icon name="add" />
-          <Show when={entries().length === 0}>Tags</Show>
-        </button>
+        <Show when={!props.editing}>
+          <button
+            class="chip chip-edit"
+            aria-label="Edit tags"
+            title="Add or remove tags"
+            onClick={props.onEdit}
+          >
+            <Icon name="add" />
+            <Show when={entries().length === 0}>Tags</Show>
+          </button>
+        </Show>
       </div>
     </div>
   );
