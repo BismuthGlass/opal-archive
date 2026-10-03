@@ -209,7 +209,11 @@ async fn metadata(
                 let set: i64 = row.get(3 + i * 3)?;
                 // Mixed also covers "set on some, empty on others".
                 let mixed = distinct > 1 || (distinct == 1 && set < count);
-                let value = if mixed { Value::Null } else { to_json(row.get(4 + i * 3)?) };
+                let value = if mixed {
+                    Value::Null
+                } else {
+                    to_json(row.get(4 + i * 3)?)
+                };
                 scalars.insert(field.to_string(), json!({ "value": value, "mixed": mixed }));
             }
             Ok((count, row.get::<_, i64>(1)?, scalars))
@@ -458,9 +462,7 @@ async fn edit(
             && field != "ordered"
             && field != "original_name"
         {
-            return Err(ApiError::BadRequest(format!(
-                "`{field}` cannot be set"
-            )));
+            return Err(ApiError::BadRequest(format!("`{field}` cannot be set")));
         }
         updates.push((field.as_str(), scalar_value(field, value)?));
     }
@@ -649,4 +651,34 @@ async fn delete(
         let _ = std::fs::remove_file(state.thumbnails.join(thumbnail_name(&hash)));
     }
     Ok(Json(json!({ "deleted": deleted })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::source_url;
+
+    #[test]
+    fn source_urls_are_web_addresses() {
+        assert_eq!(
+            source_url(" https://example.com/a ").unwrap(),
+            "https://example.com/a"
+        );
+        assert_eq!(
+            source_url("HTTP://example.com").unwrap(),
+            "HTTP://example.com"
+        );
+        assert_eq!(
+            source_url("example.com/a").unwrap(),
+            "https://example.com/a"
+        );
+        assert_eq!(
+            source_url("localhost:8080/x").unwrap(),
+            "https://localhost:8080/x"
+        );
+        assert!(source_url("javascript:alert(1)").is_err());
+        assert!(source_url("mailto:someone@example.com").is_err());
+        assert!(source_url("ftp://example.com").is_err());
+        assert!(source_url("https://").is_err());
+        assert!(source_url("two words.com").is_err());
+    }
 }

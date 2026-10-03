@@ -92,7 +92,9 @@ pub fn check_field(field: &str) -> Result<(), ApiError> {
     if TAG_FIELDS.contains(&field) {
         Ok(())
     } else {
-        Err(ApiError::BadRequest(format!("`{field}` is not a tag field")))
+        Err(ApiError::BadRequest(format!(
+            "`{field}` is not a tag field"
+        )))
     }
 }
 
@@ -263,7 +265,12 @@ async fn suggest(
             .then_with(|| a.value.to_lowercase().cmp(&b.value.to_lowercase()))
     });
     found.truncate(MAX_SUGGESTIONS);
-    Ok(Json(found.into_iter().map(|(_, suggestion)| suggestion).collect()))
+    Ok(Json(
+        found
+            .into_iter()
+            .map(|(_, suggestion)| suggestion)
+            .collect(),
+    ))
 }
 
 /// Gives the tag `id` a new value. If another tag of the field already has
@@ -295,7 +302,10 @@ fn move_tag(conn: &Connection, field: &str, id: i64, value: &str) -> rusqlite::R
             conn.execute("DELETE FROM tag WHERE id = ?1", [id])?;
         }
         None => {
-            conn.execute("UPDATE tag SET value = ?2 WHERE id = ?1", params![id, value])?;
+            conn.execute(
+                "UPDATE tag SET value = ?2 WHERE id = ?1",
+                params![id, value],
+            )?;
         }
     }
     Ok(())
@@ -377,9 +387,8 @@ async fn rename(
     let renamed = |value: &str| format!("{to}{}", &value[from.len() + 1..]);
 
     let tags = {
-        let mut stmt = tx.prepare(
-            "SELECT id, value FROM tag WHERE field = ?1 AND value LIKE ?2 ESCAPE '\\'",
-        )?;
+        let mut stmt =
+            tx.prepare("SELECT id, value FROM tag WHERE field = ?1 AND value LIKE ?2 ESCAPE '\\'")?;
         stmt.query_map([field, pattern], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
         })?
@@ -442,9 +451,8 @@ async fn list(
         uses.insert(value.to_lowercase(), (value, count));
     }
 
-    let mut stmt = conn.prepare(
-        "SELECT alias, target FROM tag_alias WHERE field = ?1 ORDER BY alias",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT alias, target FROM tag_alias WHERE field = ?1 ORDER BY alias")?;
     let alias_rows = stmt
         .query_map([&params.field], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
@@ -454,8 +462,11 @@ async fn list(
     for (alias, target) in alias_rows {
         // An alias some entity still carries is listed under its target,
         // not as a tag of its own.
-        let count = uses.remove(&alias.to_lowercase()).map_or(0, |(_, count)| count);
-        uses.entry(target.to_lowercase()).or_insert((target.clone(), 0));
+        let count = uses
+            .remove(&alias.to_lowercase())
+            .map_or(0, |(_, count)| count);
+        uses.entry(target.to_lowercase())
+            .or_insert((target.clone(), 0));
         aliases
             .entry(target.to_lowercase())
             .or_default()
@@ -600,13 +611,13 @@ async fn create(
     let conn = state.db.lock().unwrap();
     let value = definable(&conn, &input.field, &input.value)?;
     let id = pin(&conn, &input.field, &value)?;
-    if let Some(description) = input.description.as_deref().map(str::trim) {
-        if !description.is_empty() {
-            conn.execute(
-                "UPDATE tag SET description = ?2 WHERE id = ?1",
-                params![id, description],
-            )?;
-        }
+    if let Some(description) = input.description.as_deref().map(str::trim)
+        && !description.is_empty()
+    {
+        conn.execute(
+            "UPDATE tag SET description = ?2 WHERE id = ?1",
+            params![id, description],
+        )?;
     }
     Ok(Json(json!({ "value": value })))
 }
@@ -650,5 +661,23 @@ async fn delete(
             conn.execute("DELETE FROM tag WHERE id = ?1", [id])?;
             Ok(Json(json!({ "deleted": true })))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize;
+
+    #[test]
+    fn tags_are_normalized() {
+        assert_eq!(normalize("tags", "  cat ").unwrap(), "cat");
+        assert_eq!(normalize("tags", "art : line art").unwrap(), "art:line art");
+        assert_eq!(normalize("tags", "a:b : c").unwrap(), "a:b:c");
+        assert!(normalize("tags", "").is_err());
+        assert!(normalize("tags", "  ").is_err());
+        assert!(normalize("tags", "art:").is_err());
+        assert!(normalize("tags", ":cat").is_err());
+        assert!(normalize("tags", "a::b").is_err());
+        assert!(normalize("tags", "@cat").is_err());
     }
 }

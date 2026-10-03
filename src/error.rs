@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::query::QueryError;
 
 /// Error returned by API handlers, rendered as `{"error": "..."}`.
+#[derive(Debug)]
 pub enum ApiError {
     NotFound,
     BadRequest(String),

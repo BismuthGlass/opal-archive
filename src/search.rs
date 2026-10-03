@@ -25,7 +25,7 @@ struct SearchParams {
     /// Tab to search within: an upload tab's files, or a collection tab's
     /// members.
     tab: Option<i64>,
-    /// Present to have trashed entities included without `is=trashed`.
+    /// Present to have trashed entities included without `@trashed`.
     trashed: Option<String>,
 }
 
@@ -192,7 +192,9 @@ async fn search(
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
 
-    Ok(Json(json!({ "total": total, "offset": offset, "items": items })))
+    Ok(Json(
+        json!({ "total": total, "offset": offset, "items": items }),
+    ))
 }
 
 async fn search_ids(

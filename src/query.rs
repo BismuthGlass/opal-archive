@@ -136,7 +136,9 @@ enum Field {
     Choice(char, &'static str, &'static [&'static str]),
     Number(char, &'static str, Unit),
     Rating,
-    Date { added: bool },
+    Date {
+        added: bool,
+    },
     Bool(char, &'static str),
     Has,
     Id,
@@ -284,7 +286,8 @@ fn parse_rating(text: &str) -> Option<f64> {
 /// Whether `text` is `YYYY`, `YYYY-MM` or `YYYY-MM-DD`.
 pub fn valid_date(text: &str) -> bool {
     let parts: Vec<&str> = text.split('-').collect();
-    let digits = |part: &str, len: usize| part.len() == len && part.bytes().all(|b| b.is_ascii_digit());
+    let digits =
+        |part: &str, len: usize| part.len() == len && part.bytes().all(|b| b.is_ascii_digit());
     let in_range = |part: &str, max: u32| (1..=max).contains(&part.parse::<u32>().unwrap_or(0));
     match parts[..] {
         [year] => digits(year, 4),
@@ -326,7 +329,7 @@ struct Parser<'a> {
     sorts: Vec<Sort>,
     /// Collections named by top-level `in=<id>` terms, for `sort=position`.
     top_level_in: Vec<i64>,
-    /// Whether the query itself has an `is=` term.
+    /// Whether the query itself mentions `@trashed`.
     asks_trashed: bool,
 }
 
@@ -473,7 +476,10 @@ impl Parser<'_> {
         if end > start
             && let Some((op, len)) = self.operator_at(end)
         {
-            let name: String = self.chars[start..end].iter().collect::<String>().to_ascii_lowercase();
+            let name: String = self.chars[start..end]
+                .iter()
+                .collect::<String>()
+                .to_ascii_lowercase();
             let Some(field) = lookup(&name) else {
                 return error(format!("unknown field `{name}`"), start);
             };
@@ -493,7 +499,11 @@ impl Parser<'_> {
                     format!(
                         "`@{marked}` is neither a state ({}) nor a tag type followed by `:`, \
                          as in `@cr:name`",
-                        STATES.iter().map(|s| format!("@{s}")).collect::<Vec<_>>().join(", ")
+                        STATES
+                            .iter()
+                            .map(|s| format!("@{s}"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     ),
                     start,
                 );
@@ -509,7 +519,10 @@ impl Parser<'_> {
         let Some(field) = tag_type(name) else {
             let known: Vec<String> = TAG_PREFIXES.iter().map(|(_, p)| format!("@{p}")).collect();
             return error(
-                format!("`@{name}` is not a tag type (expected one of {})", known.join(", ")),
+                format!(
+                    "`@{name}` is not a tag type (expected one of {})",
+                    known.join(", ")
+                ),
                 start,
             );
         };
@@ -815,7 +828,9 @@ impl Parser<'_> {
             Op::Eq | Op::Ne => {
                 let mut alternatives = Vec::new();
                 for value in values {
-                    let range = (!value.quoted).then(|| value.text.split_once("..")).flatten();
+                    let range = (!value.quoted)
+                        .then(|| value.text.split_once(".."))
+                        .flatten();
                     let Some((low, high)) = range else {
                         let n = number(&value.text, value.pos)?;
                         self.params.push(Value::Real(n));
@@ -856,7 +871,8 @@ impl Parser<'_> {
                         values[0].pos,
                     );
                 };
-                self.params.push(Value::Real(number(&value.text, value.pos)?));
+                self.params
+                    .push(Value::Real(number(&value.text, value.pos)?));
                 format!("{expr} {} ?", comparison.symbol())
             }
         };
@@ -876,7 +892,9 @@ impl Parser<'_> {
                 Ok(())
             } else {
                 error(
-                    format!("`{text}` is not a date for `{name}` (use YYYY, YYYY-MM or YYYY-MM-DD)"),
+                    format!(
+                        "`{text}` is not a date for `{name}` (use YYYY, YYYY-MM or YYYY-MM-DD)"
+                    ),
                     pos,
                 )
             }
@@ -923,7 +941,8 @@ impl Parser<'_> {
                     Op::Gt => (&start, PERIOD_END),
                     _ => (&start, PERIOD_START),
                 };
-                self.params.push(Value::Text(pad_date(&value.text, padding)));
+                self.params
+                    .push(Value::Text(pad_date(&value.text, padding)));
                 format!("{side} {} ?", comparison.symbol())
             }
         };
@@ -1012,14 +1031,9 @@ fn placeholders(count: usize) -> String {
 /// Compiles a query. `seed` fixes the order of `sort=random` so that pages
 /// of one search agree with each other.
 ///
-/// Trashed entities are left out unless the query has an `is=` term or
+/// Trashed entities are left out unless the query mentions `@trashed` or
 /// `include_trashed` is set.
-pub fn compile(
-    source: &str,
-    seed: i64,
-    aliases: &Aliases,
-    include_trashed: bool,
-) -> Res<Compiled> {
+pub fn compile(source: &str, seed: i64, aliases: &Aliases, include_trashed: bool) -> Res<Compiled> {
     let mut parser = Parser {
         aliases,
         chars: source.chars().collect(),
@@ -1043,7 +1057,7 @@ pub fn compile(
     };
 
     // Trashed entities stay out of every search that does not ask about
-    // the trash with `is=trashed` (or its negation).
+    // the trash with `@trashed` (or its negation).
     let filter = if parser.asks_trashed || include_trashed {
         filter
     } else {
@@ -1096,7 +1110,11 @@ pub fn compile(
         // Entities without a value sort last in either direction.
         clauses.push(format!("{expr} IS NULL, {expr} {direction}"));
     }
-    let tie = if parser.sorts[0].descending { "DESC" } else { "ASC" };
+    let tie = if parser.sorts[0].descending {
+        "DESC"
+    } else {
+        "ASC"
+    };
     clauses.push(format!("e0.id {tie}"));
 
     Ok(Compiled {
@@ -1106,4 +1124,195 @@ pub fn compile(
         order_params,
         sorted,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use rusqlite::{Connection, params_from_iter};
+
+    use super::*;
+
+    /// A small library: three files and a book, one of them trashed, and a
+    /// collection holding two of them.
+    fn library() -> Connection {
+        let conn = crate::db::open(Path::new(":memory:")).unwrap();
+        conn.execute_batch(
+            "INSERT INTO entity (id, kind, date_added, title, date, score, content_rating, trashed)
+             VALUES (1, 'file', '2026-01-01T00:00:01Z', 'Cat on a mat', '2020-05-01', 5, 'safe', 0),
+                    (2, 'file', '2026-01-01T00:00:02Z', NULL, NULL, 2, 'nsfw', 0),
+                    (3, 'file', '2026-01-01T00:00:03Z', NULL, NULL, NULL, NULL, 1),
+                    (4, 'collection', '2026-01-01T00:00:04Z', 'Pets', NULL, NULL, NULL, 0),
+                    (5, 'file', '2026-01-01T00:00:05Z', NULL, NULL, NULL, NULL, 0);
+             INSERT INTO file
+                 (entity_id, hash, extension, media_type, size, original_name, width, height,
+                  page_count, length)
+             VALUES (1, printf('%064d', 1), 'jpg', 'image', 1000, 'cat.jpg', 800, 600, NULL, NULL),
+                    (2, printf('%064d', 2), 'mp4', 'video', 5000000, 'dog.mp4', 1920, 1080, NULL, 90),
+                    (3, printf('%064d', 3), 'png', 'image', 2000, 'old.png', 10, 10, NULL, NULL),
+                    (5, printf('%064d', 5), 'epub', 'book', 3000, 'book.epub', NULL, NULL, 120, NULL);
+             INSERT INTO collection (entity_id, collection_type) VALUES (4, 'set');
+             INSERT INTO membership (collection_id, member_id, position) VALUES (4, 1, 2), (4, 2, 1);
+             INSERT INTO tag (id, field, value)
+             VALUES (1, 'tags', 'cat'), (2, 'tags', 'animal:feline'), (3, 'tags', 'dog'),
+                    (4, 'creator', 'Abba'), (5, 'creator', 'Beta');
+             INSERT INTO entity_tag (entity_id, tag_id)
+             VALUES (1, 1), (1, 2), (1, 4), (2, 3), (2, 5), (3, 1);
+             INSERT INTO identifier (entity_id, value) VALUES (5, 'isbn-1');
+             INSERT INTO source_url (entity_id, url) VALUES (5, 'https://example.com/a');",
+        )
+        .unwrap();
+        conn
+    }
+
+    /// The IDs a query finds, in the order it gives them.
+    fn ordered(conn: &Connection, source: &str, aliases: &Aliases) -> Vec<i64> {
+        let compiled = compile(source, 7, aliases, false)
+            .unwrap_or_else(|err| panic!("`{source}`: {}", err.message));
+        let sql = format!(
+            "SELECT e0.id FROM {FROM} WHERE {} ORDER BY {}",
+            compiled.filter, compiled.order
+        );
+        let params = compiled.filter_params.iter().chain(&compiled.order_params);
+        conn.prepare(&sql)
+            .unwrap()
+            .query_map(params_from_iter(params), |row| row.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    }
+
+    /// The IDs a query finds, lowest first.
+    fn found(conn: &Connection, source: &str) -> Vec<i64> {
+        let mut ids = ordered(conn, source, &Aliases::new());
+        ids.sort();
+        ids
+    }
+
+    fn fails(source: &str) -> bool {
+        compile(source, 7, &Aliases::new(), false).is_err()
+    }
+
+    #[test]
+    fn plain_terms_are_tags() {
+        let conn = library();
+        assert_eq!(found(&conn, ""), [1, 2, 4, 5]);
+        assert_eq!(found(&conn, "cat"), [1]);
+        assert_eq!(found(&conn, "CAT"), [1]);
+        assert_eq!(found(&conn, "ca*"), [1]);
+        assert_eq!(found(&conn, "animal:*"), [1]);
+        assert_eq!(found(&conn, "animal:feline"), [1]);
+        assert_eq!(found(&conn, "bird"), [] as [i64; 0]);
+    }
+
+    #[test]
+    fn at_names_a_tag_type() {
+        let conn = library();
+        assert_eq!(found(&conn, "@cr:Abba"), [1]);
+        assert_eq!(found(&conn, "@creator:abba"), [1]);
+        assert_eq!(found(&conn, "@cr:Abba,Beta"), [1, 2]);
+        assert_eq!(found(&conn, "@cr:*"), [1, 2]);
+        assert_eq!(found(&conn, "-@cr:*"), [4, 5]);
+        assert_eq!(found(&conn, "@ta:cat"), [1]);
+        // A creator is not a plain tag.
+        assert_eq!(found(&conn, "Abba"), [] as [i64; 0]);
+        assert!(fails("@zz:cat"));
+    }
+
+    #[test]
+    fn trash_is_left_out_unless_asked_for() {
+        let conn = library();
+        assert_eq!(found(&conn, "@trashed"), [3]);
+        assert_eq!(found(&conn, "cat @trashed"), [3]);
+        assert_eq!(found(&conn, "ext=png"), [] as [i64; 0]);
+        assert_eq!(found(&conn, "ext=png @trashed"), [3]);
+        let all = compile("cat", 7, &Aliases::new(), true).unwrap();
+        assert!(!all.filter.contains("trashed"));
+    }
+
+    #[test]
+    fn terms_combine() {
+        let conn = library();
+        assert_eq!(found(&conn, "cat or dog"), [1, 2]);
+        assert_eq!(found(&conn, "-cat"), [2, 4, 5]);
+        assert_eq!(found(&conn, "(cat or dog) score>=3"), [1]);
+        assert_eq!(found(&conn, "cat dog"), [] as [i64; 0]);
+        assert!(fails("(cat"));
+        assert!(fails("cat)"));
+    }
+
+    #[test]
+    fn fields_compare() {
+        let conn = library();
+        assert_eq!(found(&conn, "score>=3"), [1]);
+        assert_eq!(found(&conn, "score=1..2"), [2]);
+        assert_eq!(found(&conn, "rating=nsfw"), [2]);
+        assert_eq!(found(&conn, "media=video"), [2]);
+        assert_eq!(found(&conn, "kind=collection"), [4]);
+        assert_eq!(found(&conn, "type=set"), [4]);
+        assert_eq!(found(&conn, "title~mat"), [1]);
+        assert_eq!(found(&conn, "length>1m"), [2]);
+        assert_eq!(found(&conn, "size>1mb"), [2]);
+        assert_eq!(found(&conn, "pages>100"), [5]);
+        assert_eq!(found(&conn, "width>=1920"), [2]);
+        assert_eq!(found(&conn, "date=2020"), [1]);
+        assert_eq!(found(&conn, "date>=2021"), [] as [i64; 0]);
+        assert_eq!(found(&conn, "has=title"), [1, 4]);
+        assert_eq!(found(&conn, "identifier=isbn-1"), [5]);
+        assert_eq!(found(&conn, "source_url~example"), [5]);
+        assert!(fails("score>many"));
+        assert!(fails("media=film"));
+        assert!(fails("nosuchfield=1"));
+    }
+
+    #[test]
+    fn collections_relate() {
+        let conn = library();
+        assert_eq!(found(&conn, "in=4"), [1, 2]);
+        assert_eq!(found(&conn, "in=(title~pets)"), [1, 2]);
+        assert_eq!(found(&conn, "contains=1"), [4]);
+        assert_eq!(found(&conn, "has=in"), [1, 2]);
+        assert_eq!(found(&conn, "has=contains"), [4]);
+    }
+
+    #[test]
+    fn results_are_ordered() {
+        let conn = library();
+        let none = Aliases::new();
+        // Newest first unless told otherwise.
+        assert_eq!(ordered(&conn, "", &none), [5, 4, 2, 1]);
+        assert_eq!(ordered(&conn, "sort=id", &none), [1, 2, 4, 5]);
+        // Those without a score come last in either direction.
+        assert_eq!(ordered(&conn, "kind=file sort=score", &none), [2, 1, 5]);
+        assert_eq!(ordered(&conn, "kind=file sort=-score", &none), [1, 2, 5]);
+        assert_eq!(ordered(&conn, "in=4 sort=position", &none), [2, 1]);
+        assert!(fails("sort=position"));
+        assert!(fails("sort=nothing"));
+        assert!(!compile("cat", 7, &none, false).unwrap().sorted);
+        assert!(compile("cat sort=id", 7, &none, false).unwrap().sorted);
+    }
+
+    #[test]
+    fn aliases_stand_for_their_tag() {
+        let conn = library();
+        let mut aliases = Aliases::new();
+        aliases.insert(("tags".into(), "kitty".into()), "cat".into());
+        assert_eq!(ordered(&conn, "kitty", &aliases), [1]);
+        assert_eq!(ordered(&conn, "kitty", &Aliases::new()), [] as [i64; 0]);
+    }
+
+    #[test]
+    fn units_and_dates_parse() {
+        assert_eq!(parse_duration("90"), Some(90.0));
+        assert_eq!(parse_duration("1m30s"), Some(90.0));
+        assert_eq!(parse_size("1kb"), Some(1024.0));
+        assert!(valid_date("2020"));
+        assert!(valid_date("2020-05"));
+        assert!(valid_date("2020-05-01"));
+        assert!(!valid_date("2020-5-1"));
+        assert_eq!(tag_type("cr"), Some("creator"));
+        assert_eq!(tag_type("Creator"), Some("creator"));
+        assert_eq!(tag_type("nope"), None);
+    }
 }
