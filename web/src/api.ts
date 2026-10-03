@@ -144,13 +144,39 @@ export const edit = (ids: number[], changes: Changes) =>
 export const deleteEntities = (ids: number[]) =>
   request<{ deleted: number }>("POST", "/entities/delete", { ids });
 /** A tag, or a namespace (ending in a colon) to look further into. */
-export type Suggestion = { value: string; count: number; namespace: boolean };
+export type Suggestion = {
+  value: string;
+  count: number;
+  namespace: boolean;
+  /** The alias that was typed, when the tag was found through one. */
+  alias?: string;
+};
+
+/** A tag in the tag editor, with the aliases that defer to it. */
+export type TagEntry = {
+  value: string;
+  count: number;
+  /** `count` is the items still carrying the alias itself. */
+  aliases: { value: string; count: number }[];
+};
 
 export const suggestTags = (field: string, q: string) =>
   request<Suggestion[]>("GET", `/tags?${params({ field, q })}`);
 /** Renames a namespace on every tag under it; an empty `to` removes it. */
 export const renameNamespace = (field: string, from: string, to: string) =>
+  request<{ renamed: number }>("POST", "/tags/rename", { field, from, to, namespace: true });
+/** Renames a tag; if a tag named `to` exists the two are merged. */
+export const renameTag = (field: string, from: string, to: string) =>
   request<{ renamed: number }>("POST", "/tags/rename", { field, from, to });
+/** `pending` counts items, in any field, still carrying an alias. */
+export const listTags = (field: string) =>
+  request<{ tags: TagEntry[]; pending: number }>("GET", `/tags/all?${params({ field })}`);
+/** Makes `alias` stand for `target`; an empty target removes the alias. */
+export const setAlias = (field: string, alias: string, target: string) =>
+  request<void>("POST", "/tags/alias", { field, alias, target });
+/** Replaces aliases still on items with the tags they stand for. */
+export const applyAliases = () =>
+  request<{ updated: number }>("POST", "/tags/aliases/apply", {});
 
 export const createCollection = (collection_type: string, title: string, members: number[]) =>
   request<{ id: number }>("POST", "/collections", { collection_type, title, members });

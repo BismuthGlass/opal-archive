@@ -1,11 +1,14 @@
 import { createEffect, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import CollectionDialog from "./components/CollectionDialog";
 import Grid from "./components/Grid";
+import { modalOpen } from "./components/Modal";
 import Icon from "./components/Icon";
 import { createStoredFlag, Module } from "./components/Panel";
 import QueryBar from "./components/QueryBar";
+import SettingsModal from "./components/SettingsModal";
 import Sidebar from "./components/Sidebar";
 import TabBar from "./components/TabBar";
+import TagEditor from "./components/TagEditor";
 import Toolbar from "./components/Toolbar";
 import { DropTarget, UploadBox, UploadPanel } from "./components/Upload";
 import Viewer from "./components/Viewer";
@@ -18,6 +21,8 @@ export default function App() {
   /** Result index shown in the viewer, if it is open. */
   const [viewing, setViewing] = createSignal<number | null>(null);
   const [grouping, setGrouping] = createSignal(false);
+  const [editingTags, setEditingTags] = createSignal(false);
+  const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [panelOpen, setPanelOpen] = createStoredFlag("tagutils.panel", true);
 
   onMount(() => {
@@ -44,7 +49,7 @@ export default function App() {
 
   const onKeyDown = (event: KeyboardEvent) => {
     const target = event.target as HTMLElement;
-    if (target.matches("input, textarea, select, [contenteditable]") || grouping()) return;
+    if (target.matches("input, textarea, select, [contenteditable]") || modalOpen()) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
       event.preventDefault();
       selectAll();
@@ -59,7 +64,7 @@ export default function App() {
     <>
       <header class="topbar">
         <button
-          class="panel-toggle"
+          class="icon-button"
           aria-pressed={panelOpen()}
           aria-label="Side panel"
           title={panelOpen() ? "Hide the side panel" : "Show the side panel"}
@@ -69,6 +74,22 @@ export default function App() {
         </button>
         <span class="brand">tagutils</span>
         <TabBar />
+        <button
+          class="icon-button"
+          aria-label="Tags"
+          title="Tags: rename, merge and alias"
+          onClick={() => setEditingTags(true)}
+        >
+          <Icon name="label-outline" />
+        </button>
+        <button
+          class="icon-button"
+          aria-label="Settings"
+          title="Settings"
+          onClick={() => setSettingsOpen(true)}
+        >
+          <Icon name="settings-outline" />
+        </button>
       </header>
       <Show when={error()}>
         {(message) => (
@@ -139,6 +160,12 @@ export default function App() {
             setViewing(index);
           }}
         />
+      </Show>
+      <Show when={editingTags()}>
+        <TagEditor onClose={() => setEditingTags(false)} />
+      </Show>
+      <Show when={settingsOpen()}>
+        <SettingsModal onClose={() => setSettingsOpen(false)} />
       </Show>
       <Show when={grouping()}>
         <CollectionDialog ids={[...selected()]} onClose={() => setGrouping(false)} />

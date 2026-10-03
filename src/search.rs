@@ -7,7 +7,7 @@ use rusqlite::{Connection, params_from_iter, types::Value};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{AppState, error::ApiError, query};
+use crate::{AppState, error::ApiError, query, tags};
 
 const DEFAULT_LIMIT: i64 = 200;
 const MAX_LIMIT: i64 = 1000;
@@ -49,8 +49,13 @@ pub fn router() -> Router<AppState> {
 }
 
 /// Compiles `source`, narrowed to the uploads of `tab` if one is given.
-fn compile(source: &str, seed: i64, tab: Option<i64>) -> Result<query::Compiled, ApiError> {
-    let mut compiled = query::compile(source, seed)?;
+fn compile(
+    conn: &Connection,
+    source: &str,
+    seed: i64,
+    tab: Option<i64>,
+) -> Result<query::Compiled, ApiError> {
+    let mut compiled = query::compile(source, seed, &tags::aliases(conn)?)?;
     if let Some(tab) = tab {
         compiled.filter = format!(
             "({}) AND e0.id IN (SELECT entity_id FROM tab_upload WHERE tab_id = ?)",
@@ -68,7 +73,7 @@ pub fn matching_ids(
     seed: i64,
     tab: Option<i64>,
 ) -> Result<Vec<i64>, ApiError> {
-    let compiled = compile(source, seed, tab)?;
+    let compiled = compile(conn, source, seed, tab)?;
     let sql = format!(
         "SELECT e0.id FROM {} WHERE {} ORDER BY {}",
         query::FROM,
@@ -87,10 +92,10 @@ async fn search(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let compiled = compile(&params.q, params.seed, params.tab)?;
     let limit = params.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let offset = params.offset.max(0);
     let conn = state.db.lock().unwrap();
+    let compiled = compile(&conn, &params.q, params.seed, params.tab)?;
 
     let total: i64 = conn.query_row(
         &format!(

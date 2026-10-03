@@ -1,0 +1,50 @@
+import { createSignal, onCleanup, onMount } from "solid-js";
+import type { JSX } from "solid-js";
+import Icon from "./Icon";
+
+const [openCount, setOpenCount] = createSignal(0);
+
+/** Whether a modal is on screen; page-wide shortcuts stand down while one is. */
+export const modalOpen = () => openCount() > 0;
+
+/**
+ * A window over the page, with a title and a close button. Escape, the
+ * close button and a click outside it all close it. Render one inside a
+ * `<Show>` and unmount it from `onClose`.
+ */
+export default function Modal(props: {
+  title: string;
+  /** For content that needs room, such as a list with actions. */
+  wide?: boolean;
+  onClose: () => void;
+  children: JSX.Element;
+}) {
+  let dialog!: HTMLDialogElement;
+
+  onMount(() => {
+    dialog.showModal();
+    setOpenCount((n) => n + 1);
+  });
+  onCleanup(() => setOpenCount((n) => n - 1));
+
+  return (
+    <dialog
+      ref={dialog}
+      class="dialog"
+      classList={{ wide: props.wide }}
+      onClose={props.onClose}
+      // The dialog element itself is only hit through its backdrop.
+      onClick={(event) => event.target === dialog && dialog.close()}
+    >
+      <div class="dialog-box">
+        <header class="dialog-header">
+          <h2>{props.title}</h2>
+          <button class="plain" aria-label="Close" title="Close" onClick={() => dialog.close()}>
+            <Icon name="close" />
+          </button>
+        </header>
+        {props.children}
+      </div>
+    </dialog>
+  );
+}

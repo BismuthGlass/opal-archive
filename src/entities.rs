@@ -360,6 +360,11 @@ async fn edit(
 
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
+    // Adding an alias adds the tag it defers to.
+    let added = added
+        .into_iter()
+        .map(|(field, value)| Ok((field, tags::resolve(&tx, field, value)?)))
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     for (field, value) in updates {
         let sql = if field == "collection_type" {
             format!("UPDATE collection SET collection_type = ?2 WHERE entity_id {IN_IDS}")

@@ -740,7 +740,12 @@ function TagField(props: FieldProps & { field: string; rename: RenameNamespace }
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => pick(option)}
                 >
-                  <span class="suggestion-value">{option.value}</span>
+                  <span class="suggestion-value">
+                    <Show when={option.alias}>
+                      <span class="suggestion-alias">{option.alias} → </span>
+                    </Show>
+                    {option.value}
+                  </span>
                   <span class="suggestion-count">
                     {option.count}
                     <Show when={option.namespace}>

@@ -510,7 +510,7 @@ button.primary {
 
 .actions button,
 .dialog button:not(.primary),
-.panel-toggle {
+.icon-button {
   padding: 4px 10px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -992,20 +992,174 @@ button.primary {
 
 .dialog {
   width: min(420px, calc(100vw - 32px));
-  padding: 16px;
+  padding: 0;
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
 }
 
+.dialog.wide {
+  width: min(720px, calc(100vw - 32px));
+}
+
 .dialog::backdrop {
   background: rgb(0 0 0 / 0.4);
 }
 
+.dialog-box {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 64px);
+  padding: 16px;
+}
+
+.dialog-header {
+  display: flex;
+  flex: none;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
 .dialog h2 {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 16px;
+}
+
+.dialog button.plain {
+  padding: 2px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 4px;
+}
+
+.dialog button.plain:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+
+.dialog button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Tag editor. */
+
+.tag-editor-bar {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+}
+
+.tag-editor-bar select {
+  flex: 0 0 150px;
+}
+
+.tag-editor-bar input {
+  flex: 1;
+  min-width: 0;
+}
+
+.tag-editor-bar button {
+  flex: none;
+}
+
+.tag-list {
+  /* A fixed height, so the modal does not jump as the filter narrows. */
+  flex: 0 1 60vh;
+  min-height: 120px;
+  margin: 10px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.tag-list > li + li {
+  border-top: 1px solid var(--border);
+}
+
+.tag-list > li.hint {
+  padding: 12px;
+}
+
+.tag-line,
+.tag-alias {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 32px;
+  padding: 2px 8px;
+}
+
+.tag-alias {
+  padding-left: 30px;
+  color: var(--muted);
+}
+
+.tag-toggle {
+  flex: none;
+  width: 20px;
+}
+
+.tag-toggle .icon {
+  transition: transform 0.1s;
+}
+
+.tag-toggle.open .icon {
+  transform: rotate(90deg);
+}
+
+.tag-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-alias .tag-name {
+  color: var(--text);
+}
+
+.tag-uses,
+.tag-note {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-line input,
+.tag-alias input {
+  flex: 1;
+  min-width: 0;
+}
+
+.tag-actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.dialog .tag-actions button {
+  padding: 1px 8px;
+  font-size: 13px;
+}
+
+/* Actions appear on the row in use, to keep a long list calm. */
+.tag-list li:not(:hover):not(:focus-within) .tag-line .tag-actions {
+  visibility: hidden;
+}
+
+.suggestion-alias {
+  color: var(--muted);
 }
 
 .dialog form > * + * {
@@ -1038,12 +1192,12 @@ button.primary {
 
 /* Upload. */
 
-.panel-toggle {
+.icon-button {
   align-self: center;
   margin-bottom: 4px;
 }
 
-.topbar .panel-toggle {
+.topbar .icon-button {
   padding: 3px 5px;
 }
 

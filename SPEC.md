@@ -83,6 +83,20 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - Tags on a file are shown grouped by namespace, so a long list stays readable.
 - A namespace can be renamed or merged as a whole, which renames every tag under it.
 
+### Aliases
+
+- A tag can be an alias of another tag of the same type. The alias defers to that tag: wherever the alias is added to a file or searched for, the tag it defers to is used instead.
+- Aliases don't chain. Making a tag an alias of something that is itself an alias points it at the final tag, and a tag that gains an alias target takes its own aliases along.
+- Making an existing tag an alias does not rewrite the files that carry it. They keep the old tag until "Update aliases" is pressed, which replaces every alias still on a file with the tag it defers to. Until then those files are not found by searching for either name.
+- Removing an alias makes it an ordinary name again; nothing is changed back on files.
+
+### Tag editor
+
+- A modal listing every tag of a type, with how many files carry it.
+- A tag can be renamed. Giving it the name of another tag merges the two.
+- Aliases are listed under the tag they defer to, behind an arrow that expands them, and can be added and removed there.
+- The "Update aliases" button lives here and shows how many uses are waiting.
+
 ### Decisions
 
 - A namespace is not itself a tag. Searching `metroid` does not find a file tagged only `metroid:samus`; `metroid:*` does, and `metroid` is its own tag.

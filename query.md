@@ -111,6 +111,11 @@ character=*:samus           samus in any namespace
 character=samus             only the samus that has no namespace
 ```
 
+A tag can be an alias of another tag. Searching for an alias searches for the
+tag it stands for, so if `kitty` is an alias of `cat`, `kitty` and `-kitty`
+mean `cat` and `-cat`. Only whole values are replaced: patterns (`kit*`,
+`tags~kit`) match the tags that are actually stored.
+
 `name` is the filename the file was uploaded with, and `ext` its extension
 without the dot.
 

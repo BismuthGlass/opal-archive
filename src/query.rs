@@ -279,7 +279,11 @@ fn pad_date(date: &str, padding: &str) -> String {
     format!("{date}{padding}").chars().take(10).collect()
 }
 
-struct Parser {
+/// Tag aliases: field and lowercased alias to the tag it defers to.
+pub type Aliases = std::collections::HashMap<(String, String), String>;
+
+struct Parser<'a> {
+    aliases: &'a Aliases,
     chars: Vec<char>,
     pos: usize,
     /// Subquery nesting; numbers the table aliases.
@@ -293,7 +297,7 @@ struct Parser {
     top_level_in: Vec<i64>,
 }
 
-impl Parser {
+impl Parser<'_> {
     fn peek(&self) -> Option<char> {
         self.chars.get(self.pos).copied()
     }
@@ -686,7 +690,26 @@ impl Parser {
     }
 
     fn tag_term(&mut self, field: &str, op: Op, values: &[Val]) -> String {
-        let matches = self.string_match("t.value", op, values);
+        // A value naming an alias stands for the tag the alias defers to.
+        // Patterns are left alone: they match stored tags, which an alias
+        // is not.
+        let values: Vec<Val> = values
+            .iter()
+            .map(|value| {
+                let key = (field.to_string(), value.text.to_ascii_lowercase());
+                let target = self.aliases.get(&key).filter(|_| op != Op::Like);
+                Val {
+                    text: target.map_or_else(
+                        || value.text.clone(),
+                        // Escaped, so the target is read back literally.
+                        |target| target.replace('\\', "\\\\").replace('*', "\\*"),
+                    ),
+                    quoted: value.quoted,
+                    pos: value.pos,
+                }
+            })
+            .collect();
+        let matches = self.string_match("t.value", op, &values);
         let sql = format!(
             "(EXISTS (SELECT 1 FROM entity_tag et JOIN tag t ON t.id = et.tag_id
               WHERE et.entity_id = {} AND t.field = '{field}' AND {matches}))",
@@ -915,8 +938,9 @@ fn placeholders(count: usize) -> String {
 
 /// Compiles a query. `seed` fixes the order of `sort=random` so that pages
 /// of one search agree with each other.
-pub fn compile(source: &str, seed: i64) -> Res<Compiled> {
+pub fn compile(source: &str, seed: i64, aliases: &Aliases) -> Res<Compiled> {
     let mut parser = Parser {
+        aliases,
         chars: source.chars().collect(),
         pos: 0,
         depth: 0,

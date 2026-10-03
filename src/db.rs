@@ -6,6 +6,7 @@ use rusqlite::{Connection, functions::FunctionFlags};
 const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_tab_kinds.sql"),
+    include_str!("../migrations/0003_tag_aliases.sql"),
 ];
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {

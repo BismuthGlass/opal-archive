@@ -83,7 +83,10 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `POST /entities/edit`            | `{ids, set, add, remove}` → the same edit applied to all       |
 | `POST /entities/delete`          | `{ids}` → delete; files leave storage                          |
 | `GET /tags?field=&q=`            | Completions for a tag field, one namespace level at a time     |
-| `POST /tags/rename`              | `{field, from, to}` → rename a namespace on every tag under it; an empty `to` removes it |
+| `GET /tags/all?field=`           | Every tag of a field with its aliases, and how many alias uses await updating |
+| `POST /tags/rename`              | `{field, from, to}` → rename a tag, merging it into `to` if that exists. With `namespace: true`, rename a namespace on every tag under it; an empty `to` removes it |
+| `POST /tags/alias`               | `{field, alias, target}` → make `alias` stand for `target`; an empty `target` removes the alias |
+| `POST /tags/aliases/apply`       | Replace aliases still on entities with the tags they stand for |
 | `POST /collections`              | `{collection_type, title, members}` → new collection           |
 | `POST /collections/{id}/members` | `{add, remove}` → change membership                            |
 | `PUT /collections/{id}/order`    | `{ids}` → set member positions                                 |

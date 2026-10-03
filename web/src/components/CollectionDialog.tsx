@@ -1,20 +1,18 @@
-import { createEffect, createResource, createSignal, For, Show } from "solid-js";
+import { createResource, createSignal, For, Show } from "solid-js";
 import * as api from "../api";
 import { COLLECTION_TYPES } from "../api";
 import { plural, quoteValue } from "../format";
 import { changed } from "../search";
+import Modal from "./Modal";
 
 /** Puts the given entities into a new or an existing collection. */
 export default function CollectionDialog(props: { ids: number[]; onClose: () => void }) {
-  let dialog!: HTMLDialogElement;
   const [mode, setMode] = createSignal<"new" | "existing">("new");
   const [title, setTitle] = createSignal("");
   const [type, setType] = createSignal(COLLECTION_TYPES[0]);
   const [filter, setFilter] = createSignal("");
   const [target, setTarget] = createSignal<number | null>(null);
   const [error, setError] = createSignal<string | null>(null);
-
-  createEffect(() => dialog.showModal());
 
   const [existing] = createResource(
     () => (mode() === "existing" ? filter() : null),
@@ -42,9 +40,11 @@ export default function CollectionDialog(props: { ids: number[]; onClose: () => 
   };
 
   return (
-    <dialog ref={dialog} class="dialog" onClose={props.onClose}>
+    <Modal
+      title={`Add ${plural(props.ids.length, "item")} to a collection`}
+      onClose={props.onClose}
+    >
       <form onSubmit={submit}>
-        <h2>Add {plural(props.ids.length, "item")} to a collection</h2>
         <div class="segmented">
           <label>
             <input type="radio" name="mode" checked={mode() === "new"} onChange={() => setMode("new")} />
@@ -112,7 +112,7 @@ export default function CollectionDialog(props: { ids: number[]; onClose: () => 
           </p>
         </Show>
         <footer>
-          <button type="button" onClick={() => dialog.close()}>
+          <button type="button" onClick={props.onClose}>
             Cancel
           </button>
           <button type="submit" class="primary">
@@ -120,6 +120,6 @@ export default function CollectionDialog(props: { ids: number[]; onClose: () => 
           </button>
         </footer>
       </form>
-    </dialog>
+    </Modal>
   );
 }
