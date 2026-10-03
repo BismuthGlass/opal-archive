@@ -593,8 +593,6 @@ async fn edit(
     Ok(Json(json!({ "updated": count })))
 }
 
-/// Deletes entities. Files leave internal storage; deleting a collection
-/// leaves its members in place.
 /// Moves entities to the trash, or back out of it.
 fn set_trashed(state: &AppState, ids: &[i64], trashed: bool) -> Result<Json<Value>, ApiError> {
     let conn = state.db.lock().unwrap();
@@ -622,7 +620,8 @@ async fn restore(
 }
 
 /// The second step: deletes for good those of the entities that are in the
-/// trash. Any that are not are left alone.
+/// trash. Any that are not are left alone. Files leave internal storage;
+/// deleting a collection leaves its members in place.
 async fn delete(
     State(state): State<AppState>,
     Json(input): Json<Ids>,
