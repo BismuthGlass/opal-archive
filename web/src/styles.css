@@ -824,6 +824,26 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
   margin-top: 10px;
 }
 
+/* The aggregated tags in the panel, under the score. */
+.aggregate {
+  margin-bottom: 12px;
+}
+
+/* The pill that ends the list and opens its editor. */
+.chip-edit {
+  gap: 2px;
+  padding: 1px 6px;
+  font-size: 13px;
+  color: var(--muted);
+  background: none;
+  border-style: dashed;
+}
+
+.chip-edit:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* The namespace part of a tag, where no heading shows it. */
 .chip-namespace {
   opacity: 0.6;

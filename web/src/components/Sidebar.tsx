@@ -178,7 +178,19 @@ export default function Sidebar(props: { onGroup: () => void }) {
   return (
     <>
       <Show when={meta()}>
-        {(data) => <Stars scalar={data().scalars.score} onChange={set("score")} />}
+        {(data) => (
+          <>
+            <Stars scalar={data().scalars.score} onChange={set("score")} />
+            {/* The aggregated tags, straight under the score. */}
+            <Show when={aggregatedTypes().length > 0}>
+              <AggregatedTags
+                data={data()}
+                apply={apply}
+                onEdit={() => setEditingList(AGGREGATE)}
+              />
+            </Show>
+          </>
+        )}
       </Show>
       <div class="actions">
         <button onClick={download}>
@@ -323,13 +335,6 @@ export default function Sidebar(props: { onGroup: () => void }) {
                 )}
               </Show>
             </dl>
-            <Show when={aggregatedTypes().some((field) => filled(data(), field))}>
-              <AggregatedTags
-                data={data()}
-                apply={apply}
-                onEdit={() => setEditingList(AGGREGATE)}
-              />
-            </Show>
             <For each={TAG_FIELDS.filter((field) => !tagType(field).aggregate)}>
               {(field) => (
                 <Show when={filled(data(), field)}>
@@ -365,11 +370,6 @@ export default function Sidebar(props: { onGroup: () => void }) {
                     adding() !== detail.field,
                 ),
                 [
-                  // The aggregated types are added to through one entry.
-                  ...(aggregatedTypes().some((field) => filled(data(), field)) ||
-                  aggregatedTypes().length === 0
-                    ? []
-                    : [{ field: AGGREGATE, label: "Tags" }]),
                   ...TAG_FIELDS.filter(
                     (field) => !tagType(field).aggregate && !filled(data(), field),
                   ).map((field) => ({ field, label: fieldLabel(field) })),
@@ -1233,8 +1233,9 @@ function TagField(props: FieldProps & ListMode & { field: string; rename: Rename
 
 /**
  * The tags of every aggregated type in one list, told apart by the colour
- * of their pills. In the editor, a row of the types picks which one what
- * is typed goes to.
+ * of their pills. In the panel the list has no heading, and ends in the
+ * button that opens its editor. In the editor, a row of the types picks
+ * which one what is typed goes to.
  */
 function AggregatedTags(props: FieldProps & ListMode) {
   const types = createMemo(aggregatedTypes);
@@ -1243,8 +1244,8 @@ function AggregatedTags(props: FieldProps & ListMode) {
     types().flatMap((field) => (props.data.tags[field] ?? []).map((tag) => ({ field, tag })));
 
   return (
-    <div class="field">
-      <Show when={props.editing} fallback={<ListLabel label="Tags" {...props} />}>
+    <div class={props.editing ? "field" : "aggregate"}>
+      <Show when={props.editing}>
         <div class="type-picker" role="radiogroup" aria-label="Type of the tag to add">
           <For each={types()}>
             {(field) => (
@@ -1265,21 +1266,30 @@ function AggregatedTags(props: FieldProps & ListMode) {
           {(field) => <TagInput field={field} data={props.data} apply={props.apply} />}
         </Show>
       </Show>
-      <Show when={entries().length > 0}>
-        <div class="chips aggregate-chips">
-          <For each={entries()}>
-            {(entry) => (
-              <TagChip
-                field={entry.field}
-                tag={entry.tag}
-                data={props.data}
-                apply={props.apply}
-                editing={props.editing}
-              />
-            )}
-          </For>
-        </div>
-      </Show>
+      <div class="chips aggregate-chips">
+        <For each={entries()}>
+          {(entry) => (
+            <TagChip
+              field={entry.field}
+              tag={entry.tag}
+              data={props.data}
+              apply={props.apply}
+              editing={props.editing}
+            />
+          )}
+        </For>
+        <Show when={!props.editing}>
+          <button
+            class="chip chip-edit"
+            aria-label="Edit tags"
+            title="Add or remove tags"
+            onClick={props.onEdit}
+          >
+            <Icon name="add" />
+            <Show when={entries().length === 0}>Tags</Show>
+          </button>
+        </Show>
+      </div>
     </div>
   );
 }
