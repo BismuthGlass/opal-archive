@@ -7,8 +7,11 @@ use axum::{
     extract::{Path, State},
     routing::{get, post},
 };
-use rusqlite::{Connection, OptionalExtension, params, types::Value as SqlValue};
-use serde::Deserialize;
+use rusqlite::{
+    Connection, OptionalExtension, params,
+    types::{FromSql, Value as SqlValue},
+};
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::{
@@ -88,6 +91,78 @@ fn ids_json(ids: &[i64]) -> String {
     serde_json::to_string(ids).expect("integers serialize")
 }
 
+/// A table of plain values per entity, and the column the value is in.
+type List = (&'static str, &'static str);
+const SOURCE_URLS: List = ("source_url", "url");
+const IDENTIFIERS: List = ("identifier", "value");
+
+/// An entity's values in a list.
+fn list_of(conn: &Connection, list: List, id: i64) -> rusqlite::Result<Vec<String>> {
+    let (table, column) = list;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {column} FROM {table} WHERE entity_id = ?1 ORDER BY {column}"
+    ))?;
+    stmt.query_map([id], |row| row.get(0))?.collect()
+}
+
+/// An entity's tags, by field.
+fn tags_of(conn: &Connection, id: i64) -> rusqlite::Result<BTreeMap<String, Vec<String>>> {
+    let mut tags: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut stmt = conn.prepare(
+        "SELECT t.field, t.value FROM entity_tag et JOIN tag t ON t.id = et.tag_id
+         WHERE et.entity_id = ?1 ORDER BY t.value",
+    )?;
+    for row in stmt.query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))? {
+        let (field, value): (String, String) = row?;
+        tags.entry(field).or_default().push(value);
+    }
+    Ok(tags)
+}
+
+/// What is known of an entity as a file, if it is one.
+fn file_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
+    conn.query_row(
+        "SELECT hash, extension, media_type, size, original_name, width, height,
+                page_count, length, looping, has_thumbnail
+         FROM file WHERE entity_id = ?1",
+        [id],
+        |row| {
+            Ok(json!({
+                "hash": row.get::<_, String>(0)?,
+                "extension": row.get::<_, String>(1)?,
+                "media_type": row.get::<_, String>(2)?,
+                "size": row.get::<_, i64>(3)?,
+                "original_name": row.get::<_, Option<String>>(4)?,
+                "width": row.get::<_, Option<i64>>(5)?,
+                "height": row.get::<_, Option<i64>>(6)?,
+                "page_count": row.get::<_, Option<i64>>(7)?,
+                "length": row.get::<_, Option<f64>>(8)?,
+                "looping": row.get::<_, Option<bool>>(9)?,
+                "has_thumbnail": row.get::<_, bool>(10)?,
+            }))
+        },
+    )
+    .optional()
+}
+
+/// What is known of an entity as a collection, if it is one.
+fn collection_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
+    conn.query_row(
+        "SELECT collection_type,
+                (SELECT count(*) FROM membership WHERE collection_id = ?1), ordered
+         FROM collection WHERE entity_id = ?1",
+        [id],
+        |row| {
+            Ok(json!({
+                "collection_type": row.get::<_, String>(0)?,
+                "member_count": row.get::<_, i64>(1)?,
+                "ordered": row.get::<_, bool>(2)?,
+            }))
+        },
+    )
+    .optional()
+}
+
 /// Everything known about one entity.
 async fn entity(
     State(state): State<AppState>,
@@ -111,96 +186,42 @@ async fn entity(
             Ok(entity)
         },
     )?;
-
-    let mut tags: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut stmt = conn.prepare(
-        "SELECT t.field, t.value FROM entity_tag et JOIN tag t ON t.id = et.tag_id
-         WHERE et.entity_id = ?1 ORDER BY t.value",
-    )?;
-    for row in stmt.query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))? {
-        let (field, value): (String, String) = row?;
-        tags.entry(field).or_default().push(value);
-    }
-    result.insert("tags".into(), json!(tags));
-
-    let mut stmt = conn.prepare("SELECT url FROM source_url WHERE entity_id = ?1 ORDER BY url")?;
-    let urls = stmt
-        .query_map([id], |row| row.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    result.insert("source_urls".into(), json!(urls));
-
-    let mut stmt =
-        conn.prepare("SELECT value FROM identifier WHERE entity_id = ?1 ORDER BY value")?;
-    let identifiers = stmt
-        .query_map([id], |row| row.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    result.insert("identifiers".into(), json!(identifiers));
-
-    let file = conn
-        .query_row(
-            "SELECT hash, extension, media_type, size, original_name, width, height,
-                    page_count, length, looping, has_thumbnail
-             FROM file WHERE entity_id = ?1",
-            [id],
-            |row| {
-                Ok(json!({
-                    "hash": row.get::<_, String>(0)?,
-                    "extension": row.get::<_, String>(1)?,
-                    "media_type": row.get::<_, String>(2)?,
-                    "size": row.get::<_, i64>(3)?,
-                    "original_name": row.get::<_, Option<String>>(4)?,
-                    "width": row.get::<_, Option<i64>>(5)?,
-                    "height": row.get::<_, Option<i64>>(6)?,
-                    "page_count": row.get::<_, Option<i64>>(7)?,
-                    "length": row.get::<_, Option<f64>>(8)?,
-                    "looping": row.get::<_, Option<bool>>(9)?,
-                    "has_thumbnail": row.get::<_, bool>(10)?,
-                }))
-            },
-        )
-        .optional()?;
-    result.insert("file".into(), json!(file));
-
-    let collection = conn
-        .query_row(
-            "SELECT collection_type,
-                    (SELECT count(*) FROM membership WHERE collection_id = ?1), ordered
-             FROM collection WHERE entity_id = ?1",
-            [id],
-            |row| {
-                Ok(json!({
-                    "collection_type": row.get::<_, String>(0)?,
-                    "member_count": row.get::<_, i64>(1)?,
-                    "ordered": row.get::<_, bool>(2)?,
-                }))
-            },
-        )
-        .optional()?;
-    result.insert("collection".into(), json!(collection));
-
+    result.insert("tags".into(), json!(tags_of(&conn, id)?));
+    result.insert(
+        "source_urls".into(),
+        json!(list_of(&conn, SOURCE_URLS, id)?),
+    );
+    result.insert(
+        "identifiers".into(),
+        json!(list_of(&conn, IDENTIFIERS, id)?),
+    );
+    result.insert("file".into(), json!(file_details(&conn, id)?));
+    result.insert("collection".into(), json!(collection_details(&conn, id)?));
     Ok(Json(Value::Object(result)))
 }
 
-/// The metadata a set of entities has in common, for editing them together.
-/// Scalars report their shared value or that they are mixed; tags and
-/// collections report how many of the entities carry each.
-async fn metadata(
-    State(state): State<AppState>,
-    Json(input): Json<Ids>,
-) -> Result<Json<Value>, ApiError> {
-    let conn = state.db.lock().unwrap();
-    let ids = ids_json(&input.ids);
+/// What a set of entities has of one field: the value they share, or that
+/// they differ.
+fn shared(value: Value, mixed: bool) -> Value {
+    json!({ "value": if mixed { Value::Null } else { value }, "mixed": mixed })
+}
 
+/// How many entities there are, how many of them files, and what they share
+/// of each scalar field.
+fn shared_scalars(
+    conn: &Connection,
+    ids: &str,
+) -> rusqlite::Result<(i64, i64, Map<String, Value>)> {
     let columns: Vec<String> = SCALARS
         .iter()
         .map(|field| format!("count(DISTINCT {field}), count({field}), min({field})"))
         .collect();
-    let (count, files, scalars) = conn.query_row(
+    let (count, files, mut scalars) = conn.query_row(
         &format!(
             "SELECT count(*), coalesce(sum(kind = 'file'), 0), {} FROM entity WHERE id {IN_IDS}",
             columns.join(", ")
         ),
-        [&ids],
+        [ids],
         |row| {
             let count: i64 = row.get(0)?;
             let mut scalars = Map::new();
@@ -209,12 +230,10 @@ async fn metadata(
                 let set: i64 = row.get(3 + i * 3)?;
                 // Mixed also covers "set on some, empty on others".
                 let mixed = distinct > 1 || (distinct == 1 && set < count);
-                let value = if mixed {
-                    Value::Null
-                } else {
-                    to_json(row.get(4 + i * 3)?)
-                };
-                scalars.insert(field.to_string(), json!({ "value": value, "mixed": mixed }));
+                scalars.insert(
+                    field.to_string(),
+                    shared(to_json(row.get(4 + i * 3)?), mixed),
+                );
             }
             Ok((count, row.get::<_, i64>(1)?, scalars))
         },
@@ -226,56 +245,56 @@ async fn metadata(
             "SELECT count(DISTINCT original_name), count(original_name), min(original_name)
              FROM file WHERE entity_id {IN_IDS}"
         ),
-        [&ids],
+        [ids],
         |row| {
             let (distinct, set): (i64, i64) = (row.get(0)?, row.get(1)?);
             let mixed = distinct > 1 || (distinct == 1 && set < files);
-            let value: Option<String> = row.get(2)?;
-            Ok(json!({ "value": if mixed { None } else { value }, "mixed": mixed }))
+            Ok(shared(to_json(row.get(2)?), mixed))
         },
     )?;
-    let mut scalars = scalars;
     scalars.insert("original_name".into(), original_name);
+    Ok((count, files, scalars))
+}
 
-    let collection_type = conn.query_row(
+/// What the collections among the entities share of a column of theirs.
+fn shared_of_collections<T: FromSql + Serialize>(
+    conn: &Connection,
+    ids: &str,
+    column: &str,
+) -> rusqlite::Result<Value> {
+    conn.query_row(
         &format!(
-            "SELECT count(DISTINCT collection_type), min(collection_type)
+            "SELECT count(DISTINCT {column}), min({column})
              FROM collection WHERE entity_id {IN_IDS}"
         ),
-        [&ids],
-        |row| {
-            let distinct: i64 = row.get(0)?;
-            let value: Option<String> = row.get(1)?;
-            Ok(json!({ "value": if distinct > 1 { None } else { value }, "mixed": distinct > 1 }))
-        },
-    )?;
+        [ids],
+        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<T>>(1)?)),
+    )
+    .map(|(distinct, value)| shared(json!(value), distinct > 1))
+}
 
-    let trashed: i64 = conn.query_row(
-        &format!("SELECT count(*) FROM entity WHERE trashed = 1 AND id {IN_IDS}"),
-        [&ids],
-        |row| row.get(0),
-    )?;
+/// Each value the entities have in a list table, and how many have it.
+fn counted(conn: &Connection, ids: &str, list: List) -> rusqlite::Result<Vec<Value>> {
+    let (table, column) = list;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {column}, count(*) FROM {table} WHERE entity_id {IN_IDS}
+         GROUP BY {column} ORDER BY {column}"
+    ))?;
+    stmt.query_map([ids], |row| {
+        Ok(json!({ "value": row.get::<_, String>(0)?, "count": row.get::<_, i64>(1)? }))
+    })?
+    .collect()
+}
 
-    let ordered = conn.query_row(
-        &format!(
-            "SELECT count(DISTINCT ordered), min(ordered)
-             FROM collection WHERE entity_id {IN_IDS}"
-        ),
-        [&ids],
-        |row| {
-            let distinct: i64 = row.get(0)?;
-            let value: Option<bool> = row.get(1)?;
-            Ok(json!({ "value": if distinct > 1 { None } else { value }, "mixed": distinct > 1 }))
-        },
-    )?;
-
+/// Each tag the entities carry, by field, and how many carry it.
+fn counted_tags(conn: &Connection, ids: &str) -> rusqlite::Result<BTreeMap<String, Vec<Value>>> {
     let mut tags: BTreeMap<String, Vec<Value>> = BTreeMap::new();
     let mut stmt = conn.prepare(&format!(
         "SELECT t.field, t.value, count(*), t.description
          FROM entity_tag et JOIN tag t ON t.id = et.tag_id
          WHERE et.entity_id {IN_IDS} GROUP BY t.id ORDER BY t.value"
     ))?;
-    let rows = stmt.query_map([&ids], |row| {
+    let rows = stmt.query_map([ids], |row| {
         Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
     })?;
     for row in rows {
@@ -284,26 +303,11 @@ async fn metadata(
             .or_default()
             .push(json!({ "value": value, "count": count, "description": description }));
     }
+    Ok(tags)
+}
 
-    let mut stmt = conn.prepare(&format!(
-        "SELECT url, count(*) FROM source_url WHERE entity_id {IN_IDS} GROUP BY url ORDER BY url"
-    ))?;
-    let source_urls = stmt
-        .query_map([&ids], |row| {
-            Ok(json!({ "value": row.get::<_, String>(0)?, "count": row.get::<_, i64>(1)? }))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-
-    let mut stmt = conn.prepare(&format!(
-        "SELECT value, count(*) FROM identifier WHERE entity_id {IN_IDS}
-         GROUP BY value ORDER BY value"
-    ))?;
-    let identifiers = stmt
-        .query_map([&ids], |row| {
-            Ok(json!({ "value": row.get::<_, String>(0)?, "count": row.get::<_, i64>(1)? }))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-
+/// The collections any of the entities are in, and how many are in each.
+fn memberships(conn: &Connection, ids: &str) -> rusqlite::Result<Vec<Value>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT c.entity_id, e.title, c.collection_type, count(*)
          FROM membership m
@@ -311,29 +315,44 @@ async fn metadata(
          JOIN entity e ON e.id = c.entity_id
          WHERE m.member_id {IN_IDS} GROUP BY c.entity_id ORDER BY e.title, c.entity_id"
     ))?;
-    let memberships = stmt
-        .query_map([&ids], |row| {
-            Ok(json!({
-                "id": row.get::<_, i64>(0)?,
-                "title": row.get::<_, Option<String>>(1)?,
-                "collection_type": row.get::<_, String>(2)?,
-                "count": row.get::<_, i64>(3)?,
-            }))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    stmt.query_map([ids], |row| {
+        Ok(json!({
+            "id": row.get::<_, i64>(0)?,
+            "title": row.get::<_, Option<String>>(1)?,
+            "collection_type": row.get::<_, String>(2)?,
+            "count": row.get::<_, i64>(3)?,
+        }))
+    })?
+    .collect()
+}
 
+/// The metadata a set of entities has in common, for editing them together.
+/// Scalars report their shared value or that they are mixed; tags and
+/// collections report how many of the entities carry each.
+async fn metadata(
+    State(state): State<AppState>,
+    Json(input): Json<Ids>,
+) -> Result<Json<Value>, ApiError> {
+    let conn = state.db.lock().unwrap();
+    let ids = ids_json(&input.ids);
+    let (count, files, scalars) = shared_scalars(&conn, &ids)?;
+    let trashed: i64 = conn.query_row(
+        &format!("SELECT count(*) FROM entity WHERE trashed = 1 AND id {IN_IDS}"),
+        [&ids],
+        |row| row.get(0),
+    )?;
     Ok(Json(json!({
         "count": count,
         "files": files,
         "collections": count - files,
         "trashed": trashed,
         "scalars": scalars,
-        "collection_type": collection_type,
-        "ordered": ordered,
-        "tags": tags,
-        "source_urls": source_urls,
-        "identifiers": identifiers,
-        "memberships": memberships,
+        "collection_type": shared_of_collections::<String>(&conn, &ids, "collection_type")?,
+        "ordered": shared_of_collections::<bool>(&conn, &ids, "ordered")?,
+        "tags": counted_tags(&conn, &ids)?,
+        "source_urls": counted(&conn, &ids, SOURCE_URLS)?,
+        "identifiers": counted(&conn, &ids, IDENTIFIERS)?,
+        "memberships": memberships(&conn, &ids)?,
     })))
 }
 
@@ -447,24 +466,110 @@ fn prune_tags(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
+/// The table a field that can be set lives on, and that table's ID column.
+fn home(field: &str) -> Option<(&'static str, &'static str)> {
+    match field {
+        "collection_type" | "ordered" => Some(("collection", "entity_id")),
+        "original_name" => Some(("file", "entity_id")),
+        field if SCALARS.contains(&field) => Some(("entity", "id")),
+        _ => None,
+    }
+}
+
+/// Gives positions to the members of ordered collections that have none,
+/// after any that already have one: for collections that have just become
+/// ordered.
+fn number_members(conn: &Connection, ids: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        &format!(
+            "WITH numbered AS (
+                 SELECT m.collection_id, m.member_id,
+                        (SELECT coalesce(max(position), -1) FROM membership x
+                         WHERE x.collection_id = m.collection_id)
+                        + row_number() OVER (
+                            PARTITION BY m.collection_id ORDER BY m.member_id
+                        ) AS position
+                 FROM membership m JOIN collection c ON c.entity_id = m.collection_id
+                 WHERE m.position IS NULL AND c.ordered = 1 AND m.collection_id {IN_IDS}
+             )
+             UPDATE membership SET position = (
+                 SELECT n.position FROM numbered n
+                 WHERE n.collection_id = membership.collection_id
+                   AND n.member_id = membership.member_id
+             )
+             WHERE (collection_id, member_id) IN (
+                 SELECT collection_id, member_id FROM numbered
+             )"
+        ),
+        [ids],
+    )?;
+    Ok(())
+}
+
+/// Puts a tag on the entities, creating it if it is new.
+fn attach_tag(conn: &Connection, ids: &str, field: &str, value: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO tag (field, value) VALUES (?1, ?2) ON CONFLICT (field, value) DO NOTHING",
+        [field, value],
+    )?;
+    conn.execute(
+        &format!(
+            "INSERT OR IGNORE INTO entity_tag (entity_id, tag_id)
+             SELECT e.id, t.id FROM entity e, tag t
+             WHERE e.id {IN_IDS} AND t.field = ?2 AND t.value = ?3"
+        ),
+        params![ids, field, value],
+    )?;
+    Ok(())
+}
+
+fn detach_tag(conn: &Connection, ids: &str, field: &str, value: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        &format!(
+            "DELETE FROM entity_tag WHERE entity_id {IN_IDS}
+             AND tag_id IN (SELECT id FROM tag WHERE field = ?2 AND value = ?3)"
+        ),
+        params![ids, field, value],
+    )?;
+    Ok(())
+}
+
+fn add_to_list(conn: &Connection, ids: &str, list: List, value: &str) -> rusqlite::Result<()> {
+    let (table, column) = list;
+    conn.execute(
+        &format!(
+            "INSERT OR IGNORE INTO {table} (entity_id, {column})
+             SELECT id, ?2 FROM entity WHERE id {IN_IDS}"
+        ),
+        params![ids, value],
+    )?;
+    Ok(())
+}
+
+fn remove_from_list(conn: &Connection, ids: &str, list: List, value: &str) -> rusqlite::Result<()> {
+    let (table, column) = list;
+    conn.execute(
+        &format!("DELETE FROM {table} WHERE entity_id {IN_IDS} AND {column} = ?2"),
+        params![ids, value],
+    )?;
+    Ok(())
+}
+
 /// Applies the same change to every listed entity, all or nothing.
 async fn edit(
     State(state): State<AppState>,
     Json(input): Json<EditInput>,
 ) -> Result<Json<Value>, ApiError> {
+    // Everything is checked before anything is changed.
     let mut updates = Vec::new();
     for (field, value) in &input.set {
         if field == "collection_type" && value.is_null() {
             return Err(ApiError::bad_request("a collection must have a type"));
         }
-        if !SCALARS.contains(&field.as_str())
-            && field != "collection_type"
-            && field != "ordered"
-            && field != "original_name"
-        {
+        let Some(home) = home(field) else {
             return Err(ApiError::BadRequest(format!("`{field}` cannot be set")));
-        }
-        updates.push((field.as_str(), scalar_value(field, value)?));
+        };
+        updates.push((field.as_str(), home, scalar_value(field, value)?));
     }
     let added = tag_values(&input.add, true)?;
     let removed = tag_values(&input.remove, false)?;
@@ -485,104 +590,38 @@ async fn edit(
 
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
-    // Adding an alias adds the tag it defers to.
-    let added = added
-        .into_iter()
-        .map(|(field, value)| Ok((field, tags::resolve(&tx, field, value)?)))
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    for (field, value) in updates {
-        let sql = if field == "collection_type" || field == "ordered" {
-            format!("UPDATE collection SET {field} = ?2 WHERE entity_id {IN_IDS}")
-        } else if field == "original_name" {
-            format!("UPDATE file SET original_name = ?2 WHERE entity_id {IN_IDS}")
-        } else {
-            format!("UPDATE entity SET {field} = ?2 WHERE id {IN_IDS}")
-        };
-        tx.execute(&sql, params![ids, value])?;
+    for (field, (table, key), value) in updates {
+        tx.execute(
+            &format!("UPDATE {table} SET {field} = ?2 WHERE {key} {IN_IDS}"),
+            params![ids, value],
+        )?;
         if field == "ordered" {
-            // Members of a collection that has just become ordered get
-            // positions, after any that already have one.
-            tx.execute(
-                &format!(
-                    "WITH numbered AS (
-                         SELECT m.collection_id, m.member_id,
-                                (SELECT coalesce(max(position), -1) FROM membership x
-                                 WHERE x.collection_id = m.collection_id)
-                                + row_number() OVER (
-                                    PARTITION BY m.collection_id ORDER BY m.member_id
-                                ) AS position
-                         FROM membership m JOIN collection c ON c.entity_id = m.collection_id
-                         WHERE m.position IS NULL AND c.ordered = 1 AND m.collection_id {IN_IDS}
-                     )
-                     UPDATE membership SET position = (
-                         SELECT n.position FROM numbered n
-                         WHERE n.collection_id = membership.collection_id
-                           AND n.member_id = membership.member_id
-                     )
-                     WHERE (collection_id, member_id) IN (
-                         SELECT collection_id, member_id FROM numbered
-                     )"
-                ),
-                [&ids],
-            )?;
+            number_members(&tx, &ids)?;
         }
     }
-    for (field, value) in &added {
-        tx.execute(
-            "INSERT INTO tag (field, value) VALUES (?1, ?2) ON CONFLICT (field, value) DO NOTHING",
-            [field, &value.as_str()],
-        )?;
-        tx.execute(
-            &format!(
-                "INSERT OR IGNORE INTO entity_tag (entity_id, tag_id)
-                 SELECT e.id, t.id FROM entity e, tag t
-                 WHERE e.id {IN_IDS} AND t.field = ?2 AND t.value = ?3"
-            ),
-            params![ids, field, value],
-        )?;
+    for (field, value) in added {
+        // Adding an alias adds the tag it defers to.
+        let value = tags::resolve(&tx, field, value)?;
+        attach_tag(&tx, &ids, field, &value)?;
     }
     for (field, value) in &removed {
-        tx.execute(
-            &format!(
-                "DELETE FROM entity_tag WHERE entity_id {IN_IDS}
-                 AND tag_id IN (SELECT id FROM tag WHERE field = ?2 AND value = ?3)"
-            ),
-            params![ids, field, value],
-        )?;
+        detach_tag(&tx, &ids, field, value)?;
     }
     if !removed.is_empty() {
         prune_tags(&tx)?;
     }
     for url in &added_urls {
-        tx.execute(
-            &format!(
-                "INSERT OR IGNORE INTO source_url (entity_id, url)
-                 SELECT id, ?2 FROM entity WHERE id {IN_IDS}"
-            ),
-            params![ids, url],
-        )?;
+        add_to_list(&tx, &ids, SOURCE_URLS, url)?;
     }
     // Removed as written, so one stored before the rules can be taken off.
     for url in &input.remove_urls {
-        tx.execute(
-            &format!("DELETE FROM source_url WHERE entity_id {IN_IDS} AND url = ?2"),
-            params![ids, url.trim()],
-        )?;
+        remove_from_list(&tx, &ids, SOURCE_URLS, url.trim())?;
     }
     for value in &added_identifiers {
-        tx.execute(
-            &format!(
-                "INSERT OR IGNORE INTO identifier (entity_id, value)
-                 SELECT id, ?2 FROM entity WHERE id {IN_IDS}"
-            ),
-            params![ids, value],
-        )?;
+        add_to_list(&tx, &ids, IDENTIFIERS, value)?;
     }
     for value in &input.remove_identifiers {
-        tx.execute(
-            &format!("DELETE FROM identifier WHERE entity_id {IN_IDS} AND value = ?2"),
-            params![ids, value.trim()],
-        )?;
+        remove_from_list(&tx, &ids, IDENTIFIERS, value.trim())?;
     }
     let count: i64 = tx.query_row(
         &format!("SELECT count(*) FROM entity WHERE id {IN_IDS}"),
