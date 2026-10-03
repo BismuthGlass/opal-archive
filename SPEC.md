@@ -74,16 +74,17 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - `metroid:*` finds everything under the namespace, at any depth: `metroid:samus` and also `metroid:prime:ridley`.
 - `*:samus` finds the tag `samus` in any namespace.
 - `samus` alone finds only the tag with no namespace. It does not find `metroid:samus`.
+- `metroid` alone finds only the tag `metroid`, not the tags under the namespace of that name.
 - All of this works the same with a type in front: `character=metroid:*`.
 
 ### Interface
 
-- When typing a tag, suggestions complete one level at a time: first the namespaces, then what is inside the chosen one.
+- When typing a tag, suggestions complete one level at a time: first the namespaces, then what is inside the chosen one. A bare name typed at the top level also suggests tags of that name inside namespaces.
 - Tags on a file are shown grouped by namespace, so a long list stays readable.
 - A namespace can be renamed or merged as a whole, which renames every tag under it.
 
-### Open questions
+### Decisions
 
-- Should a namespace also count as a tag? That is, should searching `metroid` find a file tagged only `metroid:samus`? The text above says no: a file is found by `metroid:*`, and `metroid` is its own tag.
-- Should `samus` alone find `metroid:samus`? The text above says no, and `*:samus` is the way to ask for it. Saying yes makes casual searches friendlier but makes it impossible to ask for only the tag without a namespace.
-- Does a tag need to exist before it can be used, or is it created by typing it, as now?
+- A namespace is not itself a tag. Searching `metroid` does not find a file tagged only `metroid:samus`; `metroid:*` does, and `metroid` is its own tag.
+- A bare name does not reach into namespaces. Searching `samus` does not find `metroid:samus`; `*:samus` does. This keeps it possible to ask for only the tag without a namespace.
+- A tag does not need to exist before it is used. Typing a new one creates it, and a tag no file carries any more disappears.
