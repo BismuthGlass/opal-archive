@@ -71,6 +71,7 @@ export type Metadata = {
   /** Whether the selected collections keep their members in order. */
   ordered: { value: boolean | null; mixed: boolean };
   tags: Record<string, { value: string; count: number }[]>;
+  source_urls: { value: string; count: number }[];
   memberships: { id: number; title: string | null; collection_type: string; count: number }[];
 };
 
@@ -78,6 +79,9 @@ export type Changes = {
   set?: Record<string, string | number | boolean | null>;
   add?: Record<string, string[]>;
   remove?: Record<string, string[]>;
+  /** Source URLs, which are a list of their own rather than tags. */
+  add_urls?: string[];
+  remove_urls?: string[];
 };
 
 export const TAG_FIELDS = [
@@ -92,14 +96,10 @@ export const TAG_FIELDS = [
   "flaws",
   "language",
   "source",
-  "source_url",
   "identifier",
   "usage_tags",
   "ai_usage_tags",
 ] as const;
-
-/** Tag fields whose values are not names: a colon in them is no namespace. */
-export const FLAT_TAG_FIELDS: readonly string[] = ["source_url"];
 
 export const COLLECTION_TYPES = ["usercollection", "set", "sequence", "variant", "sourceset"];
 export const CONTENT_RATINGS = ["safe", "risky", "nsfw"];

@@ -19,10 +19,6 @@ use crate::{
     query::{Aliases, TAG_FIELDS, contains_pattern},
 };
 
-/// Tag fields whose values are not names, so a colon in them is not a
-/// namespace separator.
-const FLAT_FIELDS: &[&str] = &["source_url"];
-
 const MAX_SUGGESTIONS: usize = 50;
 
 #[derive(Deserialize)]
@@ -87,19 +83,12 @@ pub fn check_field(field: &str) -> Result<(), ApiError> {
     }
 }
 
-fn namespaced(field: &str) -> bool {
-    !FLAT_FIELDS.contains(&field)
-}
-
-/// A tag value as it is stored: trimmed, and for namespaced fields with no
-/// space around its colons. Empty values and empty parts are refused.
+/// A tag value as it is stored: trimmed, with no space around the colons
+/// of its namespaces. Empty values and empty parts are refused.
 pub fn normalize(field: &str, value: &str) -> Result<String, ApiError> {
     let value = value.trim();
     if value.is_empty() {
         return Err(ApiError::BadRequest(format!("empty value for `{field}`")));
-    }
-    if !namespaced(field) {
-        return Ok(value.to_string());
     }
     let parts: Vec<&str> = value.split(':').map(str::trim).collect();
     if parts.iter().any(|part| part.is_empty()) {
@@ -110,9 +99,9 @@ pub fn normalize(field: &str, value: &str) -> Result<String, ApiError> {
     Ok(parts.join(":"))
 }
 
-/// Completions for what has been typed into a tag field. For a namespaced
-/// field they go one level at a time: the namespaces and tags directly under
-/// the namespace typed so far.
+/// Completions for what has been typed into a tag field. They go one level
+/// at a time: the namespaces and tags directly under the namespace typed so
+/// far.
 async fn suggest(
     State(state): State<AppState>,
     Query(params): Query<SuggestParams>,
@@ -122,11 +111,11 @@ async fn suggest(
     // What is typed splits into the namespace being looked in, with its
     // colon, and the start of a name inside it.
     let (prefix, rest) = match typed.rfind(':') {
-        Some(at) if namespaced(&params.field) => {
+        Some(at) => {
             let parts: Vec<&str> = typed[..at].split(':').map(str::trim).collect();
             (format!("{}:", parts.join(":")), typed[at + 1..].trim())
         }
-        _ => (String::new(), typed),
+        None => (String::new(), typed),
     };
     let rest = rest.to_lowercase();
 
@@ -159,7 +148,7 @@ async fn suggest(
         let Some(inside) = value.get(prefix.len()..) else {
             continue;
         };
-        let below = inside.split_once(':').filter(|_| namespaced(&params.field));
+        let below = inside.split_once(':');
         match below {
             Some((namespace, _)) => {
                 if let Some(rank) = rank(namespace) {
@@ -317,9 +306,6 @@ async fn rename(
         return Ok(Json(json!({ "renamed": 1 })));
     }
 
-    if !namespaced(field) {
-        return Err(ApiError::BadRequest(format!("`{field}` has no namespaces")));
-    }
     let from = normalize(field, &input.from)?;
     let to = match input.to.trim() {
         "" => String::new(),

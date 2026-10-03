@@ -82,6 +82,9 @@ Multi-valued: `creator` `medium` `genre` `style` `flaws` `person`
 `source_work` `character` `language` `tags` `identifier` `usage_tags`
 `ai_usage_tags` `source` `source_url`
 
+(`source_url` is a list of addresses rather than a tag field: it is searched
+the same way, but has no namespaces or aliases.)
+
 Single-valued: `title` `description` `ai_description` `version` `name` `ext`
 `hash`
 

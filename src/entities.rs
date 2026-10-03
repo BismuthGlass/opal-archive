@@ -51,6 +51,12 @@ struct EditInput {
     /// Tag field to values to detach.
     #[serde(default)]
     remove: BTreeMap<String, Vec<String>>,
+    /// Source URLs to attach.
+    #[serde(default)]
+    add_urls: Vec<String>,
+    /// Source URLs to detach.
+    #[serde(default)]
+    remove_urls: Vec<String>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -110,6 +116,12 @@ async fn entity(
         tags.entry(field).or_default().push(value);
     }
     result.insert("tags".into(), json!(tags));
+
+    let mut stmt = conn.prepare("SELECT url FROM source_url WHERE entity_id = ?1 ORDER BY url")?;
+    let urls = stmt
+        .query_map([id], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    result.insert("source_urls".into(), json!(urls));
 
     let file = conn
         .query_row(
@@ -253,6 +265,15 @@ async fn metadata(
     }
 
     let mut stmt = conn.prepare(&format!(
+        "SELECT url, count(*) FROM source_url WHERE entity_id {IN_IDS} GROUP BY url ORDER BY url"
+    ))?;
+    let source_urls = stmt
+        .query_map([&ids], |row| {
+            Ok(json!({ "value": row.get::<_, String>(0)?, "count": row.get::<_, i64>(1)? }))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    let mut stmt = conn.prepare(&format!(
         "SELECT c.entity_id, e.title, c.collection_type, count(*)
          FROM membership m
          JOIN collection c ON c.entity_id = m.collection_id
@@ -279,6 +300,7 @@ async fn metadata(
         "collection_type": collection_type,
         "ordered": ordered,
         "tags": tags,
+        "source_urls": source_urls,
         "memberships": memberships,
     })))
 }
@@ -355,6 +377,34 @@ fn tag_values(
     Ok(pairs)
 }
 
+/// A source URL as it is stored. It has to be a web address, since it is
+/// shown as a link; one typed without a scheme gets `https://`.
+fn source_url(value: &str) -> Result<String, ApiError> {
+    let value = value.trim();
+    // `host:8080/path` has a port; `javascript:…` or `mailto:…` has a scheme
+    // that is not a web one, and is refused below for lacking `http`.
+    let host = value.split('/').next().unwrap_or("");
+    let other_scheme = host
+        .split_once(':')
+        .is_some_and(|(_, after)| !after.starts_with(|c: char| c.is_ascii_digit()));
+    let url = if value.contains("://") || other_scheme {
+        value.to_string()
+    } else {
+        format!("https://{value}")
+    };
+    let rest = ["http://", "https://"].iter().find_map(|scheme| {
+        url.get(..scheme.len())
+            .filter(|start| start.eq_ignore_ascii_case(scheme))
+            .map(|_| &url[scheme.len()..])
+    });
+    match rest {
+        Some(rest) if !rest.is_empty() && !url.contains(char::is_whitespace) => Ok(url),
+        _ => Err(ApiError::BadRequest(format!(
+            "`{value}` is not a web address (http or https)"
+        ))),
+    }
+}
+
 /// Deletes tag values no entity carries any more.
 fn prune_tags(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute(
@@ -387,6 +437,11 @@ async fn edit(
     }
     let added = tag_values(&input.add, true)?;
     let removed = tag_values(&input.remove, false)?;
+    let added_urls = input
+        .add_urls
+        .iter()
+        .map(|url| source_url(url))
+        .collect::<Result<Vec<_>, _>>()?;
     let ids = ids_json(&input.ids);
 
     let mut conn = state.db.lock().unwrap();
@@ -458,6 +513,22 @@ async fn edit(
     }
     if !removed.is_empty() {
         prune_tags(&tx)?;
+    }
+    for url in &added_urls {
+        tx.execute(
+            &format!(
+                "INSERT OR IGNORE INTO source_url (entity_id, url)
+                 SELECT id, ?2 FROM entity WHERE id {IN_IDS}"
+            ),
+            params![ids, url],
+        )?;
+    }
+    // Removed as written, so one stored before the rules can be taken off.
+    for url in &input.remove_urls {
+        tx.execute(
+            &format!("DELETE FROM source_url WHERE entity_id {IN_IDS} AND url = ?2"),
+            params![ids, url.trim()],
+        )?;
     }
     let count: i64 = tx.query_row(
         &format!("SELECT count(*) FROM entity WHERE id {IN_IDS}"),

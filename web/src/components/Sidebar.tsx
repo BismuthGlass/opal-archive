@@ -10,7 +10,7 @@ import {
   Switch,
 } from "solid-js";
 import * as api from "../api";
-import { AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS, FLAT_TAG_FIELDS, TAG_FIELDS } from "../api";
+import { AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS, TAG_FIELDS } from "../api";
 import type { Changes, Metadata, Scalar } from "../api";
 import { dateTime, duration, fieldLabel, fileSize, plural, tagQuery } from "../format";
 import { changed, clearSelection, dataVersion, selected } from "../search";
@@ -19,6 +19,8 @@ import Icon from "./Icon";
 import { createStoredFlag } from "./Panel";
 
 const SCORES = [1, 2, 3, 4, 5, 6, 7];
+/** Names the source URL list where it sits among the tag fields. */
+const SOURCE_URLS = "source_url";
 
 type DetailField = {
   field: string;
@@ -56,8 +58,8 @@ export default function Sidebar(props: { onGroup: () => void }) {
   /** An unset field picked from "Add field", shown while it is filled in. */
   const [adding, setAdding] = createSignal<string | null>(null);
   /**
-   * The tag fields on show: those with values, and any picked from "Add
-   * field". One that is emptied stays until the selection changes, so the
+   * The list fields on show (the tag fields and the source URLs): those
+   * with values, and any picked from "Add field". One that is emptied stays until the selection changes, so the
    * panel does not jump while it is being worked on.
    */
   const [shownTags, setShownTags] = createSignal<ReadonlySet<string>>(new Set());
@@ -79,7 +81,9 @@ export default function Sidebar(props: { onGroup: () => void }) {
 
   const [metadata] = createResource(
     () => [ids(), dataVersion()] as const,
-    ([list]) => api.getMetadata(list),
+    // Remembers which selection the answer is about: the previous one's
+    // stays on screen while the next loads.
+    async ([list]) => ({ ...(await api.getMetadata(list)), of: list }),
   );
   const [entity] = createResource(
     () => (ids().length === 1 ? ([ids()[0], dataVersion()] as const) : null),
@@ -101,14 +105,17 @@ export default function Sidebar(props: { onGroup: () => void }) {
     ),
   );
   createEffect(() => {
-    const tags = metadata.latest?.tags ?? {};
-    const filled = TAG_FIELDS.filter((field) => (tags[field]?.length ?? 0) > 0);
+    const data = metadata.latest;
+    if (!data || data.of !== ids()) return;
+    const filled: string[] = TAG_FIELDS.filter((field) => (data.tags[field]?.length ?? 0) > 0);
+    if (data.source_urls.length > 0) filled.push(SOURCE_URLS);
     if (filled.some((field) => !shownTags().has(field))) {
       setShownTags(new Set([...shownTags(), ...filled]));
     }
   });
   const pick = (field: string) => {
-    if (!(TAG_FIELDS as readonly string[]).includes(field)) return setAdding(field);
+    const list = field === SOURCE_URLS || (TAG_FIELDS as readonly string[]).includes(field);
+    if (!list) return setAdding(field);
     // Before the field is shown, which is when it looks at this.
     setPickedTag(field);
     setShownTags(new Set([...shownTags(), field]));
@@ -338,6 +345,9 @@ export default function Sidebar(props: { onGroup: () => void }) {
                 </Show>
               )}
             </For>
+            <Show when={shownTags().has(SOURCE_URLS)}>
+              <UrlField data={data()} apply={apply} autofocus={pickedTag() === SOURCE_URLS} />
+            </Show>
 
             <AddField
               groups={[
@@ -347,10 +357,12 @@ export default function Sidebar(props: { onGroup: () => void }) {
                     !isSet(data().scalars[detail.field]) &&
                     adding() !== detail.field,
                 ),
-                TAG_FIELDS.filter((field) => !shownTags().has(field)).map((field) => ({
-                  field,
-                  label: fieldLabel(field),
-                })),
+                [...TAG_FIELDS, SOURCE_URLS]
+                  .filter((field) => !shownTags().has(field))
+                  .map((field) => ({
+                    field,
+                    label: field === SOURCE_URLS ? "Source URLs" : fieldLabel(field),
+                  })),
               ]}
               onPick={pick}
             />
@@ -681,6 +693,96 @@ const MAX_SUGGESTIONS = 8;
  * it the values the selection carries. A value only some of the selection
  * has shows how many in brackets, and a "+" to give it to the rest.
  */
+/** Only web addresses are made into links; anything else is shown as text. */
+const isWebAddress = (url: string) => /^https?:\/\//i.test(url);
+
+/**
+ * The addresses a file came from: a list of links. Unlike tags there are
+ * no suggestions, namespaces or aliases.
+ */
+function UrlField(props: FieldProps & { autofocus?: boolean }) {
+  const [text, setText] = createSignal("");
+  const urls = () => props.data.source_urls;
+
+  const add = () => {
+    const url = text().trim();
+    if (!url) return;
+    setText("");
+    props.apply({ add_urls: [url] });
+  };
+
+  return (
+    <div class="field">
+      <span class="label">Source URLs</span>
+      <input
+        type="text"
+        inputmode="url"
+        aria-label="Add a source URL"
+        placeholder="Add a link…"
+        autocomplete="off"
+        spellcheck={false}
+        value={text()}
+        ref={(el) => props.autofocus && queueMicrotask(() => el.focus())}
+        onInput={(event) => setText(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            add();
+          }
+        }}
+      />
+      <Show when={urls().length > 0}>
+        <ul class="links">
+          <For each={urls()}>
+            {(url) => {
+              const partial = () => url.count < props.data.count;
+              return (
+                <li>
+                  <Show
+                    when={isWebAddress(url.value)}
+                    fallback={<span class="link-text">{url.value}</span>}
+                  >
+                    <a
+                      class="link-text"
+                      href={url.value}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={url.value}
+                    >
+                      {url.value}
+                    </a>
+                  </Show>
+                  <Show when={partial()}>
+                    <span class="chip-count" title={`On ${url.count} of ${props.data.count} selected`}>
+                      ({url.count})
+                    </span>
+                    <button
+                      class="chip-add"
+                      aria-label={`Add ${url.value} to all selected`}
+                      title="Add to all selected"
+                      onClick={() => props.apply({ add_urls: [url.value] })}
+                    >
+                      <Icon name="add" />
+                    </button>
+                  </Show>
+                  <button
+                    class="chip-remove"
+                    aria-label={`Remove ${url.value}`}
+                    title="Remove"
+                    onClick={() => props.apply({ remove_urls: [url.value] })}
+                  >
+                    <Icon name="close" />
+                  </button>
+                </li>
+              );
+            }}
+          </For>
+        </ul>
+      </Show>
+    </div>
+  );
+}
+
 /**
  * The heading of a group of chips: the namespace they share. Clicking it
  * searches the namespace; the pencil renames it everywhere.
@@ -781,11 +883,10 @@ function TagField(
 
   /** The values by namespace: those without one first, then by name. */
   const groups = createMemo(() => {
-    const flat = FLAT_TAG_FIELDS.includes(props.field);
     type Group = { namespace: string; tags: Metadata["tags"][string] };
     const byNamespace = new Map<string, Group>();
     for (const tag of values()) {
-      const colon = flat ? -1 : tag.value.lastIndexOf(":");
+      const colon = tag.value.lastIndexOf(":");
       const namespace = colon < 0 ? "" : tag.value.slice(0, colon);
       const key = namespace.toLowerCase();
       if (!byNamespace.has(key)) byNamespace.set(key, { namespace, tags: [] });

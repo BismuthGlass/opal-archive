@@ -80,7 +80,7 @@ Everything is under `/api`. Bodies are JSON unless noted, and errors are
 | `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed` and `tab` too      |
 | `GET /entities/{id}`             | Everything about one file or collection                        |
 | `POST /entities/metadata`        | `{ids}` → what those entities have in common                   |
-| `POST /entities/edit`            | `{ids, set, add, remove}` → the same edit applied to all. `set` takes `ordered` (true or false) for collections |
+| `POST /entities/edit`            | `{ids, set, add, remove, add_urls, remove_urls}` → the same edit applied to all. `set` takes `ordered` (true or false) for collections; the `_urls` lists change source URLs |
 | `POST /entities/trash`           | `{ids}` → move to the trash: hidden from searches, nothing removed |
 | `POST /entities/restore`         | `{ids}` → take back out of the trash                           |
 | `POST /entities/delete`          | `{ids}` → delete for good those that are in the trash; files leave storage |
