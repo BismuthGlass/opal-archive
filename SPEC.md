@@ -91,7 +91,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - `*:samus` finds the tag `samus` in any namespace.
 - `samus` alone finds only the tag with no namespace. It does not find `metroid:samus`.
 - `metroid` alone finds only the tag `metroid`, not the tags under the namespace of that name.
-- All of this works the same with a type in front: `character=metroid:*`.
+- All of this works the same with a type in front: `@ch:metroid:*`.
 
 ### Interface
 
