@@ -54,6 +54,14 @@ export default function Sidebar(props: { onGroup: () => void }) {
   const [error, setError] = createSignal<string | null>(null);
   /** An unset field picked from "Add field", shown while it is filled in. */
   const [adding, setAdding] = createSignal<string | null>(null);
+  /**
+   * The tag fields on show: those with values, and any picked from "Add
+   * field". One that is emptied stays until the selection changes, so the
+   * panel does not jump while it is being worked on.
+   */
+  const [shownTags, setShownTags] = createSignal<ReadonlySet<string>>(new Set());
+  /** A tag field just picked from "Add field", to put the cursor in. */
+  const [pickedTag, setPickedTag] = createSignal<string | null>(null);
   // An error, or a half-added field, belongs to the selection it began on.
   createEffect(
     on(
@@ -61,6 +69,8 @@ export default function Sidebar(props: { onGroup: () => void }) {
       () => {
         setError(null);
         setAdding(null);
+        setShownTags(new Set<string>());
+        setPickedTag(null);
       },
       { defer: true },
     ),
@@ -89,6 +99,19 @@ export default function Sidebar(props: { onGroup: () => void }) {
       { defer: true },
     ),
   );
+  createEffect(() => {
+    const tags = metadata.latest?.tags ?? {};
+    const filled = TAG_FIELDS.filter((field) => (tags[field]?.length ?? 0) > 0);
+    if (filled.some((field) => !shownTags().has(field))) {
+      setShownTags(new Set([...shownTags(), ...filled]));
+    }
+  });
+  const pick = (field: string) => {
+    if (!(TAG_FIELDS as readonly string[]).includes(field)) return setAdding(field);
+    // Before the field is shown, which is when it looks at this.
+    setPickedTag(field);
+    setShownTags(new Set([...shownTags(), field]));
+  };
   const single = () => (ids().length === 1 ? entity.latest : undefined);
 
   const apply = async (changes: Changes) => {
@@ -198,8 +221,8 @@ export default function Sidebar(props: { onGroup: () => void }) {
       <Show when={meta()}>
         {(data) => (
           <>
-            {/* Details: only the fields that are set, each edited by clicking
-                its value. "Add field" brings in one of the others. */}
+            {/* Details and tags: only the fields that are set. "Add field"
+                brings in one of the others. */}
             <dl class="facts">
               <For each={DETAIL_FIELDS}>
                 {(detail) => (
@@ -302,19 +325,35 @@ export default function Sidebar(props: { onGroup: () => void }) {
                 )}
               </Show>
             </dl>
-            <AddField
-              fields={DETAIL_FIELDS.filter(
-                (detail) =>
-                  (!detail.fileOnly || (data().count === 1 && data().files === 1)) &&
-                  !isSet(data().scalars[detail.field]) &&
-                  adding() !== detail.field,
-              )}
-              onPick={setAdding}
-            />
-
             <For each={TAG_FIELDS}>
-              {(field) => <TagField field={field} data={data()} apply={apply} rename={rename} />}
+              {(field) => (
+                <Show when={shownTags().has(field)}>
+                  <TagField
+                    field={field}
+                    data={data()}
+                    apply={apply}
+                    rename={rename}
+                    autofocus={pickedTag() === field}
+                  />
+                </Show>
+              )}
             </For>
+
+            <AddField
+              groups={[
+                DETAIL_FIELDS.filter(
+                  (detail) =>
+                    (!detail.fileOnly || (data().count === 1 && data().files === 1)) &&
+                    !isSet(data().scalars[detail.field]) &&
+                    adding() !== detail.field,
+                ),
+                TAG_FIELDS.filter((field) => !shownTags().has(field)).map((field) => ({
+                  field,
+                  label: fieldLabel(field),
+                })),
+              ]}
+              onPick={pick}
+            />
 
             <div class="field">
               <span class="label">Collections</span>
@@ -529,10 +568,18 @@ function Detail(props: {
 }
 
 /** The "+" under the details: a menu of the fields that are not set yet. */
-function AddField(props: { fields: DetailField[]; onPick: (field: string) => void }) {
+/**
+ * "Add field" and its menu of the fields not on show, in groups with a
+ * line between them.
+ */
+function AddField(props: {
+  groups: { field: string; label: string }[][];
+  onPick: (field: string) => void;
+}) {
   const [open, setOpen] = createSignal(false);
+  const groups = () => props.groups.filter((group) => group.length > 0);
   return (
-    <Show when={props.fields.length > 0}>
+    <Show when={groups().length > 0}>
       <div
         class="add-field"
         // Closes when focus leaves the button and its menu.
@@ -559,19 +606,28 @@ function AddField(props: { fields: DetailField[]; onPick: (field: string) => voi
         </button>
         <Show when={open()}>
           <ul class="suggestions" role="menu">
-            <For each={props.fields}>
-              {(detail) => (
-                <li role="none">
-                  <button
-                    role="menuitem"
-                    onClick={() => {
-                      setOpen(false);
-                      props.onPick(detail.field);
-                    }}
-                  >
-                    {detail.label}
-                  </button>
-                </li>
+            <For each={groups()}>
+              {(group, index) => (
+                <>
+                  <Show when={index() > 0}>
+                    <li class="menu-divider" role="separator" />
+                  </Show>
+                  <For each={group}>
+                    {(entry) => (
+                      <li role="none">
+                        <button
+                          role="menuitem"
+                          onClick={() => {
+                            setOpen(false);
+                            props.onPick(entry.field);
+                          }}
+                        >
+                          {entry.label}
+                        </button>
+                      </li>
+                    )}
+                  </For>
+                </>
               )}
             </For>
           </ul>
@@ -655,7 +711,14 @@ function Namespace(props: { field: string; name: string; rename: RenameNamespace
 
 type RenameNamespace = (field: string, from: string, to: string) => void;
 
-function TagField(props: FieldProps & { field: string; rename: RenameNamespace }) {
+function TagField(
+  props: FieldProps & {
+    field: string;
+    rename: RenameNamespace;
+    /** Put the cursor in the box when the field appears. */
+    autofocus?: boolean;
+  },
+) {
   const [text, setText] = createSignal("");
   const [open, setOpen] = createSignal(false);
   /** Highlighted suggestion; -1 means the typed text itself. */
@@ -745,6 +808,7 @@ function TagField(props: FieldProps & { field: string; rename: RenameNamespace }
           type="text"
           role="combobox"
           aria-label={`Add to ${fieldLabel(props.field)}`}
+          ref={(el) => props.autofocus && queueMicrotask(() => el.focus())}
           aria-expanded={open() && suggestions().length > 0}
           aria-controls={listId}
           aria-autocomplete="list"

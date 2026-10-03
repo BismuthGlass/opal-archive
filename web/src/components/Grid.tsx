@@ -244,7 +244,15 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                   width: `${tile()}px`,
                   transform: `translate(${x()}px, ${y()}px)`,
                 }}
-                onPointerDown={(event) => item() && startDrag(item()!.id, event)}
+                onPointerDown={(event) => {
+                  // Tiles cannot take focus, so a text box would keep it,
+                  // and with it the keys meant for the gallery's hotkeys.
+                  const focused = document.activeElement;
+                  if (focused instanceof HTMLElement && focused.matches("input, textarea")) {
+                    focused.blur();
+                  }
+                  if (item()) startDrag(item()!.id, event);
+                }}
                 onClick={(event) => {
                   const current = item();
                   if (!current || dragged) return;
