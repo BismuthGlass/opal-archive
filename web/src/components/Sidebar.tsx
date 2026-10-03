@@ -63,8 +63,16 @@ const DETAIL_FIELDS: DetailField[] = [
  * the value they share or "(mixed)", and tags show how many of the
  * selection carry them.
  */
-export default function Sidebar(props: { onGroup: () => void }) {
-  const ids = createMemo(() => [...selected()]);
+export default function Sidebar(props: {
+  /**
+   * What to show instead of the selection: the collection a tab is tied
+   * to, when nothing in it is selected.
+   */
+  ids?: number[];
+  /** Asks for the given entities to be put into a collection. */
+  onGroup: (ids: number[]) => void;
+}) {
+  const ids = createMemo(() => props.ids ?? [...selected()]);
   const [error, setError] = createSignal<string | null>(null);
   /** An unset field picked from "Add field", shown while it is filled in. */
   const [adding, setAdding] = createSignal<string | null>(null);
@@ -159,7 +167,7 @@ export default function Sidebar(props: { onGroup: () => void }) {
         )}
       </Show>
       <Show when={meta()}>
-        {(data) => <Collections data={data()} onAdd={props.onGroup} onLeave={leave} />}
+        {(data) => <Collections data={data()} onAdd={() => props.onGroup(ids())} onLeave={leave} />}
       </Show>
       <Show when={error()}>
         <p class="form-error dismissible" role="alert">

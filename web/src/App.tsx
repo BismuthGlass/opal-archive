@@ -37,7 +37,10 @@ import { activeTab, error, load, open, refresh } from "./tabs";
 export default function App() {
   /** Result index shown in the viewer, if it is open. */
   const [viewing, setViewing] = createSignal<number | null>(null);
-  const [grouping, setGrouping] = createSignal(false);
+  /** The entities being put into a collection, while that dialog is open. */
+  const [grouping, setGrouping] = createSignal<number[] | null>(null);
+  /** The collection the tab is tied to, shown when nothing is selected. */
+  const shownCollection = () => (selected().size === 0 ? activeTab()?.collection : undefined);
   const [editingTags, setEditingTags] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   /** What quick tagging applies to, while its modal is open. */
@@ -196,7 +199,11 @@ export default function App() {
             <Module
               id="selection"
               title={
-                selected().size > 0 ? `${plural(selected().size, "item")} selected` : "Selection"
+                selected().size > 0
+                  ? `${plural(selected().size, "item")} selected`
+                  : shownCollection()
+                    ? "This collection"
+                    : "Selection"
               }
               action={
                 <Show when={selected().size > 0}>
@@ -208,9 +215,18 @@ export default function App() {
             >
               <Show
                 when={selected().size > 0}
-                fallback={<p class="hint">Select items to see and edit their metadata.</p>}
+                fallback={
+                  // In a collection's tab, with nothing selected, the panel
+                  // is about the collection itself.
+                  <Show
+                    when={shownCollection()}
+                    fallback={<p class="hint">Select items to see and edit their metadata.</p>}
+                  >
+                    {(collection) => <Sidebar ids={[collection().id]} onGroup={setGrouping} />}
+                  </Show>
+                }
               >
-                <Sidebar onGroup={() => setGrouping(true)} />
+                <Sidebar onGroup={setGrouping} />
               </Show>
             </Module>
           </aside>
@@ -281,11 +297,18 @@ export default function App() {
         <SettingsModal onClose={() => setSettingsOpen(false)} />
       </Show>
       <Show when={grouping()}>
-        <CollectionDialog
-          ids={[...selected()]}
-          parent={activeTab()?.collection ?? undefined}
-          onClose={() => setGrouping(false)}
-        />
+        {(ids) => (
+          <CollectionDialog
+            ids={ids()}
+            // A collection is not offered a place inside itself.
+            parent={
+              ids().includes(activeTab()?.collection?.id ?? -1)
+                ? undefined
+                : (activeTab()?.collection ?? undefined)
+            }
+            onClose={() => setGrouping(null)}
+          />
+        )}
       </Show>
     </>
   );
