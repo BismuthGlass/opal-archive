@@ -1460,7 +1460,7 @@ span/* A pill in its tag type's colours, which come inline from the settings. */
 }
 
 .dialog.wide {
-  width: min(720px, calc(100vw - 32px));
+  width: min(860px, calc(100vw - 32px));
 }
 
 .dialog::backdrop {
@@ -1682,11 +1682,20 @@ kbd {
   flex: none;
 }
 
+/* The list of tags beside the details of the one selected. */
+.tag-editor {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
+  height: 60vh;
+  margin-top: 10px;
+}
+
 .tag-list {
-  /* A fixed height, so the modal does not jump as the filter narrows. */
-  flex: 0 1 60vh;
-  min-height: 120px;
-  margin: 10px 0 0;
+  flex: 1 1 45%;
+  min-width: 0;
+  margin: 0;
   padding: 0;
   overflow-y: auto;
   list-style: none;
@@ -1702,34 +1711,24 @@ kbd {
   padding: 12px;
 }
 
-.tag-line,
-.tag-alias {
+.dialog button.tag-row {
   display: flex;
   gap: 6px;
   align-items: center;
+  width: 100%;
   min-height: 32px;
-  padding: 2px 8px;
+  padding: 3px 8px;
+  text-align: left;
+  color: var(--text);
+  border-radius: 0;
 }
 
-.tag-alias {
-  padding-left: 30px;
-  color: var(--muted);
+.dialog button.tag-row[aria-selected="true"] {
+  background: var(--bg);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.tag-toggle {
-  flex: none;
-  width: 20px;
-}
-
-.tag-toggle .icon {
-  transition: transform 0.1s;
-}
-
-.tag-toggle.open .icon {
-  transform: rotate(90deg);
-}
-
-.tag-name {
+.tag-row .chip {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -1737,67 +1736,72 @@ kbd {
   white-space: nowrap;
 }
 
-.tag-alias .tag-name {
-  flex: 1;
-  color: var(--text);
-}
-
-/* A tag's description fills the row; click it to edit. */
-.dialog button.tag-description {
-  flex: 1;
-  min-width: 0;
-  padding: 2px 6px;
-  overflow: hidden;
-  font-size: 13px;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-}
-
-.dialog button.tag-description.unset {
-  visibility: hidden;
-  font-style: italic;
-}
-
-.tag-list li:hover .tag-description.unset,
-.tag-list li:focus-within .tag-description.unset {
-  visibility: visible;
-}
-
-.dialog button.tag-create {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  width: 100%;
-  min-height: 32px;
-  padding: 2px 8px;
-  text-align: left;
-  color: var(--text);
-  border-radius: 0;
-}
-
-.dialog .tag-actions button.danger {
-  color: var(--danger-text);
-}
-
-.suggestion-note {
-  font-size: 12px;
-  color: var(--muted);
-}
-
 .tag-uses,
 .tag-note {
-  margin-left: 8px;
+  flex: none;
   font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 
-.tag-line input,
-.tag-alias input {
+/* The start of a tag's description, in its row. */
+.tag-preview {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.tag-details {
+  display: flex;
+  flex: 1 1 55%;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.tag-details header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tag-details header .chip {
+  font-size: 15px;
+}
+
+.tag-details header input {
+  flex: 1;
+  min-width: 0;
+}
+
+.tag-details .stacked {
+  margin: 4px 0 0;
+}
+
+.tag-details textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  font: inherit;
+  line-height: 1.45;
+  color: var(--text);
+  resize: vertical;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.tag-saved {
+  margin-top: -4px;
 }
 
 .tag-actions {
@@ -1811,9 +1815,45 @@ kbd {
   font-size: 13px;
 }
 
-/* Actions appear on the row in use, to keep a long list calm. */
-.tag-list li:not(:hover):not(:focus-within) .tag-line .tag-actions {
-  visibility: hidden;
+.dialog .tag-actions button.danger {
+  color: var(--danger-text);
+}
+
+.tag-aliases {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag-aliases li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 26px;
+  color: var(--muted);
+}
+
+.tag-alias-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+}
+
+.tag-alias-name .tag-note {
+  margin-left: 8px;
+}
+
+.suggestion-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  /* Too narrow for two columns: the details go under the list. */
+  .tag-editor {
+    flex-direction: column;
+    height: 75vh;
+  }
 }
 
 .suggestion-alias {

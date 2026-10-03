@@ -122,10 +122,11 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 
 - A modal listing every tag of a type, with how many files carry it. The type is chosen from a row of the types or with its prefix (`@cr `) in the text box, which otherwise filters the list.
 - A tag can be created here before any file carries it, by typing a name that does not exist yet. It is then offered as a suggestion when tagging.
-- A tag can have a description, edited in the list, shown with the tag's suggestions and in the tooltip of its pill.
+- Selecting a tag in the list shows its details beside it: its description, its aliases, and the buttons to rename, merge and delete it.
+- A tag's description can be long, for instance a few paragraphs about an author. Its start is shown in the list and with the tag's suggestions, and the whole of it in the tooltip of the tag's pill.
 - A tag that no file carries can be deleted.
 - A tag can be renamed. Giving it the name of another tag merges the two.
-- Aliases are listed under the tag they defer to, behind an arrow that expands them, and can be added and removed there.
+- Aliases are listed in the details of the tag they defer to, and can be added and removed there.
 - The "Update aliases" button lives here and shows how many uses are waiting.
 
 ### Decisions
