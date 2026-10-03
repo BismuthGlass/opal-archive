@@ -788,7 +788,96 @@ button.primary {
 }
 
 /* These chips are not searches, so their label is not a button. */
-span/* With nothing after it, as in the panel, the label fills the chip. */
+span/* A pill in its tag type's colours, which come inline from the settings. */
+.chip.tinted {
+  border-color: transparent;
+}
+
+.chip.tinted.partial {
+  border-color: currentColor;
+}
+
+.chip.tinted button,
+.chip.tinted .chip-count {
+  color: inherit;
+}
+
+.chip.tinted .chip-count {
+  opacity: 0.7;
+}
+
+.chip.tinted .chip-actions {
+  border-left-color: color-mix(in srgb, currentColor 30%, transparent);
+}
+
+.chip.tinted .chip-actions button:hover {
+  color: inherit;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+/* In the editor a pill's label is a disabled button; it should not fade. */
+.dialog .chip-label:disabled {
+  opacity: 1;
+}
+
+.field-editor .aggregate-chips {
+  margin-top: 10px;
+}
+
+/* The namespace part of a tag, where no heading shows it. */
+.chip-namespace {
+  opacity: 0.6;
+}
+
+/* The row of types in the editor of the aggregated tags. */
+.type-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.dialog .type-picker button.chip:not(.primary) {
+  padding: 1px 9px;
+  font-size: 13px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  opacity: 0.55;
+}
+
+.dialog .type-picker button.chip[aria-checked="true"] {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.type-sample {
+  padding: 1px 9px;
+}
+
+.swatch {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+}
+
+.swatch input {
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.setting-rows .check {
+  flex: none;
+  font-size: 13px;
+}
+
+/* With nothing after it, as in the panel, the label fills the chip. */
 .chip-label:last-child {
   padding-right: 8px;
 }
@@ -1392,8 +1481,11 @@ span/* With nothing after it, as in the panel, the label fills the chip. */
 
 .settings {
   display: flex;
+  flex: 1;
   gap: 20px;
-  min-height: 320px;
+  /* A long section scrolls inside the pane, not the whole modal. */
+  min-height: 0;
+  height: 520px;
 }
 
 .settings-nav {
@@ -1420,6 +1512,8 @@ span/* With nothing after it, as in the panel, the label fills the chip. */
 .settings-pane {
   flex: 1;
   min-width: 0;
+  padding-right: 4px;
+  overflow-y: auto;
 }
 
 .settings-pane h3 {

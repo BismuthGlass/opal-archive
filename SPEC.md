@@ -99,6 +99,12 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - Tags on a file are shown grouped by namespace, so a long list stays readable.
 - A namespace can be renamed or merged as a whole, which renames every tag under it.
 
+### Showing tags
+
+- A tag is shown as a pill in the colours of its type. Each type has a background and a text colour, both configurable in the settings.
+- The settings also say which types are aggregated. The aggregated types share one list on a file, told apart only by colour; each of the others has a section of its own.
+- By default the types that describe the work are aggregated (tags, creator, character, source work, person, genre, style, medium) and the rest are not (flaws, language, source, usage tags, AI usage tags).
+
 ### Aliases
 
 - A tag can be an alias of another tag of the same type. The alias defers to that tag: wherever the alias is added to a file or searched for, the tag it defers to is used instead.

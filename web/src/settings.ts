@@ -5,6 +5,8 @@ import * as api from "./api";
 export type Settings = {
   /** Action to key, for the actions whose key is not the default. */
   hotkeys?: Record<string, string>;
+  /** Tag type to what differs from its defaults: colours, aggregation. */
+  tagTypes?: Record<string, { bg?: string; fg?: string; aggregate?: boolean }>;
 };
 
 const [settings, setSettings] = createStore<Settings>({});

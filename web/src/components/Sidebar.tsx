@@ -14,12 +14,16 @@ import { AI_CONTENT, COLLECTION_TYPES, CONTENT_RATINGS, TAG_FIELDS } from "../ap
 import type { Changes, Metadata, Scalar } from "../api";
 import { dateTime, duration, fieldLabel, fileSize, plural, tagQuery } from "../format";
 import { changed, clearSelection, dataVersion, selected } from "../search";
+import { aggregatedTypes, pillStyle, tagType } from "../tagTypes";
 import { open as openTab, openCollection } from "../tabs";
 import Icon from "./Icon";
 import Modal from "./Modal";
 import { createStoredFlag } from "./Panel";
 
 const SCORES = [1, 2, 3, 4, 5, 6, 7];
+/** Names the list of every aggregated tag type, where a field is named. */
+const AGGREGATE = "aggregate";
+const filled = (data: Metadata, field: string) => (data.tags[field]?.length ?? 0) > 0;
 
 type DetailField = {
   field: string;
@@ -101,6 +105,7 @@ export default function Sidebar(props: { onGroup: () => void }) {
   );
   const pick = (field: string) => {
     const list =
+      field === AGGREGATE ||
       PLAIN_LISTS.some((list) => list.field === field) ||
       (TAG_FIELDS as readonly string[]).includes(field);
     if (!list) return setAdding(field);
@@ -318,9 +323,16 @@ export default function Sidebar(props: { onGroup: () => void }) {
                 )}
               </Show>
             </dl>
-            <For each={TAG_FIELDS}>
+            <Show when={aggregatedTypes().some((field) => filled(data(), field))}>
+              <AggregatedTags
+                data={data()}
+                apply={apply}
+                onEdit={() => setEditingList(AGGREGATE)}
+              />
+            </Show>
+            <For each={TAG_FIELDS.filter((field) => !tagType(field).aggregate)}>
               {(field) => (
-                <Show when={(data().tags[field]?.length ?? 0) > 0}>
+                <Show when={filled(data(), field)}>
                   <TagField
                     field={field}
                     data={data()}
@@ -353,9 +365,14 @@ export default function Sidebar(props: { onGroup: () => void }) {
                     adding() !== detail.field,
                 ),
                 [
-                  ...TAG_FIELDS.filter((field) => (data().tags[field]?.length ?? 0) === 0).map(
-                    (field) => ({ field, label: fieldLabel(field) }),
-                  ),
+                  // The aggregated types are added to through one entry.
+                  ...(aggregatedTypes().some((field) => filled(data(), field)) ||
+                  aggregatedTypes().length === 0
+                    ? []
+                    : [{ field: AGGREGATE, label: "Tags" }]),
+                  ...TAG_FIELDS.filter(
+                    (field) => !tagType(field).aggregate && !filled(data(), field),
+                  ).map((field) => ({ field, label: fieldLabel(field) })),
                   ...PLAIN_LISTS.filter((list) => list.values(data()).length === 0).map(
                     ({ field, label }) => ({ field, label }),
                   ),
@@ -370,7 +387,9 @@ export default function Sidebar(props: { onGroup: () => void }) {
                 const plain = () => PLAIN_LISTS.find((list) => list.field === field());
                 return (
                   <Modal
-                    title={`${plain()?.label ?? fieldLabel(field())} of ${
+                    title={`${
+                      plain()?.label ?? (field() === AGGREGATE ? "Tags" : fieldLabel(field()))
+                    } of ${
                       data().count === 1 ? "this item" : plural(data().count, "item")
                     }`}
                     onClose={() => setEditingList(null)}
@@ -379,13 +398,18 @@ export default function Sidebar(props: { onGroup: () => void }) {
                       <Show
                         when={plain()}
                         fallback={
-                          <TagField
-                            field={field()}
-                            data={data()}
-                            apply={apply}
-                            rename={rename}
-                            editing
-                          />
+                          <Show
+                            when={field() !== AGGREGATE}
+                            fallback={<AggregatedTags data={data()} apply={apply} editing />}
+                          >
+                            <TagField
+                              field={field()}
+                              data={data()}
+                              apply={apply}
+                              rename={rename}
+                              editing
+                            />
+                          </Show>
                         }
                       >
                         {(list) => <PlainList list={list()} data={data()} apply={apply} editing />}
@@ -950,7 +974,8 @@ function Namespace(props: { field: string; name: string; rename?: RenameNamespac
 
 type RenameNamespace = (field: string, from: string, to: string) => void;
 
-function TagField(props: FieldProps & ListMode & { field: string; rename: RenameNamespace }) {
+/** The box that adds tags to one field, with suggestions while typing. */
+function TagInput(props: FieldProps & { field: string }) {
   const [text, setText] = createSignal("");
   const [open, setOpen] = createSignal(false);
   /** Highlighted suggestion; -1 means the typed text itself. */
@@ -960,8 +985,8 @@ function TagField(props: FieldProps & ListMode & { field: string; rename: Rename
 
   // With nothing typed this returns the field's most used values.
   const [fetched] = createResource(
-    () => (open() ? { typed: text().trim() } : null),
-    ({ typed }) => api.suggestTags(props.field, typed),
+    () => (open() ? { field: props.field, typed: text().trim() } : null),
+    ({ field, typed }) => api.suggestTags(field, typed),
   );
   const suggestions = createMemo(() => {
     // Values the whole selection already has are not worth offering.
@@ -974,25 +999,6 @@ function TagField(props: FieldProps & ListMode & { field: string; rename: Rename
       .filter((option) => option.namespace || !complete.has(option.value.toLowerCase()))
       .slice(0, MAX_SUGGESTIONS);
   });
-
-  /** The values by namespace: those without one first, then by name. */
-  const groups = createMemo(() => {
-    type Group = { namespace: string; tags: Metadata["tags"][string] };
-    const byNamespace = new Map<string, Group>();
-    for (const tag of values()) {
-      const colon = tag.value.lastIndexOf(":");
-      const namespace = colon < 0 ? "" : tag.value.slice(0, colon);
-      const key = namespace.toLowerCase();
-      if (!byNamespace.has(key)) byNamespace.set(key, { namespace, tags: [] });
-      byNamespace.get(key)!.tags.push(tag);
-    }
-    return [...byNamespace.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([, group]) => group);
-  });
-  /** A tag's own name, without its namespace. */
-  const leaf = (value: string, namespace: string) =>
-    namespace ? value.slice(namespace.length + 1) : value;
 
   const add = (value: string) => {
     const trimmed = value.trim();
@@ -1034,125 +1040,242 @@ function TagField(props: FieldProps & ListMode & { field: string; rename: Rename
   };
 
   return (
-    <div class="field">
-      <Show when={props.editing} fallback={<ListLabel label={fieldLabel(props.field)} {...props} />}>
-      <div class="suggest">
-        <input
-          type="text"
-          role="combobox"
-          autofocus
-          aria-label={`Add to ${fieldLabel(props.field)}`}
-          aria-expanded={open() && suggestions().length > 0}
-          aria-controls={listId}
-          aria-autocomplete="list"
-          autocomplete="off"
-          placeholder="Add…"
-          value={text()}
-          onInput={(e) => {
-            setText(e.currentTarget.value);
-            setOpen(true);
-            setActive(-1);
-          }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => {
-            setOpen(false);
-            setActive(-1);
-          }}
-          onKeyDown={onKeyDown}
-        />
-        <Show when={open() && suggestions().length > 0}>
-          <ul class="suggestions" id={listId} role="listbox">
-            <For each={suggestions()}>
-              {(option, i) => (
-                <li
-                  role="option"
-                  aria-selected={i() === active()}
-                  classList={{ active: i() === active() }}
-                  // Keeps focus in the input, so the list stays open to click.
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => pick(option)}
-                >
-                  <span class="suggestion-value">
-                    <Show when={option.alias}>
-                      <span class="suggestion-alias">{option.alias} → </span>
-                    </Show>
-                    {option.value}
-                  </span>
-                  <span class="suggestion-count">
-                    {option.count}
-                    <Show when={option.namespace}>
-                      <Icon name="chevron-right" />
-                    </Show>
-                  </span>
-                </li>
-              )}
-            </For>
-          </ul>
+    <div class="suggest">
+      <input
+        type="text"
+        role="combobox"
+        autofocus
+        aria-label={`Add to ${fieldLabel(props.field)}`}
+        aria-expanded={open() && suggestions().length > 0}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        autocomplete="off"
+        placeholder="Add…"
+        value={text()}
+        onInput={(e) => {
+          setText(e.currentTarget.value);
+          setOpen(true);
+          setActive(-1);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          setOpen(false);
+          setActive(-1);
+        }}
+        onKeyDown={onKeyDown}
+      />
+      <Show when={open() && suggestions().length > 0}>
+        <ul class="suggestions" id={listId} role="listbox">
+          <For each={suggestions()}>
+            {(option, i) => (
+              <li
+                role="option"
+                aria-selected={i() === active()}
+                classList={{ active: i() === active() }}
+                // Keeps focus in the input, so the list stays open to click.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pick(option)}
+              >
+                <span class="suggestion-value">
+                  <Show when={option.alias}>
+                    <span class="suggestion-alias">{option.alias} → </span>
+                  </Show>
+                  {option.value}
+                </span>
+                <span class="suggestion-count">
+                  {option.count}
+                  <Show when={option.namespace}>
+                    <Icon name="chevron-right" />
+                  </Show>
+                </span>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
+    </div>
+  );
+}
+
+type Tag = Metadata["tags"][string][number];
+
+/**
+ * One tag as a pill in its type's colours. In the panel it searches for
+ * the tag; in the editor it has the buttons that take it off, or put it
+ * on the rest of the selection.
+ */
+function TagChip(
+  props: FieldProps & {
+    field: string;
+    tag: Tag;
+    editing?: boolean;
+    /** The namespace the pill is listed under, and so leaves out. */
+    under?: string;
+  },
+) {
+  const partial = () => props.tag.count < props.data.count;
+  /** The tag's namespace, with its colon, unless a heading shows it. */
+  const namespace = () => {
+    if (props.under !== undefined) return "";
+    return props.tag.value.slice(0, props.tag.value.lastIndexOf(":") + 1);
+  };
+  const name = () =>
+    props.tag.value.slice(props.under ? props.under.length + 1 : namespace().length);
+  return (
+    <span class="chip tinted" classList={{ partial: partial() }} style={pillStyle(props.field)}>
+      <button
+        class="chip-label"
+        // In the editor a pill is just a value; in the panel it searches.
+        disabled={props.editing}
+        title={
+          props.editing
+            ? undefined
+            : `${fieldLabel(props.field)}: ${props.tag.value}\nClick to search for it`
+        }
+        onClick={() => openTab("gallery", tagQuery(props.field, props.tag.value))}
+      >
+        <Show when={namespace()}>
+          <span class="chip-namespace">{namespace()}</span>
         </Show>
-      </div>
+        {name()}
+      </button>
+      <Show when={partial()}>
+        <span class="chip-count" title={`On ${props.tag.count} of ${props.data.count} selected`}>
+          ({props.tag.count})
+        </span>
+      </Show>
+      <Show when={props.editing}>
+        <span class="chip-actions">
+          <Show when={partial()}>
+            <button
+              class="chip-add"
+              aria-label={`Add ${props.tag.value} to all selected`}
+              title="Add to all selected"
+              onClick={() => props.apply({ add: { [props.field]: [props.tag.value] } })}
+            >
+              <Icon name="add" />
+            </button>
+          </Show>
+          <button
+            class="chip-remove"
+            aria-label={`Remove ${props.tag.value}`}
+            title="Remove"
+            onClick={() => props.apply({ remove: { [props.field]: [props.tag.value] } })}
+          >
+            <Icon name="close" />
+          </button>
+        </span>
+      </Show>
+    </span>
+  );
+}
+
+/** The tags of one type, in a section of their own, grouped by namespace. */
+function TagField(props: FieldProps & ListMode & { field: string; rename: RenameNamespace }) {
+  const values = () => props.data.tags[props.field] ?? [];
+
+  /** The values by namespace: those without one first, then by name. */
+  const groups = createMemo(() => {
+    type Group = { namespace: string; tags: Tag[] };
+    const byNamespace = new Map<string, Group>();
+    for (const tag of values()) {
+      const colon = tag.value.lastIndexOf(":");
+      const namespace = colon < 0 ? "" : tag.value.slice(0, colon);
+      const key = namespace.toLowerCase();
+      if (!byNamespace.has(key)) byNamespace.set(key, { namespace, tags: [] });
+      byNamespace.get(key)!.tags.push(tag);
+    }
+    return [...byNamespace.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, group]) => group);
+  });
+
+  return (
+    <div class="field">
+      <Show
+        when={props.editing}
+        fallback={<ListLabel label={fieldLabel(props.field)} {...props} />}
+      >
+        <TagInput field={props.field} data={props.data} apply={props.apply} />
       </Show>
       <Show when={values().length > 0}>
         <div class="tag-groups">
           <For each={groups()}>
             {(group) => (
-            <div class="chips">
-              <Show when={group.namespace}>
-                <Namespace
-                  field={props.field}
-                  name={group.namespace}
-                  rename={props.editing ? props.rename : undefined}
-                />
-              </Show>
-              <For each={group.tags}>
-                {(tag) => {
-                  const partial = () => tag.count < props.data.count;
-                  return (
-                    <span class="chip" classList={{ partial: partial() }}>
-                      <button
-                        class="chip-label"
-                        // In the editor a chip is just a value; in the panel it
-                        // searches.
-                        disabled={props.editing}
-                        title={props.editing ? undefined : `Search for ${tag.value}`}
-                        onClick={() => openTab("gallery", tagQuery(props.field, tag.value))}
-                      >
-                        {leaf(tag.value, group.namespace)}
-                      </button>
-                      <Show when={partial()}>
-                        <span
-                          class="chip-count"
-                          title={`On ${tag.count} of ${props.data.count} selected`}
-                        >
-                          ({tag.count})
-                        </span>
-                      </Show>
-                      <Show when={props.editing}>
-                      <span class="chip-actions">
-                        <Show when={partial()}>
-                          <button
-                            class="chip-add"
-                            aria-label={`Add ${tag.value} to all selected`}
-                            title="Add to all selected"
-                            onClick={() => props.apply({ add: { [props.field]: [tag.value] } })}
-                          >
-                            <Icon name="add" />
-                          </button>
-                        </Show>
-                        <button
-                          class="chip-remove"
-                          aria-label={`Remove ${tag.value}`}
-                          title="Remove"
-                          onClick={() => props.apply({ remove: { [props.field]: [tag.value] } })}
-                        >
-                          <Icon name="close" />
-                        </button>
-                      </span>
-                      </Show>
-                    </span>
-                  );
-                }}
-              </For>
-            </div>
+              <div class="chips">
+                <Show when={group.namespace}>
+                  <Namespace
+                    field={props.field}
+                    name={group.namespace}
+                    rename={props.editing ? props.rename : undefined}
+                  />
+                </Show>
+                <For each={group.tags}>
+                  {(tag) => (
+                    <TagChip
+                      field={props.field}
+                      tag={tag}
+                      under={group.namespace}
+                      data={props.data}
+                      apply={props.apply}
+                      editing={props.editing}
+                    />
+                  )}
+                </For>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+/**
+ * The tags of every aggregated type in one list, told apart by the colour
+ * of their pills. In the editor, a row of the types picks which one what
+ * is typed goes to.
+ */
+function AggregatedTags(props: FieldProps & ListMode) {
+  const types = createMemo(aggregatedTypes);
+  const [target, setTarget] = createSignal(types()[0]);
+  const entries = () =>
+    types().flatMap((field) => (props.data.tags[field] ?? []).map((tag) => ({ field, tag })));
+
+  return (
+    <div class="field">
+      <Show when={props.editing} fallback={<ListLabel label="Tags" {...props} />}>
+        <div class="type-picker" role="radiogroup" aria-label="Type of the tag to add">
+          <For each={types()}>
+            {(field) => (
+              <button
+                class="chip tinted"
+                role="radio"
+                aria-checked={field === target()}
+                style={pillStyle(field)}
+                onClick={() => setTarget(field)}
+              >
+                {fieldLabel(field)}
+              </button>
+            )}
+          </For>
+        </div>
+        {/* Keyed, so changing the type starts the box and its suggestions afresh. */}
+        <Show when={target()} keyed>
+          {(field) => <TagInput field={field} data={props.data} apply={props.apply} />}
+        </Show>
+      </Show>
+      <Show when={entries().length > 0}>
+        <div class="chips aggregate-chips">
+          <For each={entries()}>
+            {(entry) => (
+              <TagChip
+                field={entry.field}
+                tag={entry.tag}
+                data={props.data}
+                apply={props.apply}
+                editing={props.editing}
+              />
             )}
           </For>
         </div>
