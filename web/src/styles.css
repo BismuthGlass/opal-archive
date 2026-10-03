@@ -228,6 +228,58 @@ button.primary {
   overflow-y: auto;
 }
 
+/* Above the grid: select all, and the pager. */
+.toolbar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+  padding: 8px 12px 0;
+  font-size: 13px;
+}
+
+.toolbar button:not(.link) {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 3px 10px 3px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.toolbar button:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.toolbar-note {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pager {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.pager .toolbar-note {
+  margin-right: 6px;
+}
+
+.pager button:not(.link) {
+  padding: 3px;
+}
+
+.pager-page {
+  padding: 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* The box at the top of an upload tab. */
 .upload-box {
   display: flex;

@@ -3,6 +3,7 @@ import { thumbnailUrl } from "../api";
 import type { Item } from "../api";
 import { duration, plural } from "../format";
 import {
+  PAGE,
   clickSelect,
   dataVersion,
   ensureRange,
@@ -36,9 +37,8 @@ function badge(item: Item): string | null {
 }
 
 /**
- * The results grid. Only the tiles in or near the viewport exist in the
- * page, and result pages are fetched as they scroll into view, so tens of
- * thousands of results cost the same as a screenful.
+ * The results grid, showing one page of results. Only the tiles in or near
+ * the viewport exist in the document.
  */
 export default function Grid(props: { onOpen: (index: number) => void }) {
   let scroller!: HTMLDivElement;
@@ -50,18 +50,21 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
     Math.max(1, Math.floor((width() - 2 * PADDING + GAP) / (MIN_TILE + GAP)));
   const tile = () => (width() - 2 * PADDING - (columns() - 1) * GAP) / columns();
   const rowHeight = () => tile() + GAP;
-  const rows = () => Math.ceil(search.total / columns());
+  /** Result index of the first tile on this page, and how many it has. */
+  const first = () => search.page * PAGE;
+  const count = () => Math.max(0, Math.min(PAGE, search.total - first()));
+  const rows = () => Math.ceil(count() / columns());
 
   const visible = createMemo(() => {
-    if (width() === 0 || search.total === 0) return [];
+    if (width() === 0 || count() === 0) return [];
     const firstRow = Math.max(0, Math.floor((scrollTop() - PADDING) / rowHeight()) - OVERSCAN);
     const lastRow = Math.min(
       rows() - 1,
       Math.floor((scrollTop() + height() - PADDING) / rowHeight()) + OVERSCAN,
     );
     const start = firstRow * columns();
-    const end = Math.min(search.total, (lastRow + 1) * columns());
-    return Array.from({ length: Math.max(0, end - start) }, (_, i) => start + i);
+    const end = Math.min(count(), (lastRow + 1) * columns());
+    return Array.from({ length: Math.max(0, end - start) }, (_, i) => first() + start + i);
   });
 
   createEffect(() => {
@@ -70,9 +73,9 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
     if (indices.length > 0) ensureRange(indices[0], indices[indices.length - 1]);
   });
 
-  // A new search starts at the top.
+  // A new search, or another page, starts at the top.
   createEffect(
-    on(searchCount, () => {
+    on([searchCount, () => search.page], () => {
       scroller.scrollTop = 0;
       setScrollTop(0);
     }),
@@ -107,8 +110,9 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
         <For each={visible()}>
           {(index) => {
             const item = () => itemAt(index);
-            const x = () => PADDING + (index % columns()) * (tile() + GAP);
-            const y = () => PADDING + Math.floor(index / columns()) * rowHeight();
+            const place = () => index - first();
+            const x = () => PADDING + (place() % columns()) * (tile() + GAP);
+            const y = () => PADDING + Math.floor(place() / columns()) * rowHeight();
             return (
               <div
                 class="tile"

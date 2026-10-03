@@ -6,10 +6,11 @@ import { createStoredFlag, Module } from "./components/Panel";
 import QueryBar from "./components/QueryBar";
 import Sidebar from "./components/Sidebar";
 import TabBar from "./components/TabBar";
+import Toolbar from "./components/Toolbar";
 import { DropTarget, UploadBox, UploadPanel } from "./components/Upload";
 import Viewer from "./components/Viewer";
 import { plural } from "./format";
-import { clearSelection, runSearch, search, selectAll, selected } from "./search";
+import { PAGE, clearSelection, goToPage, runSearch, search, selectAll, selected } from "./search";
 import { refreshStats, stats } from "./stats";
 import { activeTab, error, load } from "./tabs";
 
@@ -109,6 +110,7 @@ export default function App() {
           <Show when={activeTab()?.kind === "upload"}>
             <UploadBox />
           </Show>
+          <Toolbar />
           <Grid onOpen={setViewing} />
         </main>
       </div>
@@ -129,7 +131,14 @@ export default function App() {
       <UploadPanel />
       <DropTarget />
       <Show when={viewing() !== null}>
-        <Viewer index={viewing()!} onMove={setViewing} />
+        <Viewer
+          index={viewing()!}
+          onMove={(index) => {
+            // The grid follows the viewer across pages.
+            if (index !== null) goToPage(Math.floor(index / PAGE));
+            setViewing(index);
+          }}
+        />
       </Show>
       <Show when={grouping()}>
         <CollectionDialog ids={[...selected()]} onClose={() => setGrouping(false)} />

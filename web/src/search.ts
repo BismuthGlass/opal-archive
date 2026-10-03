@@ -4,7 +4,7 @@ import * as api from "./api";
 import type { Item } from "./api";
 import { refreshStats } from "./stats";
 
-/** Results are fetched in pages of this many, as the grid scrolls to them. */
+/** Results are shown, and fetched, in pages of this many. */
 export const PAGE = 200;
 
 type SearchError = { message: string; position?: number };
@@ -13,6 +13,8 @@ const [search, setSearch] = createStore({
   query: "",
   /** Upload tab the results are limited to, if any. */
   scope: null as number | null,
+  /** The page of results on show, counted from 0. */
+  page: 0,
   total: 0,
   /** False until the first page of the current query has arrived. */
   ready: false,
@@ -48,12 +50,21 @@ function loadPage(page: number) {
       if (current !== generation) return;
       setPages(page, result.items);
       setSearch({ total: result.total, ready: true, error: null });
+      // Results may have gone away under the page on show.
+      if (search.page > lastPage()) setSearch("page", lastPage());
     })
     .catch((err) => {
       if (current !== generation) return;
       setPages(reconcile({}));
       setSearch({ total: 0, ready: true, error: { message: err.message, position: err.position } });
     });
+}
+
+export const pageCount = () => Math.max(1, Math.ceil(search.total / PAGE));
+const lastPage = () => pageCount() - 1;
+
+export function goToPage(page: number) {
+  setSearch("page", Math.max(0, Math.min(lastPage(), page)));
 }
 
 /** Makes sure the pages covering these result indices are loaded. */
@@ -71,7 +82,7 @@ export function runSearch(query: string, scope: number | null = null) {
   allIds = null;
   anchor = null;
   setPages(reconcile({}));
-  setSearch({ query, scope, total: 0, ready: false, error: null });
+  setSearch({ query, scope, page: 0, total: 0, ready: false, error: null });
   setSelected(new Set<number>());
   setSearchCount((n) => n + 1);
   loadPage(0);
@@ -114,6 +125,7 @@ export async function clickSelect(
   }
 }
 
+/** Selects every result, on every page. */
 export async function selectAll() {
   setSelected(new Set(await resultIds()));
 }
