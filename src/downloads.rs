@@ -733,6 +733,14 @@ impl Download {
             }
             _ => None,
         };
+        // The collections are listed under the tab beside their files.
+        for collection in tagged[ids.len()..].iter().chain(&whole) {
+            tx.execute(
+                "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
+                 SELECT id, ?2 FROM tab WHERE id = ?1",
+                params![self.tab, collection],
+            )?;
+        }
         let tagged = entities::ids_json(&tagged);
         // What the user has written is never written over.
         for (column, value) in [("title", &title), ("description", &description)] {

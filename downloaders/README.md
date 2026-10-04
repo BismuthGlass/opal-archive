@@ -91,7 +91,7 @@ part of its thread. Everything downloaded with the same `url` is put, in the
 order it arrives, in one `sourceset` collection, which is made the first
 time, with that title, the `url` as its source URL, and the source and the
 tab's tags. An item of several files goes in as its set. Like a set, the
-collection is not listed in the tab.
+collection is listed in the tab, beside the files.
 
 Lines that are not one of these events are ignored. The script ends with
 status 0 when it is done. Any other status means the download failed, and

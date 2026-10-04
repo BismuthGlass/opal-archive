@@ -857,9 +857,10 @@ impl Api {
         panic!("the download never ended");
     }
 
-    async fn in_tab(&self, tab: i64) -> Vec<i64> {
+    /// What a tab lists of one kind, lowest ID first.
+    async fn in_tab(&self, tab: i64, kind: &str) -> Vec<i64> {
         let answer = self
-            .get(&format!("/search/ids?q=sort%3Did&tab={tab}"))
+            .get(&format!("/search/ids?q=kind%3D{kind}+sort%3Did&tab={tab}"))
             .await;
         serde_json::from_value(answer["ids"].clone()).unwrap()
     }
@@ -931,7 +932,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     };
     assert_eq!(counts(&job), [2, 2, 3, 0, 0, 1]);
     assert_eq!(job["errors"], json!(["one thing could not be had"]));
-    let files = api.in_tab(tab).await;
+    let files = api.in_tab(tab, "file").await;
     assert_eq!(files.len(), 3);
     // A view saved before the files came does not outlast them.
     assert_eq!(api.get(&format!("/tabs/{tab}/view")).await, Value::Null);
@@ -1000,6 +1001,11 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         [tag("https://example.test/board", 1)]
     );
 
+    // Both collections are listed in the tab, beside the files.
+    let mut made = [sets[0], wholes[0]];
+    made.sort();
+    assert_eq!(api.in_tab(tab, "collection").await, made);
+
     // What was seen is passed over the next time.
     let seen = api.get(&format!("{path}/seen")).await;
     assert_eq!(seen.as_array().unwrap().len(), 2);
@@ -1024,7 +1030,8 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         "Mine"
     );
     assert_eq!(counts(&third), [2, 1, 0, 2, 1, 1]);
-    assert_eq!(api.in_tab(tab).await, files);
+    assert_eq!(api.in_tab(tab, "file").await, files);
+    assert_eq!(api.in_tab(tab, "collection").await.len(), 2);
     assert_eq!(api.found("type=set").await, sets);
     assert_eq!(api.found("type=sourceset").await, wholes);
     assert_eq!(api.members(wholes[0]).len(), 2);
