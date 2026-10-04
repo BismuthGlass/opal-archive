@@ -84,6 +84,10 @@ interface FileMetadata {
   // General descriptive tags.
   tags?: string[];
 
+  // The broad piles the file is kept in, for keeping apart
+  // things that have little to do with each other.
+  bucket?: string[];
+
   // Human-readable description.
   description?: string;
 

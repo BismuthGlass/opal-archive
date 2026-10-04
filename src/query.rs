@@ -22,6 +22,7 @@ pub const TAG_PREFIXES: &[(&str, &str)] = &[
     ("source", "so"),
     ("usage_tags", "us"),
     ("ai_usage_tags", "ai"),
+    ("bucket", "bu"),
 ];
 
 /// The tag type an `@` name stands for: its short name or its full one.
@@ -47,6 +48,7 @@ pub const TAG_FIELDS: &[&str] = &[
     "usage_tags",
     "ai_usage_tags",
     "source",
+    "bucket",
 ];
 pub const KINDS: &[&str] = &["file", "collection"];
 pub const MEDIA_TYPES: &[&str] = &["image", "video", "audio", "book", "other"];

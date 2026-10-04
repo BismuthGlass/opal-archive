@@ -108,6 +108,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - A tag is a value together with its type. `samus` as a `character` and `samus` as a plain `tags` entry are two different tags.
 - A search only looks at the type it names. A plain search term looks at `tags` only, so creator or flaw tags never show up among regular tags.
 - The set of types is fixed and comes from the schema. No custom types, in line with "no custom fields".
+- `bucket` is the type for keeping apart things that have little to do with each other: the broad pile a file belongs in (`@bu:reference`, `@bu:wallpapers`). A file can be in several. It is a tag like the others, so it is not a wall: a search looks everywhere unless it names a bucket.
 - Tags are case insensitive.
 
 ### Namespaces
@@ -137,13 +138,13 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 
 - A tag is shown as a pill in the colours of its type. Each type has a background and a text colour, both configurable in the settings.
 - The settings also say which types are aggregated. The aggregated types share one list on a file, told apart only by colour; each of the others has a section of its own.
-- By default the types that describe the work are aggregated (tags, creator, character, source work, person, genre, style, medium) and the rest are not (flaws, language, source, usage tags, AI usage tags).
+- By default the types that describe the work are aggregated (tags, creator, character, source work, person, genre, style, medium) and the rest are not (bucket, flaws, language, source, usage tags, AI usage tags).
 - The order the types are listed in is configurable too, by dragging them in the settings. By default plain tags come last among the aggregated types.
 
 ### Writing tags
 
 - Wherever a tag is typed, to add it or to search for it, its type is written in front of it: `@cr:name` is the creator `name`. A tag with nothing in front is a plain tag.
-- Each type has a two-letter name: `@cr:` creator, `@ch:` character, `@sw:` source work, `@pe:` person, `@ge:` genre, `@st:` style, `@me:` medium, `@fl:` flaws, `@la:` language, `@so:` source, `@us:` usage tags, `@ai:` AI usage tags, and `@ta:` for plain tags. The full name works too (`@creator:`). Only the first colon ends the type; any after it belong to the tag's namespaces.
+- Each type has a two-letter name: `@cr:` creator, `@ch:` character, `@sw:` source work, `@pe:` person, `@ge:` genre, `@st:` style, `@me:` medium, `@fl:` flaws, `@la:` language, `@so:` source, `@us:` usage tags, `@ai:` AI usage tags, `@bu:` bucket, and `@ta:` for plain tags. The full name works too (`@creator:`). Only the first colon ends the type; any after it belong to the tag's namespaces.
 - There is one place to add and remove tags, for every type. Typing `@` suggests the types; after the colon the suggestions are that type's tags.
 - The same goes for searching: `@us:wallpaper` finds that usage tag, `@us:*` everything with a usage tag. There is no other way to search tags by type.
 - No tag can start with `@`.

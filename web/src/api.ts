@@ -148,6 +148,7 @@ export const TAG_FIELDS = [
   "source",
   "usage_tags",
   "ai_usage_tags",
+  "bucket",
 ] as const;
 
 export const COLLECTION_TYPES = ["usercollection", "set", "sequence", "variant", "sourceset"];

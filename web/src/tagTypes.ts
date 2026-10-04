@@ -15,7 +15,8 @@ export type TagType = {
 
 // The defaults give what describes the work itself a place in the one list,
 // each in a colour with some bearing on it, and keep the housekeeping types
-// (flaws, language, where it came from, what it is for) apart.
+// (flaws, language, where it came from, what it is for) apart, as they do
+// the bucket a file is kept in.
 const DEFAULTS: Record<(typeof TAG_FIELDS)[number], TagType> = {
   tags: { bg: "#e3e6ea", fg: "#22262b", aggregate: true }, // slate: the neutral ones
   creator: { bg: "#ffd8a8", fg: "#5c2a00", aggregate: true }, // amber: a signature
@@ -30,6 +31,7 @@ const DEFAULTS: Record<(typeof TAG_FIELDS)[number], TagType> = {
   source: { bg: "#e2e8c6", fg: "#374209", aggregate: false }, // olive: provenance
   usage_tags: { bg: "#ffe8a3", fg: "#594200", aggregate: false }, // sticky note
   ai_usage_tags: { bg: "#d8d5e8", fg: "#2e2949", aggregate: false }, // machine grey
+  bucket: { bg: "#3b4252", fg: "#f1f3f7", aggregate: false }, // dark: a label on a box
 };
 
 /**
@@ -50,6 +52,7 @@ export const TAG_PREFIXES: Record<(typeof TAG_FIELDS)[number], string> = {
   source: "so",
   usage_tags: "us",
   ai_usage_tags: "ai",
+  bucket: "bu",
 };
 
 export const prefixOf = (field: string) => TAG_PREFIXES[field as keyof typeof TAG_PREFIXES];
@@ -122,8 +125,8 @@ export const pillStyle = (field: string) => {
 
 /**
  * The order tags are listed in by default: who and what the work is, then
- * how it is made, with plain tags closing the aggregated list, and the
- * housekeeping types after.
+ * how it is made, with plain tags closing the aggregated list, then the
+ * bucket it is kept in, and the housekeeping types after.
  */
 const DEFAULT_ORDER: string[] = [
   "creator",
@@ -134,6 +137,7 @@ const DEFAULT_ORDER: string[] = [
   "style",
   "medium",
   "tags",
+  "bucket",
   "flaws",
   "language",
   "source",
