@@ -817,7 +817,7 @@ for n in 1 2; do
     printf 'file %s b' "$n" > "$out/$n-b.txt"
     files="$files,\"$out/$n-b.txt\""
   fi
-  more='"title":" Thing '$n' ","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]},"collection":{"url":"https://example.test/board","title":"Board"}'
+  more='"title":" Thing '$n' ","set_title":"fake#'$n'","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]},"collection":{"url":"https://example.test/board","title":"Board"}'
   echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":\"$key\",\"files\":[$files],$more}"
 done
 echo '{"event":"error","message":"one thing could not be had"}'
@@ -977,7 +977,8 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         [(files[1], Some(0)), (files[2], Some(1))]
     );
     let set = api.metadata(&sets).await;
-    assert_eq!(set["scalars"]["title"]["value"], "Thing 2");
+    // It has the name the downloader gave it, not the thing's title.
+    assert_eq!(set["scalars"]["title"]["value"], "fake#2");
     assert_eq!(carried(&set, "source"), [tag("fakesite", 1)]);
     assert_eq!(
         carried(&set, "source_urls"),

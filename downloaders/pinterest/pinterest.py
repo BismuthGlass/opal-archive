@@ -319,6 +319,8 @@ def download() -> int:
                     source_url=key,
                     files=files,
                     title=pin_title(pin),
+                    # A pin of several files becomes a set, named for the pin.
+                    set_title=f"pinterest#{pin['id']}",
                     description=(pin.get("description") or "").strip(),
                 )
     return 0

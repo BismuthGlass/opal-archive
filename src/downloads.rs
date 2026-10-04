@@ -147,6 +147,8 @@ struct Item {
     /// Given to the files if they have none of their own.
     title: Option<String>,
     description: Option<String>,
+    /// What the set of its files is called, if not as the thing itself.
+    set_title: Option<String>,
     /// Tags of its own, by field, besides the source and the tab's.
     #[serde(default)]
     tags: BaseTags,
@@ -714,7 +716,8 @@ impl Download {
         let tx = conn.transaction()?;
         let mut tagged = ids.clone();
         if ids.len() > 1 {
-            let set = collection_of(&tx, "set", source_url, title.as_deref(), &ids)?;
+            let named = text(&item.set_title).or_else(|| title.clone());
+            let set = collection_of(&tx, "set", source_url, named.as_deref(), &ids)?;
             tagged.push(set);
         }
         // What the thing is part of holds it whole: its set, if it has one.
