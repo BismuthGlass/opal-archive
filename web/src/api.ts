@@ -101,6 +101,7 @@ export type Entity = {
   id: number;
   kind: "file" | "collection";
   date_added: string;
+  title: string | null;
   file: Omit<FileEntity, "id" | "date_added"> | null;
   collection: {
     collection_type: string;
@@ -243,8 +244,14 @@ export const saveTabView = (id: number, view: TabView) =>
 export const orderTabs = (ids: number[]) => request<Tab[]>("PUT", "/tabs/order", { ids });
 export const deleteTab = (id: number) => request<void>("DELETE", `/tabs/${id}`);
 
-/** `tab` narrows a search to what an upload or collection tab holds. */
-const scoped = (tab: number | null): Record<string, number> => (tab === null ? {} : { tab });
+/**
+ * `tab` narrows a search to what an upload or collection tab holds, and
+ * `collection` to the members of a collection instead.
+ */
+const scoped = (tab: number | null, collection: number | null = null): Record<string, number> => ({
+  ...(tab === null ? {} : { tab }),
+  ...(collection === null ? {} : { collection }),
+});
 
 export const search = (
   q: string,
@@ -259,10 +266,16 @@ export const search = (
     "GET",
     `/search?${params({ q, offset, limit, seed, ...scoped(tab), ...(withTrashed ? { trashed: 1 } : {}) })}`,
   );
-export const searchIds = (q: string, seed: number, tab: number | null) =>
-  request<{ ids: number[] }>("GET", `/search/ids?${params({ q, seed, ...scoped(tab) })}`).then(
-    (r) => r.ids,
-  );
+export const searchIds = (
+  q: string,
+  seed: number,
+  tab: number | null,
+  collection: number | null = null,
+) =>
+  request<{ ids: number[] }>(
+    "GET",
+    `/search/ids?${params({ q, seed, ...scoped(tab, collection) })}`,
+  ).then((r) => r.ids);
 
 export const getEntity = (id: number) => request<Entity>("GET", `/entities/${id}`);
 export const getMetadata = (ids: number[]) =>

@@ -13,6 +13,8 @@ const [search, setSearch] = createStore({
   query: "",
   /** Upload tab the results are limited to, if any. */
   scope: null as number | null,
+  /** Collection whose members the results are limited to instead, if any. */
+  collection: null as number | null,
   /** The page of results on show, counted from 0. */
   page: 0,
   /** Whether the results have been dragged into an order of their own. */
@@ -29,7 +31,10 @@ const [selected, setSelected] = createSignal<ReadonlySet<number>>(new Set());
 const [searchCount, setSearchCount] = createSignal(0);
 const [dataVersion, setDataVersion] = createSignal(0);
 
-export { search, selected, searchCount, dataVersion };
+/** The result index the grid is to bring into sight, until it has. */
+const [revealed, setRevealed] = createSignal<number | null>(null);
+
+export { search, selected, searchCount, dataVersion, revealed, setRevealed };
 
 // Responses from an older generation are dropped.
 let generation = 0;
@@ -54,7 +59,7 @@ let viewTab: number | null = null;
  * The views seen while the page is open, so that coming back to a tab
  * shows what it showed before without asking the server again.
  */
-const views = new Map<string, { ids: number[]; custom: boolean }>();
+const views = new Map<string, { ids: number[]; custom: boolean; page?: number }>();
 let saving = 0;
 /** Items already fetched, so a reorder can redraw without asking again. */
 const known = new Map<number, Item>();
@@ -145,7 +150,8 @@ function calculate() {
   const current = (calculation += 1);
   // What the tab was left with is asked for only when the view is opened;
   // a refresh always runs the search.
-  calculated = api.searchIds(search.query, seed, search.scope).then((found) => {
+  const found = api.searchIds(search.query, seed, search.scope, search.collection);
+  calculated = found.then((found) => {
     if (current !== calculation) return;
     if (search.custom) {
       const fresh = new Set(found);
@@ -174,9 +180,14 @@ export function runSearch(
   scope: number | null = null,
   key = "",
   tab: number | null = null,
+  /** A collection to show the members of, in place of what `scope` holds. */
+  collection: number | null = null,
 ) {
   // The view being left is saved now, not after its delay.
   flushSave();
+  // Coming back to it, it is on the page it was left on.
+  const left = views.get(viewKey);
+  if (left) left.page = search.page;
   generation += 1;
   seed = Math.floor(Math.random() * 2 ** 31);
   requested = new Set();
@@ -190,7 +201,8 @@ export function runSearch(
   setSearch({
     query,
     scope,
-    page: 0,
+    collection,
+    page: seen?.page ?? 0,
     custom: seen?.custom ?? false,
     total: 0,
     ready: false,
@@ -224,7 +236,20 @@ export function runSearch(
       });
     calculated.catch(() => {});
   }
-  loadPage(0);
+  loadPage(search.page);
+}
+
+/**
+ * Selects one result of the view on show, if it is listed, and has the
+ * grid bring it into sight: for showing where the view has come back to.
+ */
+export async function reveal(id: number) {
+  const index = (await resultIds()).indexOf(id);
+  // Only on the page on show: the view came back on the page it was left on.
+  if (index < 0 || Math.floor(index / PAGE) !== search.page) return;
+  anchor = index;
+  setSelected(new Set([id]));
+  setRevealed(index);
 }
 
 /**

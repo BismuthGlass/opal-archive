@@ -2,7 +2,7 @@ import { createEffect, createSignal, For, Index, onCleanup, onMount, Show } from
 import { errorMessage } from "../format";
 import { queryLabel, savedQueries, saveQuery } from "../savedQueries";
 import { search } from "../search";
-import { activeTab, setQuery } from "../tabs";
+import { activeTab, filterInside, inside, setQuery } from "../tabs";
 import Icon from "./Icon";
 
 /** A stacked query is kept as one line per row. */
@@ -22,7 +22,8 @@ export default function QueryBar() {
   const [naming, setNaming] = createSignal<number | null>(null);
   const [saveError, setSaveError] = createSignal<string | null>(null);
 
-  const stored = () => activeTab()?.query ?? "";
+  // Inside a collection the box filters it, and the tab's own query waits.
+  const stored = () => inside()?.query ?? activeTab()?.query ?? "";
   /** The saved queries there is something to add from. */
   const offered = () => savedQueries().filter((saved) => saved.query.trim() !== "");
 
@@ -39,7 +40,11 @@ export default function QueryBar() {
       .map((row) => row.trim())
       .filter((row) => row !== "")
       .join("\n");
-    if (tab && query !== tab.query) setQuery(tab.id, query);
+    if (inside()) {
+      if (query !== inside()!.query) filterInside(query);
+    } else if (tab && query !== tab.query) {
+      setQuery(tab.id, query);
+    }
   };
 
   const setRow = (index: number, text: string) =>
@@ -88,10 +93,10 @@ export default function QueryBar() {
   onCleanup(() => document.removeEventListener("keydown", onKeyDown));
 
   const placeholder = () =>
-    activeTab()?.kind === "upload"
-      ? "Filter these uploads"
-      : activeTab()?.kind === "collection"
-        ? "Filter this collection"
+    inside() || activeTab()?.kind === "collection"
+      ? "Filter this collection"
+      : activeTab()?.kind === "upload"
+        ? "Filter these uploads"
         : "cat creator=someone score>=5";
 
   return (

@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
+import { createStore, produce, reconcile } from "solid-js/store";
 import * as api from "./api";
 import { errorMessage } from "./format";
 import type { Tab, TabKind } from "./api";
@@ -10,6 +10,7 @@ import { forgetViews } from "./search";
 function forget(id: number) {
   forgetViews(id);
   forgetDownload(id);
+  setTrails(produce((all) => void delete all[id]));
 }
 
 // Tabs live on the server; which one is active is remembered per browser.
@@ -22,6 +23,62 @@ const [error, setError] = createSignal<string | null>(null);
 export { tabs, activeId, error };
 
 export const activeTab = () => tabs.find((tab) => tab.id === activeId());
+
+/** A collection a tab has gone into, and the filter typed while in it. */
+export type Step = { id: number; title: string | null; ordered: boolean; query: string };
+
+// A tab can go into a collection among its results, and into one inside
+// that, and back out: the way in is its trail. It is kept while the page
+// is open, and not with the tab.
+const [trails, setTrails] = createStore<Record<number, Step[]>>({});
+
+/** The collections the active tab has gone into, outermost first. */
+export const trail = (): Step[] => trails[activeId() ?? -1] ?? [];
+
+/** The collection the active tab is inside, if it has gone into one. */
+export const inside = (): Step | undefined => trail().at(-1);
+
+/**
+ * The collection the active tab shows the members of: the one it has gone
+ * into, or failing that the one a collection tab is tied to.
+ */
+export const shownCollection = () => inside() ?? activeTab()?.collection ?? undefined;
+
+/** Goes into a collection, in the active tab. */
+export async function enter(collection: { id: number; title: string | null }) {
+  const tab = activeId();
+  if (tab === null) return;
+  await guard(async () => {
+    const entity = await api.getEntity(collection.id);
+    if (activeId() !== tab) return;
+    const step = {
+      id: entity.id,
+      title: entity.title,
+      ordered: entity.collection?.ordered ?? false,
+      query: "",
+    };
+    setTrails(tab, [...(trails[tab] ?? []), step]);
+  });
+}
+
+/**
+ * Goes back out: one collection, or to where the trail was `depth` long.
+ * Resolves to the collection that was left for the one outside it.
+ */
+export function leave(depth = trail().length - 1): Step | undefined {
+  const tab = activeId();
+  const steps = trail();
+  if (tab === null || depth < 0 || depth >= steps.length) return undefined;
+  setTrails(tab, steps.slice(0, depth));
+  return steps[depth];
+}
+
+/** Filters the collection the active tab is inside. */
+export function filterInside(query: string) {
+  const tab = activeId();
+  const depth = trail().length - 1;
+  if (tab !== null && depth >= 0) setTrails(tab, depth, "query", query);
+}
 
 function savedActiveId(): number | null {
   try {
@@ -117,10 +174,30 @@ export const refresh = () =>
       if (!list.some((kept) => kept.id === tab.id)) forget(tab.id);
     }
     setTabs(reconcile(list, { key: "id" }));
+    await followTrail();
     if (!list.some((tab) => tab.id === activeId())) {
       select(list[Math.max(0, Math.min(index, list.length - 1))].id);
     }
   });
+
+/**
+ * Brings the active tab's trail up to date with its collections: their
+ * titles and whether they are ordered. It ends where one has been deleted.
+ */
+async function followTrail() {
+  const tab = activeId();
+  const steps = trail();
+  if (tab === null || steps.length === 0) return;
+  const kept: Step[] = [];
+  for (const step of steps) {
+    const entity = await api.getEntity(step.id).catch(() => null);
+    if (!entity?.collection) break;
+    kept.push({ ...step, title: entity.title, ordered: entity.collection.ordered });
+  }
+  if (activeId() === tab && trails[tab]?.length === steps.length) {
+    setTrails(tab, reconcile(kept, { key: "id" }));
+  }
+}
 
 /** Names a tab; an empty name puts it back to showing its query. */
 export const rename = (id: number, name: string) =>

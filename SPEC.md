@@ -68,6 +68,17 @@ A row can be saved under a name, to be used again: the + then offers the saved q
 
 The saved queries are a setting. The settings list them, to write, rename, delete and drag into the order they are offered in.
 
+## Going into a collection
+
+Double-clicking a collection among a view's results goes into it, in the same tab: the view becomes the collection's members, and a bar above it shows the way back.
+
+- The bar has a back arrow, the collections gone through to get here, and a button that opens the collection in a tab of its own. Going into a collection inside this one adds to the trail; any earlier point of it can be gone back to directly. Backspace goes back one.
+- Coming back out, the view outside is as it was left: the same results, order and page, with the collection come out of selected and in sight.
+- Inside, the search box filters the collection, as it does in a collection's own tab. The tab's query is untouched and is there again on coming out.
+- An ordered collection is shown in its order, and a new order dragged into can be saved from here.
+- What the tab is for (its upload box, its download panel) gives way while it is inside a collection.
+- The trail belongs to the page, not the tab: reloading the page brings the tab back to its own view.
+
 ## Playing a view
 
 The viewer, opened on any result of a view, can play through the results by itself. A button starts and stops it; beside it are how many seconds each result stays up, and whether they come in the view's order or at random. Both are settings, kept for next time.

@@ -25,6 +25,9 @@ struct SearchParams {
     /// Tab to search within: an upload tab's files, or a collection tab's
     /// members.
     tab: Option<i64>,
+    /// Collection to search within, in place of what `tab` holds: the
+    /// collection a tab has gone into.
+    collection: Option<i64>,
     /// Present to have trashed entities included without `@trashed`.
     trashed: Option<String>,
 }
@@ -56,37 +59,51 @@ pub fn router() -> Router<AppState> {
         .route("/search/ids", get(search_ids))
 }
 
-/// Compiles `source`, narrowed to what `tab` holds if it is an upload, a
-/// download or a collection tab. An ordered collection is shown in its own order unless
-/// the query asks for another.
+/// Compiles `source`, narrowed to the members of `collection` if one is
+/// given, and otherwise to what `tab` holds if it is an upload, a download
+/// or a collection tab. An ordered collection is shown in its own order
+/// unless the query asks for another.
 fn compile(
     conn: &Connection,
     source: &str,
     seed: i64,
     tab: Option<i64>,
+    collection: Option<i64>,
     include_trashed: bool,
 ) -> Result<query::Compiled, ApiError> {
     let mut compiled = query::compile(source, seed, &tags::aliases(conn)?, include_trashed)?;
-    let Some(tab) = tab else {
-        return Ok(compiled);
+    // What to narrow to: a tab's own list, or a collection and whether it
+    // is ordered. A collection that is gone has no members.
+    let scope: Option<(String, Option<i64>, Option<bool>)> = match (collection, tab) {
+        (Some(collection), _) => {
+            let ordered = conn
+                .query_row(
+                    "SELECT ordered FROM collection WHERE entity_id = ?1",
+                    [collection],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            Some(("collection".to_string(), Some(collection), ordered))
+        }
+        (None, Some(tab)) => conn
+            .query_row(
+                "SELECT t.kind, t.collection_id, c.ordered FROM tab t
+                 LEFT JOIN collection c ON c.entity_id = t.collection_id WHERE t.id = ?1",
+                [tab],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?,
+        (None, None) => None,
     };
-    let scope: Option<(String, Option<i64>, Option<bool>)> = conn
-        .query_row(
-            "SELECT t.kind, t.collection_id, c.ordered FROM tab t
-             LEFT JOIN collection c ON c.entity_id = t.collection_id WHERE t.id = ?1",
-            [tab],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .optional()?;
-    match scope {
-        Some((kind, _, _)) if kind == "upload" || kind == "download" => {
+    match (scope, tab) {
+        (Some((kind, _, _)), Some(tab)) if kind == "upload" || kind == "download" => {
             compiled.filter = format!(
                 "({}) AND e0.id IN (SELECT entity_id FROM tab_upload WHERE tab_id = ?)",
                 compiled.filter
             );
             compiled.filter_params.push(Value::Integer(tab));
         }
-        Some((_, Some(collection), ordered)) => {
+        (Some((_, Some(collection), ordered)), _) => {
             compiled.filter = format!(
                 "({}) AND e0.id IN (SELECT member_id FROM membership WHERE collection_id = ?)",
                 compiled.filter
@@ -110,9 +127,10 @@ pub fn matching_ids(
     source: &str,
     seed: i64,
     tab: Option<i64>,
+    collection: Option<i64>,
     include_trashed: bool,
 ) -> Result<Vec<i64>, ApiError> {
-    let compiled = compile(conn, source, seed, tab, include_trashed)?;
+    let compiled = compile(conn, source, seed, tab, collection, include_trashed)?;
     let sql = format!(
         "SELECT e0.id FROM {} WHERE {} ORDER BY {}",
         query::FROM,
@@ -135,7 +153,14 @@ async fn search(
     let offset = params.offset.max(0);
     let conn = state.db.lock().unwrap();
     let include_trashed = params.trashed.is_some();
-    let compiled = compile(&conn, &params.q, params.seed, params.tab, include_trashed)?;
+    let compiled = compile(
+        &conn,
+        &params.q,
+        params.seed,
+        params.tab,
+        params.collection,
+        include_trashed,
+    )?;
 
     let total: i64 = conn.query_row(
         &format!(
@@ -220,6 +245,7 @@ async fn search_ids(
         &params.q,
         params.seed,
         params.tab,
+        params.collection,
         params.trashed.is_some(),
     )?;
     Ok(Json(json!({ "ids": ids })))

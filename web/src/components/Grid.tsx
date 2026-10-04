@@ -10,12 +10,14 @@ import {
   goToPage,
   itemAt,
   moveItems,
+  revealed,
   search,
   searchCount,
   selected,
+  setRevealed,
 } from "../search";
 import { stats } from "../stats";
-import { activeTab, openCollection } from "../tabs";
+import { activeTab, enter, inside } from "../tabs";
 import { openContextMenu } from "./ContextMenu";
 import Icon from "./Icon";
 
@@ -111,8 +113,20 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
     onCleanup(() => observer.disconnect());
   });
 
+  // A result asked to be shown is scrolled to, once the page is laid out.
+  createEffect(() => {
+    const index = revealed();
+    if (index === null || !search.ready || count() === 0 || height() === 0) return;
+    setRevealed(null);
+    const row = Math.floor((index - first()) / columns());
+    const top = Math.max(0, PADDING + row * rowHeight() - (height() - tile()) / 2);
+    scroller.scrollTop = top;
+    setScrollTop(scroller.scrollTop);
+  });
+
+  // A collection is gone into, in this tab; a file is opened in the viewer.
   const activate = (index: number, item: Item) => {
-    if (item.kind === "collection") openCollection(item.id);
+    if (item.kind === "collection") enter(item);
     else props.onOpen(index);
   };
 
@@ -227,9 +241,11 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
         <p class="empty">
           {stats()?.files === 0 && stats()?.collections === 0
             ? "The library is empty. Open an upload tab with +, or drop files here."
-            : search.scope !== null && search.query === ""
-              ? EMPTY[activeTab()?.kind ?? "upload"]
-              : "No results."}
+            : inside() && search.query === ""
+              ? EMPTY.collection
+              : search.scope !== null && search.query === ""
+                ? EMPTY[activeTab()?.kind ?? "upload"]
+                : "No results."}
         </p>
       </Show>
       <div class="grid" style={{ height: `${rows() * rowHeight() + 2 * PADDING - GAP}px` }}>

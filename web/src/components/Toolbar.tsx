@@ -13,7 +13,7 @@ import {
   selectAll,
   selected,
 } from "../search";
-import { activeTab } from "../tabs";
+import { shownCollection } from "../tabs";
 import Icon from "./Icon";
 
 /**
@@ -24,9 +24,9 @@ export default function Toolbar() {
   const from = () => search.page * PAGE + 1;
   const to = () => Math.min(search.total, (search.page + 1) * PAGE);
   const allSelected = () => search.total > 0 && selected().size >= search.total;
-  /** The ordered collection this tab shows, whose order can be saved. */
+  /** The ordered collection on show, whose order can be saved. */
   const ordered = () => {
-    const collection = activeTab()?.collection;
+    const collection = shownCollection();
     return collection?.ordered ? collection : null;
   };
   const filtered = () => search.query.trim() !== "";

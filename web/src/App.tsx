@@ -34,7 +34,17 @@ import {
 import { loadSettings } from "./settings";
 import { refreshStats, stats } from "./stats";
 import { hideToast, showToast, toast } from "./toast";
-import { activeTab, error, load, open, refresh } from "./tabs";
+import {
+  activeTab,
+  error,
+  inside,
+  load,
+  open,
+  refresh,
+  shownCollection as collectionShown,
+  trail,
+} from "./tabs";
+import Trail, { goBack } from "./components/Trail";
 
 export default function App() {
   /** Result index shown in the viewer, if it is open. */
@@ -46,11 +56,11 @@ export default function App() {
    * tab is tied to, unless it is itself among them.
    */
   const parentFor = (ids: number[]) => {
-    const collection = activeTab()?.collection;
+    const collection = collectionShown();
     return collection && !ids.includes(collection.id) ? collection : undefined;
   };
-  /** The collection the tab is tied to, shown when nothing is selected. */
-  const shownCollection = () => (selected().size === 0 ? activeTab()?.collection : undefined);
+  /** The collection on show, described when nothing is selected. */
+  const shownCollection = () => (selected().size === 0 ? collectionShown() : undefined);
   const [editingTags, setEditingTags] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   /** What the tagging hotkey applies to, while the tag editor it opens is up. */
@@ -72,13 +82,24 @@ export default function App() {
     on(
       () => {
         const tab = activeTab();
-        return tab && `${tab.id}:${tab.query}`;
+        if (!tab) return undefined;
+        // Inside a collection, the view is of its members: one view for
+        // each way in, kept apart from the tab's own by a character that
+        // cannot be typed.
+        const way = trail().map((step) => step.id).join("/");
+        return inside() ? `${tab.id}:\u0001${way}:${inside()!.query}` : `${tab.id}:${tab.query}`;
       },
       (key) => {
         if (key === undefined) return;
         setViewing(null);
         const tab = activeTab()!;
-        runSearch(tab.query, tab.kind === "gallery" ? null : tab.id, key, tab.id);
+        const step = inside();
+        if (step) {
+          // Not saved with the tab: the trail is the page's alone.
+          runSearch(step.query, null, key, null, step.id);
+        } else {
+          runSearch(tab.query, tab.kind === "gallery" ? null : tab.id, key, tab.id);
+        }
       },
     ),
   );
@@ -152,7 +173,11 @@ export default function App() {
     }
 
     if (viewing() !== null) return;
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+    if (event.key === "Backspace" && inside()) {
+      // Back out of the collection, as the arrow above the grid does.
+      event.preventDefault();
+      goBack();
+    } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
       event.preventDefault();
       selectAll();
     } else if (event.key === "Escape") {
@@ -242,11 +267,12 @@ export default function App() {
           </aside>
         </Show>
         <main class="content">
-          <Show when={activeTab()?.kind === "upload"}>
+          {/* What a tab is for gives way while it is inside a collection. */}
+          <Show when={activeTab()?.kind === "upload" && !inside()}>
             <UploadBox />
           </Show>
           {/* Keyed by the tab: each download tab has a panel of its own. */}
-          <Show when={activeTab()?.kind === "download" && activeTab()?.id} keyed>
+          <Show when={activeTab()?.kind === "download" && !inside() && activeTab()?.id} keyed>
             {(id) => (
               <Dynamic
                 component={panelFor(activeTab()?.downloader ?? "")}
@@ -254,6 +280,7 @@ export default function App() {
               />
             )}
           </Show>
+          <Trail />
           <Toolbar />
           <Grid onOpen={setViewing} />
         </main>

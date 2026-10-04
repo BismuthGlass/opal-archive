@@ -97,8 +97,8 @@ is on, for a query of several lines).
 | `POST /files/fetch`              | `{url, tab}` → have the server fetch the file at that web address, as an upload of it, with the address as its source URL. Answers as an upload does. A page is refused: the address has to be of the file itself |
 | `GET /files/{id}/content`        | The file. `?download=1` to save rather than display            |
 | `GET /files/{id}/thumbnail`      | JPEG thumbnail, 404 if the file has none. With `?v=` as a search result gives it (`thumbnail_version`), the answer may be kept for good; without, the browser asks again each time |
-| `GET /search?q=&offset=&limit=`  | One page of results and the total. `seed` fixes `sort=random`; `tab=<id>` searches only what that upload or collection tab holds. Trashed entities only match with `@trashed` in the query, or with `trashed=1` |
-| `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed` and `tab` too      |
+| `GET /search?q=&offset=&limit=`  | One page of results and the total. `seed` fixes `sort=random`; `tab=<id>` searches only what that upload or collection tab holds, and `collection=<id>` only that collection's members, in its order if it has one. Trashed entities only match with `@trashed` in the query, or with `trashed=1` |
+| `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed`, `tab` and `collection` too |
 | `GET /entities/{id}`             | Everything about one file or collection                        |
 | `POST /entities/metadata`        | `{ids}` → what those entities have in common                   |
 | `POST /entities/edit`            | `{ids, set, add, remove, add_urls, remove_urls, add_identifiers, remove_identifiers}` → the same edit applied to all. `set` takes `ordered` (true or false) and `collection_id` for collections (an ID another collection has is refused, as is giving one to several); the `_urls` and `_identifiers` lists change those plain lists |

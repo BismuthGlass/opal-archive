@@ -148,7 +148,7 @@ export default function Viewer(props: { index: number; onMove: (index: number | 
               <Match when={current.kind === "collection"}>
                 <p class="viewer-note">
                   Collection{current.title ? `: ${current.title}` : ""}. Double-click it in the
-                  grid to open it.
+                  grid to go into it.
                 </p>
               </Match>
               <Match when={current.media_type === "image"}>

@@ -409,6 +409,55 @@ button.primary {
   opacity: 0.6;
 }
 
+/* Above the toolbar while the tab is inside a collection: the way back. */
+.trail {
+  display: flex;
+  flex: none;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px 0;
+  font-size: 13px;
+}
+
+.trail > button {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  padding: 3px 10px 3px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.trail ol {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 2px 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trail li {
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trail li + li::before {
+  margin: 0 6px;
+  color: var(--muted);
+  content: "›";
+}
+
+.trail li[aria-current] {
+  font-weight: 600;
+}
+
 .toolbar-note {
   color: var(--muted);
   font-variant-numeric: tabular-nums;

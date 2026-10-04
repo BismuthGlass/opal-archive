@@ -531,6 +531,23 @@ async fn ordered_collections_keep_positions() {
     .await;
     assert_eq!(api.members(sequence).last(), Some(&(d, Some(3))));
 
+    // A search can be kept to a collection's members without a tab of its
+    // own: in the collection's order, filtered by the query, and whatever
+    // another tab would have held. One that is gone has no members.
+    let within = async |query: &str, collection: i64| -> Vec<i64> {
+        let path = format!("/search/ids?q={query}&collection={collection}");
+        serde_json::from_value(api.get(&path).await["ids"].clone()).unwrap()
+    };
+    assert_eq!(within("", sequence).await, [c, a, b, d]);
+    assert_eq!(within("sort%3Did", sequence).await, [a, b, c, d]);
+    assert_eq!(within(&format!("id%3D{a},{d}"), sequence).await, [a, d]);
+    assert!(within("", 999).await.is_empty());
+    let upload = api.post("/tabs", json!({ "kind": "upload" })).await["id"]
+        .as_i64()
+        .unwrap();
+    let both = format!("/search/ids?q=&collection={sequence}&tab={upload}");
+    assert_eq!(api.get(&both).await["ids"], json!([c, a, b, d]));
+
     // Members left out of a new order follow it, as they were.
     let (status, _) = api
         .call(
