@@ -1269,6 +1269,41 @@ mod tests {
     }
 
     #[test]
+    fn collection_ids_are_searched_by_namespace() {
+        let conn = library();
+        conn.execute_batch(
+            "INSERT INTO entity (id, kind, date_added) VALUES
+                 (10, 'collection', '2026-01-02T00:00:00Z'),
+                 (11, 'collection', '2026-01-02T00:00:01Z'),
+                 (12, 'collection', '2026-01-02T00:00:02Z');
+             INSERT INTO collection (entity_id, collection_type, collection_id) VALUES
+                 (10, 'sourceset', 'pinterest:someone:women'),
+                 (11, 'sourceset', 'pinterest:someone:women:celebs'),
+                 (12, 'set', 'pinterest:pin:77');
+             INSERT INTO membership (collection_id, member_id) VALUES (10, 11), (11, 1), (12, 2);",
+        )
+        .unwrap();
+        // As with a tag: the name alone is that one, `:*` what is under it.
+        assert_eq!(found(&conn, "collection_id=pinterest:someone:women"), [10]);
+        assert_eq!(
+            found(&conn, "collection_id=pinterest:someone:women:*"),
+            [11]
+        );
+        assert_eq!(found(&conn, "collection_id=pinterest:someone:*"), [10, 11]);
+        assert_eq!(found(&conn, "collection_id=pinterest:*"), [10, 11, 12]);
+        assert_eq!(found(&conn, "collection_id=*:celebs"), [11]);
+        assert_eq!(found(&conn, "collection_id=PINTEREST:PIN:*"), [12]);
+        assert!(found(&conn, "collection_id=pinterest").is_empty());
+        // What is in them, and which have an ID at all.
+        assert_eq!(
+            found(&conn, "in=(collection_id=pinterest:someone:*)"),
+            [1, 11]
+        );
+        assert_eq!(found(&conn, "has=collection_id"), [10, 11, 12]);
+        assert_eq!(found(&conn, "kind=collection -has=collection_id"), [4]);
+    }
+
+    #[test]
     fn plain_terms_are_tags() {
         let conn = library();
         assert_eq!(found(&conn, ""), [1, 2, 4, 5]);

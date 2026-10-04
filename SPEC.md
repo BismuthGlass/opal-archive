@@ -48,7 +48,7 @@ The format's `ai_content` field is left out. Whether a work is AI-made, and how 
 
 Every file and collection records when it was added to the library, as a date and time to the second in ISO 8601 format, in UTC: `2026-10-03T12:20:37Z`. The application sets it; it is not editable. The interface shows it in local time.
 
-A collection has a title, like a file, which is for people and need not be unique. It may also have a collection ID, which no two collections share: that, and not the title, is what says for certain which collection is meant. It is shown with the collection's details and can be set, changed or cleared there; one that another collection has is refused. `collection_id=` searches for it.
+A collection has a title, like a file, which is for people and need not be unique. It may also have a collection ID, which no two collections share: that, and not the title, is what says for certain which collection is meant. It is shown with the collection's details and can be set, changed or cleared there; one that another collection has is refused. `collection_id=` searches for it, and by namespace as a tag is: `collection_id=pinterest:someone:*` finds every collection whose ID is under that.
 
 Collections should behave as their own entities that may also be categorized and searched in the same way as files. The hierarchical directory concept of categories does not apply, as the system isn't directory based. Groups can still belong to other groups, however.
 

@@ -174,10 +174,30 @@ hash=3fa9*                  hash prefix
 For multi-valued fields the term matches if any one of the entity's values
 matches. Write `\*` for a literal asterisk.
 
-`collection_id` is a collection's identifier, which no two collections
-share: `collection_id=pinterest:pin:924574998519073090` finds that one
-collection whatever it is titled. `name` is the filename the file was uploaded with, and `ext` its extension
+`name` is the filename the file was uploaded with, and `ext` its extension
 without the dot.
+
+`collection_id` is a collection's identifier, which no two collections
+share, so it finds one collection whatever it is titled. An ID may be
+namespaced with colons, as a tag is, and is searched the same way:
+
+```
+collection_id=pinterest:pin:924574998519073090   that one collection
+collection_id=pinterest:someone:women            the board, and not its sections
+collection_id=pinterest:someone:women:*          its sections, at any depth
+collection_id=pinterest:someone:*                everything of that user
+collection_id=4chan:g:*                          every thread of a board
+collection_id=*:celebs                           whatever ends in celebs
+has=collection_id                                collections that have an ID
+```
+
+These find the collections themselves. What is in them is found with `in=`:
+
+```
+in=(collection_id=4chan:g:*)                     the files of those threads
+in=(collection_id=pinterest:someone:women,pinterest:someone:women:*)
+                                                 what is in the board or in a section of it
+```
 
 ### Choice fields
 
