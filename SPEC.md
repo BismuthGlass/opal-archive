@@ -75,12 +75,12 @@ The viewer, opened on any result of a view, can play through the results by itse
 
 ## Downloaders
 
-A downloader fetches files from a website straight into the library, in a tab of its own kind. Each downloader is for one site; the first is for Pinterest. They are made to be added to: a downloader is a folder with a manifest and a script, and the server and the interface need no change for a new one unless it wants a panel of its own. `downloaders/README.md` describes how they are written.
+A downloader fetches files from a website straight into the library, in a tab of its own kind. Each downloader is for one site: there is one for Pinterest and one for 4chan. They are made to be added to: a downloader is a folder with a manifest and a script, and the server and the interface need no change for a new one unless it wants a panel of its own. `downloaders/README.md` describes how they are written.
 
 - A download tab belongs to one downloader. At its top is a box to paste an address into; under it, what was downloaded through the tab, as in an upload tab.
-- What an address can be is up to the downloader. For Pinterest: a pin, a board, a section of a board, or a profile.
-- A downloader has options, set per tab. Pinterest has two: whether to go into what is inside (a board's sections, a profile's boards) or take only what sits directly in the board, and whether to download videos.
-- Everything downloaded gets the address it came from as a source URL (for Pinterest, the pin's), and a `source` tag naming the site. That tag is implied and not shown among the tab's settings. A tab can also be given tags of its own, of any type, which everything it downloads gets as well.
+- What an address can be is up to the downloader. For Pinterest: a pin, a board, a section of a board, or a profile. For 4chan: a thread.
+- A downloader has options, set per tab. Pinterest has two: whether to go into what is inside (a board's sections, a profile's boards) or take only what sits directly in the board, and whether to download videos. 4chan has two as well: whether to download videos, and whether each file is described with the text of its post.
+- Everything downloaded gets the address it came from as a source URL (for Pinterest, the pin's; for 4chan, the post's), and a `source` tag naming the site. That tag is implied and not shown among the tab's settings. A tab can also be given tags of its own, of any type, which everything it downloads gets as well.
 - Something that is several files (a Pinterest pin with several images) also becomes a `set` holding them in order, titled as the thing is. The set is not listed in the tab; its files are.
 - Boards and sections do not become collections: what is downloaded is flat.
 - A downloader also passes on what the site says of each thing, where it says anything: its title and description, and any tags the downloader makes of it. Title and description only fill in where there is none; what the user wrote is never replaced. Pinterest gives the pin's title and description.

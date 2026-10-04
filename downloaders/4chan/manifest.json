@@ -1,0 +1,18 @@
+{
+  "title": "4chan",
+  "source": "4chan",
+  "command": ["uv", "run", "--quiet", "--script", "4chan.py"],
+  "url_hint": "A thread URL",
+  "options": [
+    {
+      "key": "video",
+      "label": "Download videos",
+      "default": true
+    },
+    {
+      "key": "comments",
+      "label": "Describe each file with the text of its post",
+      "default": false
+    }
+  ]
+}
