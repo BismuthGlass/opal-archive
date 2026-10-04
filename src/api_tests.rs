@@ -976,8 +976,8 @@ async fn a_download_tab_fetches_tags_and_remembers() {
 
     // The second thing asked for a set of its own: it holds its files in
     // order, under the ID, description and tags given for it, with the
-    // tab's tags but not those of the thing. Given no title, it is called
-    // by its ID.
+    // tab's tags but not those of the thing. Given no title, it has none:
+    // its ID is not its title.
     let sets = api.found("type=set").await;
     assert_eq!(sets.len(), 1);
     assert_eq!(
@@ -985,7 +985,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         [(files[1], Some(0)), (files[2], Some(1))]
     );
     let set = api.metadata(&sets).await;
-    assert_eq!(set["scalars"]["title"]["value"], "fake#2");
+    assert_eq!(set["scalars"]["title"]["value"], Value::Null);
     assert_eq!(set["collection_id"]["value"], "fake#2");
     assert_eq!(api.found("collection_id=fake#2").await, sets);
     assert_eq!(set["scalars"]["description"]["value"], "A pair");

@@ -168,7 +168,7 @@ struct Whole {
     kind: Option<String>,
     /// Its address on the site, kept as its source URL.
     url: Option<String>,
-    /// What it is called when it is made; the ID if not said.
+    /// What it is called when it is made; it has no title if not said.
     title: Option<String>,
     description: Option<String>,
     /// Tags of its own, by field, besides the source and the tab's.
@@ -746,9 +746,8 @@ impl Download {
             }
             let wanted = whole.id.trim();
             let title = text(&whole.title);
-            let title = title.as_deref().unwrap_or(wanted);
             let ordered = whole.ordered.unwrap_or(true);
-            let id = collection_of(&tx, wanted, kind, title, ordered, &members)?;
+            let id = collection_of(&tx, wanted, kind, title.as_deref(), ordered, &members)?;
             let json = entities::ids_json(&[id]);
             if let Some(url) = text(&whole.url) {
                 entities::add_to_list(&tx, &json, SOURCE_URLS, &url)?;
@@ -829,12 +828,12 @@ impl Download {
 
 /// The collection with the given collection ID, with `files` put in it:
 /// the one that has it, whatever it has been retitled or made into since,
-/// or a new one of the type and title given.
+/// or a new one of the type given, with the title given if any.
 fn collection_of(
     conn: &Connection,
     collection_id: &str,
     collection_type: &str,
-    title: &str,
+    title: Option<&str>,
     ordered: bool,
     files: &[i64],
 ) -> Result<i64, ApiError> {

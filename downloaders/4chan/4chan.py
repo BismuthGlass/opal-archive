@@ -142,9 +142,11 @@ def download() -> int:
 
     emit("log", message="Reading the thread")
     board, thread = thread_of(request["url"])
+    posts = posts_of(board, thread)
+    subject = html.unescape(posts[0].get("sub") or "").strip() if posts else ""
     posts = [
         post
-        for post in posts_of(board, thread)
+        for post in posts
         if post.get("tim") and post.get("ext") and not post.get("filedeleted")
     ]
     if not options.get("video", True):
@@ -165,6 +167,8 @@ def download() -> int:
                 "id": f"4chan:{board}:{thread}",
                 "type": "sourceset",
                 "url": address,
+                # Titled with the thread's subject, and not at all without one.
+                "title": subject,
             }
         }
 

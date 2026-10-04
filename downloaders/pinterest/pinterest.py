@@ -345,6 +345,8 @@ def download() -> int:
                     "id": f"pinterest:pin:{pin['id']}",
                     "type": "set",
                     "url": key,
+                    # Titled as the pin is, and not at all if it has no title.
+                    "title": pin_title(pin),
                     "description": description,
                 }
                 if inside:

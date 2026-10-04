@@ -105,7 +105,7 @@ Nothing is put in a collection unless the item asks. It asks with
 | `id`          | Required. Its collection ID, which no two collections in the library share. Start it with the downloader's name, so that it cannot meet another downloader's, and namespace it with colons: `pinterest:pin:…`, `4chan:<board>:…` |
 | `type`        | `set`, `sourceset`, `sequence`, `variant` or `usercollection`. A `set` if left out |
 | `url`         | Its address on the site, kept as its source URL                          |
-| `title`       | What it is called. The `id` if left out                                  |
+| `title`       | What it is called. It has no title if this is left out or empty: the `id` is not shown in its place |
 | `description` | Given to it if it has none                                               |
 | `tags`        | Tags of its own, as an item's                                            |
 | `ordered`     | Whether it keeps its members in the order they arrive. It does if left out |
