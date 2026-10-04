@@ -10,11 +10,12 @@ import {
   goToPage,
   itemAt,
   moveItems,
-  revealed,
+  noteScroll,
+  scrollTo,
   search,
   searchCount,
   selected,
-  setRevealed,
+  setScrollTo,
 } from "../search";
 import { stats } from "../stats";
 import { activeTab, enter, inside } from "../tabs";
@@ -113,15 +114,14 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
     onCleanup(() => observer.disconnect());
   });
 
-  // A result asked to be shown is scrolled to, once the page is laid out.
+  // A view come back to is scrolled as it was left, once it is laid out.
   createEffect(() => {
-    const index = revealed();
-    if (index === null || !search.ready || count() === 0 || height() === 0) return;
-    setRevealed(null);
-    const row = Math.floor((index - first()) / columns());
-    const top = Math.max(0, PADDING + row * rowHeight() - (height() - tile()) / 2);
+    const top = scrollTo();
+    if (top === null || !search.ready || height() === 0) return;
+    setScrollTo(null);
     scroller.scrollTop = top;
     setScrollTop(scroller.scrollTop);
+    noteScroll(scroller.scrollTop);
   });
 
   // A collection is gone into, in this tab; a file is opened in the viewer.
@@ -235,7 +235,10 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
       class="results"
       classList={{ reordering: drag() !== null }}
       ref={scroller}
-      onScroll={() => setScrollTop(scroller.scrollTop)}
+      onScroll={() => {
+        setScrollTop(scroller.scrollTop);
+        noteScroll(scroller.scrollTop);
+      }}
     >
       <Show when={search.ready && search.total === 0 && !search.error}>
         <p class="empty">

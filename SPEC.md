@@ -56,7 +56,7 @@ There is no need to support injesting existing sidecar files on file upload for 
 
 ## Gallery views
 
-What a view lists is decided when its search is calculated, and stays put after that: it is a snapshot, saved with its tab, so it is the same after switching tabs or reloading the page. The order results were dragged into and any that were taken out of the view are part of it. Editing, tagging, rating or trashing a file changes how it is shown, but it does not drop out of the view, and files that start matching do not appear. A Refresh button calculates the search again.
+What a view lists is decided when its search is calculated, and stays put after that: it is a snapshot, saved with its tab, so it is the same after switching tabs or reloading the page. Switching tabs also keeps where a view was: its page, how far it was scrolled, and what was selected in it, until the page is reloaded. The order results were dragged into and any that were taken out of the view are part of it. Editing, tagging, rating or trashing a file changes how it is shown, but it does not drop out of the view, and files that start matching do not appear. A Refresh button calculates the search again.
 
 The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab or downloaded into a download tab, a collection created inside the collection a tab shows).
 
@@ -73,7 +73,7 @@ The saved queries are a setting. The settings list them, to write, rename, delet
 Double-clicking a collection among a view's results goes into it, in the same tab: the view becomes the collection's members, and a bar above it shows the way back. So does clicking a collection in the side panel: one of those the selection belongs to, or the selected collection's own count of members.
 
 - The bar has a back arrow, the collections gone through to get here, and a button that opens the collection in a tab of its own. Going into a collection inside this one adds to the trail; any earlier point of it can be gone back to directly. Backspace goes back one.
-- Coming back out, the view outside is as it was left: the same results, order and page, with the collection come out of selected and in sight.
+- Coming back out, the view outside is as it was left: the same results, order and page, scrolled as far, with the same selection.
 - Inside, the search box filters the collection, as it does in a collection's own tab. The tab's query is untouched and is there again on coming out.
 - An ordered collection is shown in its order, and a new order dragged into can be saved from here.
 - What the tab is for (its upload box, its download panel) gives way while it is inside a collection.

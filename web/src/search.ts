@@ -31,10 +31,17 @@ const [selected, setSelected] = createSignal<ReadonlySet<number>>(new Set());
 const [searchCount, setSearchCount] = createSignal(0);
 const [dataVersion, setDataVersion] = createSignal(0);
 
-/** The result index the grid is to bring into sight, until it has. */
-const [revealed, setRevealed] = createSignal<number | null>(null);
+/** How far down the grid is to be scrolled, once it is laid out, until it has. */
+const [scrollTo, setScrollTo] = createSignal<number | null>(null);
+/** How far down the grid is scrolled now, as it last said. */
+let scrolled = 0;
 
-export { search, selected, searchCount, dataVersion, revealed, setRevealed };
+/** The grid says how far down it is scrolled, to be put back there later. */
+export function noteScroll(top: number) {
+  scrolled = top;
+}
+
+export { search, selected, searchCount, dataVersion, scrollTo, setScrollTo };
 
 // Responses from an older generation are dropped.
 let generation = 0;
@@ -56,10 +63,20 @@ let viewKey = "";
 /** The tab the view belongs to, and is saved with. */
 let viewTab: number | null = null;
 /**
- * The views seen while the page is open, so that coming back to a tab
- * shows what it showed before without asking the server again.
+ * The views seen while the page is open, so that coming back to a tab, or
+ * out of a collection, shows what it showed before without asking the
+ * server again: on the page it was on, scrolled as far, with the same
+ * selection.
  */
-const views = new Map<string, { ids: number[]; custom: boolean; page?: number }>();
+const views = new Map<
+  string,
+  {
+    ids: number[];
+    custom: boolean;
+    /** How it was left, if it has been. */
+    left?: { page: number; scroll: number; selected: ReadonlySet<number>; anchor: number | null };
+  }
+>();
 let saving = 0;
 /** Items already fetched, so a reorder can redraw without asking again. */
 const known = new Map<number, Item>();
@@ -95,6 +112,9 @@ async function fetchPage(page: number): Promise<Item[]> {
     const gone = new Set(slice.filter((id) => !known.has(id)));
     if (gone.size === 0) return slice.map((id) => known.get(id)!);
     ids = ids.filter((id) => !gone.has(id));
+    if ([...selected()].some((id) => gone.has(id))) {
+      setSelected(new Set([...selected()].filter((id) => !gone.has(id))));
+    }
     remember();
   }
 }
@@ -185,31 +205,36 @@ export function runSearch(
 ) {
   // The view being left is saved now, not after its delay.
   flushSave();
-  // Coming back to it, it is on the page it was left on.
-  const left = views.get(viewKey);
-  if (left) left.page = search.page;
+  // Coming back to it, it is as it was left.
+  const leaving = views.get(viewKey);
+  if (leaving) {
+    leaving.left = { page: search.page, scroll: scrolled, selected: selected(), anchor };
+  }
   generation += 1;
   seed = Math.floor(Math.random() * 2 ** 31);
   requested = new Set();
-  anchor = null;
   viewKey = key;
   viewTab = tab;
   known.clear();
   const seen = views.get(key);
+  anchor = seen?.left?.anchor ?? null;
+  scrolled = 0;
   ids = seen?.ids ?? [];
   setPages(reconcile({}));
   setSearch({
     query,
     scope,
     collection,
-    page: seen?.page ?? 0,
+    page: seen?.left?.page ?? 0,
     custom: seen?.custom ?? false,
     total: 0,
     ready: false,
     error: null,
   });
-  setSelected(new Set<number>());
+  setSelected(seen?.left?.selected ?? new Set<number>());
   setSearchCount((n) => n + 1);
+  // After the count: the grid goes to the top first, then to where it was.
+  setScrollTo(seen?.left?.scroll || null);
   if (seen) {
     // Voids a calculation still running for the view just left.
     calculation += 1;
@@ -237,19 +262,6 @@ export function runSearch(
     calculated.catch(() => {});
   }
   loadPage(search.page);
-}
-
-/**
- * Selects one result of the view on show, if it is listed, and has the
- * grid bring it into sight: for showing where the view has come back to.
- */
-export async function reveal(id: number) {
-  const index = (await resultIds()).indexOf(id);
-  // Only on the page on show: the view came back on the page it was left on.
-  if (index < 0 || Math.floor(index / PAGE) !== search.page) return;
-  anchor = index;
-  setSelected(new Set([id]));
-  setRevealed(index);
 }
 
 /**

@@ -1,18 +1,14 @@
 import { For, Show } from "solid-js";
-import { reveal } from "../search";
 import { activeTab, inside, leave, openCollection, trail } from "../tabs";
 import type { Step } from "../tabs";
 import Icon from "./Icon";
 
 /**
  * Goes back out of the collection the tab is inside: by one, or to where
- * the trail was `depth` long. The collection come out of is selected, to
- * show where the view has come back to.
+ * the trail was `depth` long. The view outside comes back as it was left.
  */
 export function goBack(depth?: number) {
-  const left = leave(depth);
-  // By now the view outside is the one on show.
-  if (left) queueMicrotask(() => reveal(left.id));
+  leave(depth);
 }
 
 const named = (step: Step) => step.title || `#${step.id}`;
