@@ -67,7 +67,7 @@ The script answers on standard output, one JSON object per line:
 | Event     | Fields                       | Meaning                                                   |
 | --------- | ---------------------------- | --------------------------------------------------------- |
 | `found`   | `total`                      | How many things there are to download, as far as is known |
-| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `tags` | One thing has been fetched, as these files, in order |
+| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `tags`, `collection` | One thing has been fetched, as these files, in order |
 | `skipped` | `key`                        | One thing was passed over because its key is in `seen`    |
 | `error`   | `message`, optionally `key`  | Something failed; the download goes on                    |
 | `log`     | `message`                    | What the script is doing, shown while it runs             |
@@ -84,6 +84,14 @@ any the item brings itself in `tags`: an object of tag field to values,
 is left as it is, and a value that is not a valid tag is passed over.
 `title` and `description` are given to the files, and the set, that have
 none; one the user wrote is never replaced.
+
+An item can say what it is part of on the site, to be kept together in the
+library: `"collection": {"url": "https://…", "title": "…"}`, as a post is
+part of its thread. Everything downloaded with the same `url` is put, in the
+order it arrives, in one `sourceset` collection, which is made the first
+time, with that title, the `url` as its source URL, and the source and the
+tab's tags. An item of several files goes in as its set. Like a set, the
+collection is not listed in the tab.
 
 Lines that are not one of these events are ignored. The script ends with
 status 0 when it is done. Any other status means the download failed, and

@@ -97,7 +97,7 @@ pub fn add_members(conn: &Connection, collection: i64, members: &[i64]) -> Resul
 
 /// The title a collection gets when it is given none: what kind it is.
 /// Titles need not be unique; the ID is what tells collections apart.
-fn default_title(collection_type: &str) -> &'static str {
+pub fn default_title(collection_type: &str) -> &'static str {
     match collection_type {
         "variant" => "Variant",
         "set" => "Set",

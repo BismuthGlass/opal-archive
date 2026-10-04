@@ -797,8 +797,8 @@ async fn a_bad_query_says_where() {
     assert_eq!(page["items"][0]["trashed"], false);
 }
 
-/// A downloader that fetches from nowhere: two things, the second of two
-/// files, and a complaint.
+/// A downloader that fetches from nowhere: two things of one board, the
+/// second of two files, and a complaint.
 const FAKE_DOWNLOADER: &str = r#"
 [ "$1" = download ] || exit 2
 input=$(cat)
@@ -817,7 +817,7 @@ for n in 1 2; do
     printf 'file %s b' "$n" > "$out/$n-b.txt"
     files="$files,\"$out/$n-b.txt\""
   fi
-  more='"title":" Thing '$n' ","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]}'
+  more='"title":" Thing '$n' ","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]},"collection":{"url":"https://example.test/board","title":"Board"}'
   echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":\"$key\",\"files\":[$files],$more}"
 done
 echo '{"event":"error","message":"one thing could not be had"}'
@@ -983,6 +983,23 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         [tag("https://example.test/item/2", 1)]
     );
 
+    // What the things are part of holds them, the set as one, and is
+    // tagged as the tab says but not as each thing is.
+    let wholes = api.found("type=sourceset").await;
+    assert_eq!(wholes.len(), 1);
+    assert_eq!(
+        api.members(wholes[0]),
+        [(files[0], Some(0)), (sets[0], Some(1))]
+    );
+    let whole = api.metadata(&wholes).await;
+    assert_eq!(whole["scalars"]["title"]["value"], "Board");
+    assert_eq!(carried(&whole, "source"), [tag("fakesite", 1)]);
+    assert_eq!(carried(&whole, "creator"), [tag("Someone", 1)]);
+    assert_eq!(
+        carried(&whole, "source_urls"),
+        [tag("https://example.test/board", 1)]
+    );
+
     // What was seen is passed over the next time.
     let seen = api.get(&format!("{path}/seen")).await;
     assert_eq!(seen.as_array().unwrap().len(), 2);
@@ -1009,6 +1026,8 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     assert_eq!(counts(&third), [2, 1, 0, 2, 1, 1]);
     assert_eq!(api.in_tab(tab).await, files);
     assert_eq!(api.found("type=set").await, sets);
+    assert_eq!(api.found("type=sourceset").await, wholes);
+    assert_eq!(api.members(wholes[0]).len(), 2);
     assert_eq!(api.get(&path).await["seen"], 2);
     assert_eq!(
         api.post(&format!("{path}/seen/forget"), json!({})).await["forgotten"],

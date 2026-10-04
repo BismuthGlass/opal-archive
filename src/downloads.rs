@@ -150,6 +150,16 @@ struct Item {
     /// Tags of its own, by field, besides the source and the tab's.
     #[serde(default)]
     tags: BaseTags,
+    /// What it is part of on the site, to be kept together in the library.
+    collection: Option<Whole>,
+}
+
+/// What things on a site are part of: a thread, for its posts.
+#[derive(Deserialize)]
+struct Whole {
+    /// Its address, which is what tells it from the others.
+    url: String,
+    title: Option<String>,
 }
 
 /// One line of a downloader's output.
@@ -704,8 +714,25 @@ impl Download {
         let tx = conn.transaction()?;
         let mut tagged = ids.clone();
         if ids.len() > 1 {
-            tagged.push(set_of(&tx, source_url, title.as_deref(), &ids)?);
+            let set = collection_of(&tx, "set", source_url, title.as_deref(), &ids)?;
+            tagged.push(set);
         }
+        // What the thing is part of holds it whole: its set, if it has one.
+        let whole = match &item.collection {
+            Some(whole) if !ids.is_empty() && !whole.url.trim().is_empty() => {
+                let members = if ids.len() > 1 {
+                    &tagged[ids.len()..]
+                } else {
+                    &ids[..]
+                };
+                let title = text(&whole.title);
+                let url = whole.url.trim();
+                let id = collection_of(&tx, "sourceset", Some(url), title.as_deref(), members)?;
+                entities::add_to_list(&tx, &entities::ids_json(&[id]), SOURCE_URLS, url)?;
+                Some(id)
+            }
+            _ => None,
+        };
         let tagged = entities::ids_json(&tagged);
         // What the user has written is never written over.
         for (column, value) in [("title", &title), ("description", &description)] {
@@ -735,13 +762,22 @@ impl Download {
             tags::check_field(&field).ok()?;
             Some((field.clone(), tags::normalize(&field, &value).ok()?))
         });
-        let given = source
+        let shared = source
             .into_iter()
             .map(|(field, value)| (field.to_string(), value))
-            .chain(each(&self.base))
-            .chain(own);
-        for (field, value) in given {
+            .chain(each(&self.base));
+        // What it is part of gets the source and the tab's tags, but not
+        // those of the one thing.
+        let whole = whole.map(|id| entities::ids_json(&[id]));
+        for (field, value) in shared {
             // An alias stands for the tag it defers to.
+            let value = tags::resolve(&tx, &field, value)?;
+            entities::attach_tag(&tx, &tagged, &field, &value)?;
+            if let Some(whole) = &whole {
+                entities::attach_tag(&tx, whole, &field, &value)?;
+            }
+        }
+        for (field, value) in own {
             let value = tags::resolve(&tx, &field, value)?;
             entities::attach_tag(&tx, &tagged, &field, &value)?;
         }
@@ -760,11 +796,13 @@ impl Download {
     }
 }
 
-/// The set holding the files of one downloaded thing, in their order:
-/// the one already made for its source URL, or a new one, with the title
-/// given or named for its type.
-fn set_of(
+/// The collection of the given type holding what was downloaded, in its
+/// order: the one already made for its source URL, or a new one, with the
+/// title given or named for its type. A `set` holds the files of one
+/// thing, a `sourceset` the things that are part of one whole.
+fn collection_of(
     conn: &Connection,
+    collection_type: &str,
     source_url: Option<&str>,
     title: Option<&str>,
     files: &[i64],
@@ -774,8 +812,8 @@ fn set_of(
             .query_row(
                 "SELECT c.entity_id FROM collection c
                  JOIN source_url s ON s.entity_id = c.entity_id
-                 WHERE s.url = ?1 AND c.collection_type = 'set' ORDER BY c.entity_id LIMIT 1",
-                [url],
+                 WHERE s.url = ?1 AND c.collection_type = ?2 ORDER BY c.entity_id LIMIT 1",
+                [url, collection_type],
                 |row| row.get(0),
             )
             .optional()?,
@@ -786,13 +824,13 @@ fn set_of(
         None => {
             conn.execute(
                 "INSERT INTO entity (kind, title) VALUES ('collection', ?1)",
-                [title.unwrap_or("Set")],
+                [title.unwrap_or(collections::default_title(collection_type))],
             )?;
             let set = conn.last_insert_rowid();
             conn.execute(
                 "INSERT INTO collection (entity_id, collection_type, ordered)
-                 VALUES (?1, 'set', 1)",
-                [set],
+                 VALUES (?1, ?2, 1)",
+                params![set, collection_type],
             )?;
             set
         }

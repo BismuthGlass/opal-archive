@@ -7,7 +7,8 @@
 
     4chan.py download < request.json
 
-It takes a thread URL and downloads the files posted in it, through 4chan's
+It takes a thread URL and downloads the files posted in it, into a collection
+named for the thread, through 4chan's
 read-only JSON API (https://github.com/4chan/4chan-API). A thread still on
 the board or in its archive can be read; one that has been pruned is gone.
 """
@@ -30,7 +31,8 @@ import requests
 
 API = "https://a.4cdn.org/{board}/thread/{thread}.json"
 FILES = "https://i.4cdn.org/{board}/{tim}{ext}"
-POST = "https://boards.4chan.org/{board}/thread/{thread}#p{no}"
+THREAD = "https://boards.4chan.org/{board}/thread/{thread}"
+POST = THREAD + "#p{no}"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126.0 Safari/537.36",
@@ -153,6 +155,12 @@ def download() -> int:
     def post_url(post: dict) -> str:
         return POST.format(board=board, thread=thread, no=post["no"])
 
+    # The thread becomes a collection holding its files, in the order posted.
+    whole = {}
+    if options.get("collection", True):
+        address = THREAD.format(board=board, thread=thread)
+        whole = {"collection": {"url": address, "title": f"4chan#{thread}"}}
+
     todo = []
     for post in posts:
         if post_url(post) in seen:
@@ -173,7 +181,7 @@ def download() -> int:
                 emit("error", key=key, message=f"{key}: {err}")
                 continue
             comment = text_of(post.get("com") or "") if options.get("comments") else ""
-            emit("item", key=key, source_url=key, files=[file], description=comment)
+            emit("item", key=key, source_url=key, files=[file], description=comment, **whole)
     return 0
 
 
