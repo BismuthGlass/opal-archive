@@ -70,7 +70,7 @@ The saved queries are a setting. The settings list them, to write, rename, delet
 
 ## Going into a collection
 
-Double-clicking a collection among a view's results goes into it, in the same tab: the view becomes the collection's members, and a bar above it shows the way back.
+Double-clicking a collection among a view's results goes into it, in the same tab: the view becomes the collection's members, and a bar above it shows the way back. So does clicking a collection in the side panel: one of those the selection belongs to, or the selected collection's own count of members.
 
 - The bar has a back arrow, the collections gone through to get here, and a button that opens the collection in a tab of its own. Going into a collection inside this one adds to the trail; any earlier point of it can be gone back to directly. Backspace goes back one.
 - Coming back out, the view outside is as it was left: the same results, order and page, with the collection come out of selected and in sight.

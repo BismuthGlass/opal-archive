@@ -47,7 +47,8 @@ export const shownCollection = () => inside() ?? activeTab()?.collection ?? unde
 /** Goes into a collection, in the active tab. */
 export async function enter(collection: { id: number; title: string | null }) {
   const tab = activeId();
-  if (tab === null) return;
+  // The collection on show is already gone into.
+  if (tab === null || shownCollection()?.id === collection.id) return;
   await guard(async () => {
     const entity = await api.getEntity(collection.id);
     if (activeId() !== tab) return;

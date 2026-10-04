@@ -5,7 +5,7 @@ import type { Changes, Metadata, Scalar } from "../api";
 import { dateTime, duration, errorMessage, fileSize, plural } from "../format";
 import { changed, dataVersion, selected } from "../search";
 import { aggregatedTypes, orderedTypes, prefixOf, tagType } from "../tagTypes";
-import { openCollection } from "../tabs";
+import { enter } from "../tabs";
 import Detail, { isSet } from "./Detail";
 import Icon from "./Icon";
 import Modal from "./Modal";
@@ -281,7 +281,7 @@ export default function Sidebar(props: {
                           <dd>
                             <button
                               class="link"
-                              onClick={() => openCollection(current().id)}
+                              onClick={() => enter(current())}
                             >
                               {plural(collection().member_count, "item")}, open
                             </button>
@@ -400,8 +400,8 @@ function Collections(props: {
               <span class="chip" classList={{ partial: membership.count < props.data.count }}>
                 <button
                   class="chip-label"
-                  title="Open this collection"
-                  onClick={() => openCollection(membership.id)}
+                  title="Go into this collection"
+                  onClick={() => enter(membership)}
                 >
                   {membership.title || `#${membership.id}`}
                 </button>
