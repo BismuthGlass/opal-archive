@@ -11,6 +11,7 @@ function forget(id: number) {
   forgetViews(id);
   forgetDownload(id);
   setTrails(produce((all) => void delete all[id]));
+  saveTrails();
 }
 
 // Tabs live on the server; which one is active is remembered per browser.
@@ -31,6 +32,45 @@ export type Step = { id: number; title: string | null; ordered: boolean; query: 
 // that, and back out: the way in is its trail. It is kept while the page
 // is open, and not with the tab.
 const [trails, setTrails] = createStore<Record<number, Step[]>>({});
+
+// Remembered per browser, like the active tab, so a reload keeps them.
+const TRAILS_KEY = "tagutils.trails";
+
+function saveTrails() {
+  try {
+    localStorage.setItem(TRAILS_KEY, JSON.stringify(trails));
+  } catch {
+    // Storage unavailable; the trails just won't survive a reload.
+  }
+}
+
+/**
+ * Takes up the trails remembered for the tabs there still are, as far as
+ * their collections still exist.
+ */
+async function loadTrails(list: Tab[]) {
+  let stored: Record<string, Step[]> = {};
+  try {
+    stored = JSON.parse(localStorage.getItem(TRAILS_KEY) ?? "{}");
+  } catch {
+    // Nothing remembered.
+  }
+  for (const tab of list) {
+    const kept: Step[] = [];
+    for (const step of stored[tab.id] ?? []) {
+      const entity = await api.getEntity(step.id).catch(() => null);
+      if (!entity?.collection) break;
+      kept.push({
+        id: step.id,
+        title: entity.title,
+        ordered: entity.collection.ordered,
+        query: String(step.query ?? ""),
+      });
+    }
+    if (kept.length > 0) setTrails(tab.id, kept);
+  }
+  saveTrails();
+}
 
 /** The collections the active tab has gone into, outermost first. */
 export const trail = (): Step[] => trails[activeId() ?? -1] ?? [];
@@ -59,6 +99,7 @@ export async function enter(collection: { id: number; title: string | null }) {
       query: "",
     };
     setTrails(tab, [...(trails[tab] ?? []), step]);
+    saveTrails();
   });
 }
 
@@ -71,6 +112,7 @@ export function leave(depth = trail().length - 1): Step | undefined {
   const steps = trail();
   if (tab === null || depth < 0 || depth >= steps.length) return undefined;
   setTrails(tab, steps.slice(0, depth));
+  saveTrails();
   return steps[depth];
 }
 
@@ -79,6 +121,7 @@ export function filterInside(query: string) {
   const tab = activeId();
   const depth = trail().length - 1;
   if (tab !== null && depth >= 0) setTrails(tab, depth, "query", query);
+  saveTrails();
 }
 
 function savedActiveId(): number | null {
@@ -112,6 +155,8 @@ export const load = () =>
   guard(async () => {
     let list = await api.listTabs();
     if (list.length === 0) list = [await api.createTab("gallery", "")];
+    // Before the tabs are shown, so that each opens where it was.
+    await loadTrails(list);
     setTabs(list);
     const saved = savedActiveId();
     select(list.some((tab) => tab.id === saved) ? saved! : list[0].id);
@@ -197,6 +242,7 @@ async function followTrail() {
   }
   if (activeId() === tab && trails[tab]?.length === steps.length) {
     setTrails(tab, reconcile(kept, { key: "id" }));
+    saveTrails();
   }
 }
 

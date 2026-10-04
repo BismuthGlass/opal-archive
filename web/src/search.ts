@@ -68,15 +68,56 @@ let viewTab: number | null = null;
  * server again: on the page it was on, scrolled as far, with the same
  * selection.
  */
-const views = new Map<
-  string,
-  {
-    ids: number[];
-    custom: boolean;
-    /** How it was left, if it has been. */
-    left?: { page: number; scroll: number; selected: ReadonlySet<number>; anchor: number | null };
+const views = new Map<string, { ids: number[]; custom: boolean }>();
+
+/** How a view was left: where it was, and what was selected in it. */
+type Left = { page: number; scroll: number; selected: ReadonlySet<number>; anchor: number | null };
+
+// How each view was left is remembered per browser, like the active tab,
+// so that reloading the page brings every view back to where it was.
+const LEFT_KEY = "tagutils.views";
+/** Views remembered at most; the ones left longest ago go first. */
+const LEFT_MOST = 200;
+/** A selection bigger than this is not worth keeping across a reload. */
+const SELECTED_MOST = 20000;
+
+const lefts = new Map<string, Left>(readLefts());
+
+function readLefts(): [string, Left][] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LEFT_KEY) ?? "[]");
+    return (stored as [string, { page: number; scroll: number; selected: number[]; anchor: number | null }][]).map(
+      ([key, left]) => [key, { ...left, selected: new Set(left.selected) }],
+    );
+  } catch {
+    return [];
   }
->();
+}
+
+function writeLefts() {
+  const stored = [...lefts].map(([key, left]) => [
+    key,
+    { ...left, selected: left.selected.size > SELECTED_MOST ? [] : [...left.selected] },
+  ]);
+  try {
+    localStorage.setItem(LEFT_KEY, JSON.stringify(stored));
+  } catch {
+    // Storage unavailable or full; the views just won't survive a reload.
+  }
+}
+
+/** Notes how the view on show is being left. */
+function noteLeft() {
+  if (viewKey === "") return;
+  // Put last: it is the one left most recently.
+  lefts.delete(viewKey);
+  lefts.set(viewKey, { page: search.page, scroll: scrolled, selected: selected(), anchor });
+  for (const key of lefts.keys()) {
+    if (lefts.size <= LEFT_MOST) break;
+    lefts.delete(key);
+  }
+  writeLefts();
+}
 let saving = 0;
 /** Items already fetched, so a reorder can redraw without asking again. */
 const known = new Map<number, Item>();
@@ -206,10 +247,7 @@ export function runSearch(
   // The view being left is saved now, not after its delay.
   flushSave();
   // Coming back to it, it is as it was left.
-  const leaving = views.get(viewKey);
-  if (leaving) {
-    leaving.left = { page: search.page, scroll: scrolled, selected: selected(), anchor };
-  }
+  noteLeft();
   generation += 1;
   seed = Math.floor(Math.random() * 2 ** 31);
   requested = new Set();
@@ -217,7 +255,8 @@ export function runSearch(
   viewTab = tab;
   known.clear();
   const seen = views.get(key);
-  anchor = seen?.left?.anchor ?? null;
+  const left = lefts.get(key);
+  anchor = left?.anchor ?? null;
   scrolled = 0;
   ids = seen?.ids ?? [];
   setPages(reconcile({}));
@@ -225,16 +264,16 @@ export function runSearch(
     query,
     scope,
     collection,
-    page: seen?.left?.page ?? 0,
+    page: left?.page ?? 0,
     custom: seen?.custom ?? false,
     total: 0,
     ready: false,
     error: null,
   });
-  setSelected(seen?.left?.selected ?? new Set<number>());
+  setSelected(left?.selected ?? new Set<number>());
   setSearchCount((n) => n + 1);
   // After the count: the grid goes to the top first, then to where it was.
-  setScrollTo(seen?.left?.scroll || null);
+  setScrollTo(left?.scroll || null);
   if (seen) {
     // Voids a calculation still running for the view just left.
     calculation += 1;
@@ -261,6 +300,20 @@ export function runSearch(
       });
     calculated.catch(() => {});
   }
+  if (left && left.selected.size > 0) {
+    // The view may have changed since it was left: what it no longer
+    // lists is no longer selected.
+    const current = generation;
+    calculated
+      .then(() => {
+        if (current !== generation) return;
+        const listed = new Set(ids);
+        if ([...selected()].some((id) => !listed.has(id))) {
+          setSelected(new Set([...selected()].filter((id) => listed.has(id))));
+        }
+      })
+      .catch(() => {});
+  }
   loadPage(search.page);
 }
 
@@ -269,9 +322,15 @@ export function runSearch(
  * later tab the same number, and it must not be shown the closed one's.
  */
 export function forgetViews(tab: number) {
-  for (const key of [...views.keys()]) {
-    if (key.startsWith(`${tab}:`)) views.delete(key);
+  for (const key of [...views.keys(), ...lefts.keys()]) {
+    if (key.startsWith(`${tab}:`)) {
+      views.delete(key);
+      lefts.delete(key);
+    }
   }
+  // The tab closed may be the one on show: nothing is noted of it later.
+  if (viewKey.startsWith(`${tab}:`)) viewKey = "";
+  writeLefts();
   if (viewTab === tab) {
     // Nothing more is saved for it either.
     clearTimeout(saving);
@@ -290,8 +349,12 @@ function flushSave() {
     api.saveTabView(viewTab, view).catch(() => {});
   }
 }
-// Leaving the page should not lose the last change either.
-window.addEventListener("pagehide", flushSave);
+// Leaving the page should not lose the last change either, nor where the
+// view on show was.
+window.addEventListener("pagehide", () => {
+  flushSave();
+  noteLeft();
+});
 
 /** Calculates the current search again. */
 export function refresh() {

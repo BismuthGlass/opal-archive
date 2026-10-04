@@ -56,7 +56,7 @@ There is no need to support injesting existing sidecar files on file upload for 
 
 ## Gallery views
 
-What a view lists is decided when its search is calculated, and stays put after that: it is a snapshot, saved with its tab, so it is the same after switching tabs or reloading the page. Switching tabs also keeps where a view was: its page, how far it was scrolled, and what was selected in it, until the page is reloaded. The order results were dragged into and any that were taken out of the view are part of it. Editing, tagging, rating or trashing a file changes how it is shown, but it does not drop out of the view, and files that start matching do not appear. A Refresh button calculates the search again.
+What a view lists is decided when its search is calculated, and stays put after that: it is a snapshot, saved with its tab, so it is the same after switching tabs or reloading the page. Where a view was is kept as well: its page, how far it was scrolled, and what was selected in it, across switching tabs and reloading the page. Unlike what the view lists, this is remembered by the browser, not saved with the tab: another browser opens the same view at its top. The order results were dragged into and any that were taken out of the view are part of it. Editing, tagging, rating or trashing a file changes how it is shown, but it does not drop out of the view, and files that start matching do not appear. A Refresh button calculates the search again.
 
 The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab or downloaded into a download tab, a collection created inside the collection a tab shows).
 
@@ -77,7 +77,7 @@ Double-clicking a collection among a view's results goes into it, in the same ta
 - Inside, the search box filters the collection, as it does in a collection's own tab. The tab's query is untouched and is there again on coming out.
 - An ordered collection is shown in its order, and a new order dragged into can be saved from here.
 - What the tab is for (its upload box, its download panel) gives way while it is inside a collection.
-- The trail belongs to the page, not the tab: reloading the page brings the tab back to its own view.
+- The trail is remembered by the browser, like the tab that is active: reloading the page leaves each tab inside the collection it was in, with its filter. A collection deleted meanwhile ends the trail there.
 
 ## Playing a view
 
