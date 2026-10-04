@@ -157,6 +157,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 ### Showing tags
 
 - A tag is shown as a pill in the colours of its type. Each type has a background and a text colour, both configurable in the settings.
+- Clicking a tag's pill in the side panel adds the tag to the query in the search box, without searching. A right click on it offers to search for the tag in a new tab, or to open it in the tag editor. The heading of a namespace does the same for everything in the namespace, without the tag editor.
 - The settings also say which types are aggregated. The aggregated types share one list on a file, told apart only by colour; each of the others has a section of its own.
 - By default the types that describe the work are aggregated (tags, creator, character, source work, person, genre, style, medium) and the rest are not (bucket, flaws, language, source, usage tags, AI usage tags).
 - The order the types are listed in is configurable too, by dragging them in the settings. By default plain tags come last among the aggregated types.

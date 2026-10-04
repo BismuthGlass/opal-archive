@@ -5,6 +5,15 @@ import { refresh, search } from "../search";
 import { activeTab, filterInside, inside, setQuery } from "../tabs";
 import Icon from "./Icon";
 
+/** Writes a term into the search box on show, if there is one. */
+let write: ((term: string) => void) | null = null;
+
+/**
+ * Adds a term to the query in the search box, without searching: it is
+ * there to be added to, and searched when wanted.
+ */
+export const addToQuery = (term: string) => write?.(term);
+
 /** A stacked query is kept as one line per row. */
 const rowsOf = (query: string) => query.split("\n");
 
@@ -59,6 +68,19 @@ export default function QueryBar() {
     setRows(rows().map((row, i) => (i === index ? text : row)));
 
   const focus = (index: number) => queueMicrotask(() => inputs[index]?.focus());
+
+  // A term goes at the end of the last row, unless that row has it already.
+  write = (term) => {
+    const last = rows().length - 1;
+    const row = rows()[last].trimEnd();
+    if (!row.split(/\s+/).includes(term)) setRow(last, row === "" ? term : `${row} ${term}`);
+    queueMicrotask(() => {
+      const input = inputs[last];
+      input?.focus();
+      input?.setSelectionRange(input.value.length, input.value.length);
+    });
+  };
+  onCleanup(() => (write = null));
 
   const addRow = () => {
     setRows([...rows(), ""]);

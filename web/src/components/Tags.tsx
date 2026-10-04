@@ -13,11 +13,12 @@ import {
   tagType,
   typesStarting,
 } from "../tagTypes";
-import { open as openTab } from "../tabs";
+import { openTagMenu } from "./ContextMenu";
 import { ListLabel } from "./fields";
 import type { FieldProps, ListMode } from "./fields";
 import Icon from "./Icon";
 import Modal from "./Modal";
+import { addToQuery } from "./QueryBar";
 
 /** How many suggestions are listed at once. */
 const MAX_SUGGESTIONS = 8;
@@ -279,15 +280,18 @@ function createTagBox(props: FieldProps & { initial?: string }) {
 
 /**
  * The heading of a group of chips in the panel: the namespace they share.
- * Clicking it searches the namespace.
+ * Clicking it adds the namespace to the search.
  */
 function Namespace(props: { field: string; name: string }) {
   return (
     <span class="namespace">
       <button
         class="namespace-label"
-        title="Search for everything in this namespace"
-        onClick={() => openTab("gallery", tagQuery(props.field, props.name, true))}
+        title="Click to add everything in this namespace to the search; right click for more"
+        onClick={() => addToQuery(tagQuery(props.field, props.name, true))}
+        onContextMenu={(event) =>
+          openTagMenu(event, { field: props.field, value: props.name, under: true })
+        }
       >
         {props.name}:
       </button>
@@ -298,8 +302,8 @@ function Namespace(props: { field: string; name: string }) {
 type Tag = Metadata["tags"][string][number];
 
 /**
- * One tag as a pill in its type's colours. In the panel it searches for
- * the tag; in the editor it has the buttons that take it off, or put it
+ * One tag as a pill in its type's colours. In the panel a click adds the
+ * tag to the search, and a right click offers more; in the editor it has the buttons that take it off, or put it
  * on the rest of the selection.
  */
 function TagChip(
@@ -331,10 +335,13 @@ function TagChip(
             : [
                 `${fieldLabel(props.field)}: ${props.tag.value}`,
                 ...(props.tag.description ? [props.tag.description] : []),
-                "Click to search for it",
+                "Click to add it to the search; right click for more",
               ].join("\n")
         }
-        onClick={() => openTab("gallery", tagQuery(props.field, props.tag.value))}
+        onClick={() => addToQuery(tagQuery(props.field, props.tag.value))}
+        onContextMenu={(event) =>
+          props.editing || openTagMenu(event, { field: props.field, value: props.tag.value })
+        }
       >
         <Show when={namespace()}>
           <span class="chip-namespace">{namespace()}</span>

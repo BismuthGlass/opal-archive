@@ -33,6 +33,7 @@ import {
   selected,
 } from "./search";
 import { loadSettings } from "./settings";
+import { closeTagEditor, openTagEditor, tagEditor } from "./tagEditing";
 import { refreshStats, stats } from "./stats";
 import { hideToast, showToast, toast } from "./toast";
 import {
@@ -62,7 +63,6 @@ export default function App() {
   };
   /** The collection on show, described when nothing is selected. */
   const shownCollection = () => (selected().size === 0 ? collectionShown() : undefined);
-  const [editingTags, setEditingTags] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [helpOpen, setHelpOpen] = createSignal(false);
   /** What the tagging hotkey applies to, while the tag editor it opens is up. */
@@ -213,7 +213,7 @@ export default function App() {
           class="icon-button"
           aria-label="Tags"
           title="Tags: rename, merge and alias"
-          onClick={() => setEditingTags(true)}
+          onClick={openTagEditor}
         >
           <Icon name="label-outline" />
         </button>
@@ -354,8 +354,8 @@ export default function App() {
           {toast()}
         </div>
       </Show>
-      <Show when={editingTags()}>
-        <TagEditor onClose={() => setEditingTags(false)} />
+      <Show when={tagEditor()} keyed>
+        {(opened) => <TagEditor initial={opened.tag} onClose={closeTagEditor} />}
       </Show>
       <Show when={helpOpen()}>
         <SearchHelp onClose={() => setHelpOpen(false)} />

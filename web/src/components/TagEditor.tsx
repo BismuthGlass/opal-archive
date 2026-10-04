@@ -3,7 +3,7 @@ import * as api from "../api";
 import type { TagEntry } from "../api";
 import { errorMessage, fieldLabel, plural } from "../format";
 import { changed } from "../search";
-import { pillStyle, prefixOf, readTag, typesStarting } from "../tagTypes";
+import { pillStyle, prefixOf, readTag, tagText, typesStarting } from "../tagTypes";
 import Icon from "./Icon";
 import Modal from "./Modal";
 
@@ -57,14 +57,22 @@ const normalized = (name: string) =>
  * not exist yet can be created. While only `@…` is typed the list is of the
  * types.
  */
-export default function TagEditor(props: { onClose: () => void }) {
-  const [filter, setFilter] = createSignal("");
+export default function TagEditor(props: {
+  /** A tag to open on: the list is narrowed to it, and it is selected. */
+  initial?: { field: string; value: string };
+  onClose: () => void;
+}) {
+  const [filter, setFilter] = createSignal(
+    props.initial ? tagText(props.initial.field, props.initial.value) : "",
+  );
   const read = createMemo(() => readTag(filter()));
   /** The type on show: the one last written, while another is being typed. */
   const field = createMemo<string>((shown) => read().field ?? shown, "tags");
   const [error, setError] = createSignal<string | null>(null);
   /** The tag whose details are on show, by its lowercased name. */
-  const [chosen, setChosen] = createSignal<string | null>(null);
+  const [chosen, setChosen] = createSignal<string | null>(
+    props.initial?.value.toLowerCase() ?? null,
+  );
   const [renaming, setRenaming] = createSignal(false);
   /** The description as typed, until it is saved. */
   const [draft, setDraft] = createSignal("");

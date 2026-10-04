@@ -1,13 +1,20 @@
 import { createResource, createSignal, onCleanup, onMount, Show } from "solid-js";
+import type { JSX } from "solid-js";
 import * as api from "../api";
 import type { Item } from "../api";
 import { errorMessage, plural } from "../format";
 import { changed, clearSelection, moveItems, removeFromView, search, selected } from "../search";
+import { open as openTab } from "../tabs";
+import { editTag } from "../tagEditing";
+import { fieldLabel, tagQuery } from "../format";
 import { showToast } from "../toast";
 import Icon from "./Icon";
 
-/** Where the menu is, and the item that was right-clicked. */
-type Opened = { x: number; y: number; item: Item };
+/** A tag that was right-clicked, or with `under` the namespace of that name. */
+export type MenuTag = { field: string; value: string; under?: boolean };
+
+/** Where the menu is, and the item or tag that was right-clicked. */
+type Opened = { x: number; y: number; item?: Item; tag?: MenuTag };
 
 const [opened, setOpened] = createSignal<Opened | null>(null);
 
@@ -18,6 +25,12 @@ export const contextMenuOpen = () => opened() !== null;
 export function openContextMenu(event: MouseEvent, item: Item) {
   event.preventDefault();
   setOpened({ x: event.clientX, y: event.clientY, item });
+}
+
+/** Opens the menu of what can be done with a tag, at the pointer. */
+export function openTagMenu(event: MouseEvent, tag: MenuTag) {
+  event.preventDefault();
+  setOpened({ x: event.clientX, y: event.clientY, tag });
 }
 
 const close = () => setOpened(null);
@@ -31,58 +44,55 @@ export default function ContextMenu() {
   // Keyed, so the menu is given the value itself and can use it as it closes.
   return (
     <Show when={opened()} keyed>
-      {(at) => <Menu at={at} />}
+      {(at) => (at.tag ? <TagMenu at={at} tag={at.tag} /> : <Menu at={at} item={at.item!} />)}
     </Show>
   );
 }
 
-function Menu(props: { at: Opened }) {
+/** What a right click on a tag brings up. */
+function TagMenu(props: { at: Opened; tag: MenuTag }) {
+  const tag = props.tag;
+  return (
+    <Shell at={props.at} label={`Actions on ${tag.value}`}>
+      <li class="context-menu-title" role="none">
+        {fieldLabel(tag.field)}: {tag.value}
+        {tag.under ? ":*" : ""}
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          onClick={() => {
+            close();
+            openTab("gallery", tagQuery(tag.field, tag.value, tag.under));
+          }}
+        >
+          <Icon name="open-in-new" />
+          Search in a new tab
+        </button>
+      </li>
+      <Show when={!tag.under}>
+        <li role="none">
+          <button
+            role="menuitem"
+            title="Rename, merge, describe or alias it"
+            onClick={() => {
+              close();
+              editTag(tag);
+            }}
+          >
+            <Icon name="label-outline" />
+            Open in the tag editor
+          </button>
+        </li>
+      </Show>
+    </Shell>
+  );
+}
+
+/** The menu itself: where it is, and how it is put away. */
+function Shell(props: { at: Opened; label: string; children: JSX.Element }) {
   let menu!: HTMLUListElement;
-  // Read once, here: after the menu closes, what it was opened with can no
-  // longer be asked for.
-  const ids = [...selected()];
-  const clicked = props.at.item;
   const [position, setPosition] = createSignal({ left: props.at.x, top: props.at.y });
-  // Whether everything selected is in the trash, which the items on other
-  // pages may or may not be.
-  const [state] = createResource(() => api.getMetadata(ids));
-  const allTrashed = () => state() !== undefined && state()!.trashed === state()!.count;
-
-  const run = async (action: (ids: number[]) => Promise<unknown>, gone = false) => {
-    close();
-    try {
-      await action(ids);
-      // Trashed and restored items stay listed, and selected; deleted ones
-      // are gone.
-      if (gone) clearSelection();
-    } catch (err) {
-      showToast(errorMessage(err));
-    }
-    changed();
-  };
-
-  const download = () => {
-    close();
-    // One file downloads as itself; anything else as a zip.
-    if (ids.length === 1 && clicked.kind === "file") {
-      location.href = api.contentUrl(ids[0], true);
-    } else {
-      api.exportZip(ids);
-    }
-  };
-
-  /** Does something to the view only, not to the entities. */
-  const arrange = (action: () => Promise<void>) => {
-    close();
-    action().catch((err) => showToast(errorMessage(err)));
-  };
-
-  const remove = () => {
-    close();
-    if (confirm(`Delete ${plural(ids.length, "item")} for good? This cannot be undone.`)) {
-      run(api.deleteEntities, true);
-    }
-  };
 
   // Any press outside the menu, a scroll or Escape puts it away.
   const onPointerDown = (event: PointerEvent) => {
@@ -133,11 +143,65 @@ function Menu(props: { at: Opened }) {
       role="menu"
       tabindex={-1}
       ref={menu}
-      aria-label={`Actions on ${plural(ids.length, "item")}`}
+      aria-label={props.label}
       style={{ left: `${position().left}px`, top: `${position().top}px` }}
       // The menu's own right click does nothing.
       onContextMenu={(event) => event.preventDefault()}
     >
+      {props.children}
+    </ul>
+  );
+}
+
+/** What a right click on the grid brings up. */
+function Menu(props: { at: Opened; item: Item }) {
+  // Read once, here: after the menu closes, what it was opened with can no
+  // longer be asked for.
+  const ids = [...selected()];
+  const clicked = props.item;
+  // Whether everything selected is in the trash, which the items on other
+  // pages may or may not be.
+  const [state] = createResource(() => api.getMetadata(ids));
+  const allTrashed = () => state() !== undefined && state()!.trashed === state()!.count;
+
+  const run = async (action: (ids: number[]) => Promise<unknown>, gone = false) => {
+    close();
+    try {
+      await action(ids);
+      // Trashed and restored items stay listed, and selected; deleted ones
+      // are gone.
+      if (gone) clearSelection();
+    } catch (err) {
+      showToast(errorMessage(err));
+    }
+    changed();
+  };
+
+  const download = () => {
+    close();
+    // One file downloads as itself; anything else as a zip.
+    if (ids.length === 1 && clicked.kind === "file") {
+      location.href = api.contentUrl(ids[0], true);
+    } else {
+      api.exportZip(ids);
+    }
+  };
+
+  /** Does something to the view only, not to the entities. */
+  const arrange = (action: () => Promise<void>) => {
+    close();
+    action().catch((err) => showToast(errorMessage(err)));
+  };
+
+  const remove = () => {
+    close();
+    if (confirm(`Delete ${plural(ids.length, "item")} for good? This cannot be undone.`)) {
+      run(api.deleteEntities, true);
+    }
+  };
+
+  return (
+    <Shell at={props.at} label={`Actions on ${plural(ids.length, "item")}`}>
       <li class="context-menu-title" role="none">
         {plural(ids.length, "item")}
       </li>
@@ -212,6 +276,6 @@ function Menu(props: { at: Opened }) {
           </button>
         </li>
       </Show>
-    </ul>
+    </Shell>
   );
 }
