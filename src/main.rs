@@ -72,9 +72,9 @@ fn api() -> Router<AppState> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Made absolute: downloaders are handed paths under the data directory,
     // and run from folders of their own.
-    let data_dir = std::path::absolute(env_or("TAGUTILS_DATA", "data"))?;
-    let web_dir = PathBuf::from(env_or("TAGUTILS_WEB", "web/dist"));
-    let addr: SocketAddr = env_or("TAGUTILS_ADDR", "127.0.0.1:7878").parse()?;
+    let data_dir = std::path::absolute(env_or("OPALARCHIVE_DATA", "data"))?;
+    let web_dir = PathBuf::from(env_or("OPALARCHIVE_WEB", "web/dist"));
+    let addr: SocketAddr = env_or("OPALARCHIVE_ADDR", "127.0.0.1:7878").parse()?;
 
     let storage = data_dir.join("storage");
     let tmp = data_dir.join("tmp");
@@ -85,13 +85,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp)?;
 
-    let conn = db::open(&data_dir.join("tagutils.db"))?;
+    let database = data_dir.join("opalarchive.db");
+    // The database of a library begun under the program's earlier name
+    // carries on under this one.
+    let earlier = data_dir.join("tagutils.db");
+    if !database.exists() && earlier.exists() {
+        for end in ["", "-wal", "-shm"] {
+            let from = data_dir.join(format!("tagutils.db{end}"));
+            if from.exists() {
+                std::fs::rename(from, data_dir.join(format!("opalarchive.db{end}")))?;
+            }
+        }
+    }
+    let conn = db::open(&database)?;
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
         storage,
         thumbnails,
         tmp,
-        downloaders: std::path::absolute(env_or("TAGUTILS_DOWNLOADERS", "downloaders"))?,
+        downloaders: std::path::absolute(env_or("OPALARCHIVE_DOWNLOADERS", "downloaders"))?,
         cookies: data_dir.join("cookies"),
         downloads: Default::default(),
     };

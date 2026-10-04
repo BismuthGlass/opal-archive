@@ -1,4 +1,4 @@
-# tagutils
+# OpalArchive
 
 Media library with metadata, collections and search. See `SPEC.md` for the
 idea, `schema.md` for the metadata format it is based on, and `query.md` for
@@ -40,7 +40,7 @@ SQLite is compiled into the server, so no system install is needed.
 - `downloaders/` – one folder per downloader: a manifest and a script that
   fetches files from a website. See `downloaders/README.md` for how to add one
 - `data/` – created at runtime:
-  - `tagutils.db` – the database
+  - `opalarchive.db` – the database
   - `storage/` – uploaded files, named `<sha256>.<extension>`
   - `thumbnails/` – one `<sha256>.jpg` per file that has a thumbnail
   - `tmp/` – uploads and downloads in progress
@@ -71,10 +71,10 @@ query language, and `src/api_tests.rs` the API, through its router.
 
 | Variable        | Default          | Meaning                          |
 | --------------- | ---------------- | -------------------------------- |
-| `TAGUTILS_ADDR` | `127.0.0.1:7878` | Address the server listens on    |
-| `TAGUTILS_DATA` | `data`           | Database and internal storage    |
-| `TAGUTILS_WEB`  | `web/dist`       | Built frontend to serve          |
-| `TAGUTILS_DOWNLOADERS` | `downloaders` | The folder of downloaders     |
+| `OPALARCHIVE_ADDR` | `127.0.0.1:7878` | Address the server listens on    |
+| `OPALARCHIVE_DATA` | `data`           | Database and internal storage    |
+| `OPALARCHIVE_WEB`  | `web/dist`       | Built frontend to serve          |
+| `OPALARCHIVE_DOWNLOADERS` | `downloaders` | The folder of downloaders     |
 
 There is no authentication, so the server listens on localhost only by
 default.

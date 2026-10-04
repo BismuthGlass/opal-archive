@@ -69,7 +69,7 @@ export default function App() {
   const [tagging, setTagging] = createSignal<{ ids: number[]; name: string } | null>(null);
   /** What the next digit rates, after the quick-rate key. */
   const [rating, setRating] = createSignal<{ ids: number[]; name: string } | null>(null);
-  const [panelOpen, setPanelOpen] = createStoredFlag("tagutils.panel", true);
+  const [panelOpen, setPanelOpen] = createStoredFlag("opalarchive.panel", true);
 
   onMount(() => {
     load();

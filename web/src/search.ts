@@ -80,7 +80,7 @@ type Left = { page: number; scroll: number; selected: ReadonlySet<number>; ancho
 
 // How each view was left is remembered per browser, like the active tab,
 // so that reloading the page brings every view back to where it was.
-const LEFT_KEY = "tagutils.views";
+const LEFT_KEY = "opalarchive.views";
 /** Views remembered at most; the ones left longest ago go first. */
 const LEFT_MOST = 200;
 /** A selection bigger than this is not worth keeping across a reload. */

@@ -38,7 +38,7 @@ impl Drop for Api {
 impl Api {
     fn new() -> Self {
         let dir = std::env::temp_dir().join(format!(
-            "tagutils-test-{}-{}",
+            "opalarchive-test-{}-{}",
             std::process::id(),
             NEXT_DIR.fetch_add(1, Ordering::Relaxed)
         ));

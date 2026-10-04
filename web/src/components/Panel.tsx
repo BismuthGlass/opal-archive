@@ -44,7 +44,7 @@ export function Module(props: {
   action?: JSX.Element;
   children: JSX.Element;
 }) {
-  const [open, setOpen] = createStoredFlag(`tagutils.module.${props.id}`, true);
+  const [open, setOpen] = createStoredFlag(`opalarchive.module.${props.id}`, true);
   return (
     <section class="module" classList={{ open: open() }}>
       <header>

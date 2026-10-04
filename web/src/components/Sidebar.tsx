@@ -368,7 +368,7 @@ function Collections(props: {
   onAdd: () => void;
   onLeave: (collection: number) => void;
 }) {
-  const [open, setOpen] = createStoredFlag("tagutils.collections", false);
+  const [open, setOpen] = createStoredFlag("opalarchive.collections", false);
   const count = () => props.data.memberships.length;
   return (
     <div class="collections" classList={{ open: open() && count() > 0 }}>

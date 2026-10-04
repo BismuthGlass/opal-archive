@@ -461,6 +461,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
+name = "opalarchive"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "futures-core",
+ "http-body-util",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tower",
+ "tower-http",
+ "zip",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -676,24 +694,6 @@ name = "sync_wrapper"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
-
-[[package]]
-name = "tagutils"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "futures-core",
- "http-body-util",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tower",
- "tower-http",
- "zip",
-]
 
 [[package]]
 name = "thiserror"

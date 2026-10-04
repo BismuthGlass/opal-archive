@@ -15,7 +15,7 @@ function forget(id: number) {
 }
 
 // Tabs live on the server; which one is active is remembered per browser.
-const ACTIVE_KEY = "tagutils.activeTab";
+const ACTIVE_KEY = "opalarchive.activeTab";
 
 const [tabs, setTabs] = createStore<Tab[]>([]);
 const [activeId, setActiveId] = createSignal<number | null>(null);
@@ -34,7 +34,7 @@ export type Step = { id: number; title: string | null; ordered: boolean; query: 
 const [trails, setTrails] = createStore<Record<number, Step[]>>({});
 
 // Remembered per browser, like the active tab, so a reload keeps them.
-const TRAILS_KEY = "tagutils.trails";
+const TRAILS_KEY = "opalarchive.trails";
 
 function saveTrails() {
   try {

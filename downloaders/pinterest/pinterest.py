@@ -3,7 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["requests", "yt-dlp"]
 # ///
-"""The Pinterest downloader for tagutils. See ../README.md for the protocol.
+"""The Pinterest downloader for OpalArchive. See ../README.md for the protocol.
 
     pinterest.py cookies --browser chrome --out FILE
     pinterest.py download < request.json

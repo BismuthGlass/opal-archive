@@ -32,7 +32,7 @@ function summary(job: DownloadJob) {
 export default function DownloadPanel(props: PanelProps) {
   const [url, setUrl] = createSignal("");
   const [error, setError] = createSignal<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = createStoredFlag("tagutils.download.settings", true);
+  const [settingsOpen, setSettingsOpen] = createStoredFlag("opalarchive.download.settings", true);
   const [showSeen, setShowSeen] = createSignal(false);
   const state = () => downloadState(props.tab);
   const running = () => state()?.job?.running ?? false;

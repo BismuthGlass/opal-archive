@@ -3,7 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["requests"]
 # ///
-"""The 4chan downloader for tagutils. See ../README.md for the protocol.
+"""The 4chan downloader for OpalArchive. See ../README.md for the protocol.
 
     4chan.py download < request.json
 

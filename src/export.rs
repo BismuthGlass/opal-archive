@@ -175,7 +175,7 @@ async fn export(
         (header::CONTENT_TYPE, "application/zip"),
         (
             header::CONTENT_DISPOSITION,
-            "attachment; filename=\"tagutils-export.zip\"",
+            "attachment; filename=\"opalarchive-export.zip\"",
         ),
     ];
     Ok((headers, Body::from_stream(ChannelStream(receiver))).into_response())
