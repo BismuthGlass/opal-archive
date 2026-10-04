@@ -96,7 +96,7 @@ is on, for a query of several lines).
 | `POST /files?name=<filename>`    | Upload; the file is the raw body. 201 if new, 200 if a duplicate, which is only taken out of the trash if it was there. `tab=<id>` lists it under that upload tab either way |
 | `POST /files/fetch`              | `{url, tab}` → have the server fetch the file at that web address, as an upload of it, with the address as its source URL. Answers as an upload does. A page is refused: the address has to be of the file itself |
 | `GET /files/{id}/content`        | The file. `?download=1` to save rather than display            |
-| `GET /files/{id}/thumbnail`      | JPEG thumbnail, 404 if the file has none                       |
+| `GET /files/{id}/thumbnail`      | JPEG thumbnail, 404 if the file has none. With `?v=` as a search result gives it (`thumbnail_version`), the answer may be kept for good; without, the browser asks again each time |
 | `GET /search?q=&offset=&limit=`  | One page of results and the total. `seed` fixes `sort=random`; `tab=<id>` searches only what that upload or collection tab holds. Trashed entities only match with `@trashed` in the query, or with `trashed=1` |
 | `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed` and `tab` too      |
 | `GET /entities/{id}`             | Everything about one file or collection                        |

@@ -59,6 +59,13 @@ struct FetchInput {
 }
 
 #[derive(Deserialize)]
+struct ThumbnailParams {
+    /// The version the address is of, from a search result. An address
+    /// with one never shows anything else, so it can be kept for good.
+    v: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct ContentParams {
     /// Present to have the browser save the file instead of showing it.
     download: Option<String>,
@@ -542,12 +549,25 @@ async fn content(
             HeaderValue::from_static("sandbox"),
         );
     }
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static(RECHECK));
     Ok(response)
+}
+
+/// Kept by the browser, but asked about each time: an ID is given out
+/// again when a library is started afresh, and then stands for another
+/// file.
+const RECHECK: &str = "no-cache";
+
+/// The part of a file's hash that tells its thumbnail's address from that
+/// of any other file that has had, or will have, its ID.
+pub fn thumbnail_version(hash: &str) -> &str {
+    &hash[..hash.len().min(16)]
 }
 
 async fn thumbnail(
     State(state): State<AppState>,
     UrlPath(id): UrlPath<i64>,
+    Query(params): Query<ThumbnailParams>,
     request: Request,
 ) -> Result<Response, ApiError> {
     let file = file_by_id(&state.db.lock().unwrap(), id)?;
@@ -556,10 +576,17 @@ async fn thumbnail(
     }
     let path = state.thumbnails.join(thumbnail_name(&file.hash));
     let mut response = serve(&path, request).await?;
-    // A file's content never changes, so neither does its thumbnail.
-    response.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=31536000, immutable"),
-    );
+    // A file's content never changes, so neither does its thumbnail: an
+    // address that says which file it is of can be kept for good. One that
+    // only has the ID cannot.
+    let versioned = params.v.as_deref() == Some(thumbnail_version(&file.hash));
+    let caching = if versioned {
+        "public, max-age=31536000, immutable"
+    } else {
+        RECHECK
+    };
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static(caching));
     Ok(response)
 }

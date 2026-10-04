@@ -88,6 +88,8 @@ export type Item = {
   collection_type: string | null;
   /** File whose thumbnail stands for this entry, if any. */
   thumbnail: number | null;
+  /** Which file that thumbnail is of, for its address. */
+  thumbnail_version: string | null;
   member_count: number | null;
   /** In the trash: deleted once, not yet for good. */
   trashed: boolean;
@@ -332,7 +334,12 @@ export const setOrder = (id: number, ids: number[]) =>
 export const changeMembers = (id: number, changes: { add?: number[]; remove?: number[] }) =>
   request<{ member_count: number }>("POST", `/collections/${id}/members`, changes);
 
-export const thumbnailUrl = (fileId: number) => `/api/files/${fileId}/thumbnail`;
+/**
+ * With the version a search result gives, the address is of that one
+ * file's thumbnail and no other's, and the browser keeps it for good.
+ */
+export const thumbnailUrl = (fileId: number, version: string | null) =>
+  `/api/files/${fileId}/thumbnail${version ? `?v=${version}` : ""}`;
 export const contentUrl = (fileId: number, download = false) =>
   `/api/files/${fileId}/content${download ? "?download=1" : ""}`;
 

@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, params_from_iter, types::Value};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{AppState, error::ApiError, query, tags};
+use crate::{AppState, error::ApiError, files, query, tags};
 
 const DEFAULT_LIMIT: i64 = 200;
 const MAX_LIMIT: i64 = 1000;
@@ -42,6 +42,9 @@ struct Item {
     /// ID of the file whose thumbnail represents this entity: the file
     /// itself, or a collection's first member that has one.
     thumbnail: Option<i64>,
+    /// What to ask for that thumbnail as (`?v=`), so that it can be kept:
+    /// it tells this file from any other that has had its ID.
+    thumbnail_version: Option<String>,
     /// Members not in the trash.
     member_count: Option<i64>,
     trashed: bool,
@@ -186,11 +189,21 @@ async fn search(
                 length: row.get(5)?,
                 collection_type: row.get(6)?,
                 thumbnail: row.get(7)?,
+                thumbnail_version: None,
                 member_count: row.get(8)?,
                 trashed: row.get(9)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    let mut items = items;
+    let mut version = conn.prepare("SELECT hash FROM file WHERE entity_id = ?1")?;
+    for item in &mut items {
+        if let Some(file) = item.thumbnail {
+            let hash: String = version.query_row([file], |row| row.get(0))?;
+            item.thumbnail_version = Some(files::thumbnail_version(&hash).to_string());
+        }
+    }
 
     Ok(Json(
         json!({ "total": total, "offset": offset, "items": items }),

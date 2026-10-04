@@ -290,7 +290,7 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                           fallback={<span class="placeholder">{placeholder(current())}</span>}
                         >
                           <img
-                            src={thumbnailUrl(current().thumbnail!)}
+                            src={thumbnailUrl(current().thumbnail!, current().thumbnail_version)}
                             alt=""
                             loading="lazy"
                             decoding="async"
