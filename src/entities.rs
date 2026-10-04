@@ -428,7 +428,7 @@ fn tag_values(
 
 /// A source URL as it is stored. It has to be a web address, since it is
 /// shown as a link; one typed without a scheme gets `https://`.
-fn source_url(value: &str) -> Result<String, ApiError> {
+pub fn source_url(value: &str) -> Result<String, ApiError> {
     let value = value.trim();
     // `host:8080/path` has a port; `javascript:…` or `mailto:…` has a scheme
     // that is not a web one, and is refused below for lacking `http`.

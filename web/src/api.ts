@@ -347,6 +347,24 @@ export function exportZip(ids: number[]) {
 }
 
 /**
+ * Has the server fetch the file at a web address, as an upload of it.
+ * `duplicate` is true when the same content was already in the library.
+ */
+export async function fetchFile(
+  url: string,
+  tab: number,
+): Promise<{ file: FileEntity; duplicate: boolean }> {
+  const res = await fetch("/api/files/fetch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, tab }),
+  });
+  const answer = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(answer?.error ?? `HTTP ${res.status}`);
+  return { file: answer, duplicate: res.status === 200 };
+}
+
+/**
  * Uploads one file as the raw request body. `duplicate` is true when the
  * same content was already in the library. Uses XMLHttpRequest because
  * fetch cannot report upload progress.

@@ -21,13 +21,19 @@ const [uploads, setUploads] = createStore({ ...idle });
 
 export { uploads };
 
-const queue: { file: File; tab: number }[] = [];
+/** What is uploaded: a file from this computer, or one at a web address. */
+type Source = File | string;
+
+const nameOf = (source: Source) => (typeof source === "string" ? source : source.name);
+
+const queue: { file: Source; tab: number }[] = [];
 
 /**
  * Uploads files into the active tab if it is an upload tab, and into a new
- * upload tab otherwise.
+ * upload tab otherwise. A file given as a web address is fetched by the
+ * server.
  */
-export async function upload(files: File[]) {
+export async function upload(files: Source[]) {
   if (files.length === 0) return;
   const current = activeTab();
   const tab = current?.kind === "upload" ? current : await open("upload");
@@ -35,7 +41,7 @@ export async function upload(files: File[]) {
 }
 
 /** Adds files to the batch in progress, or starts a new one. */
-function enqueue(files: File[], tab: number) {
+function enqueue(files: Source[], tab: number) {
   if (!uploads.active) setUploads({ ...idle, failures: [] });
   queue.push(...files.map((file) => ({ file, tab })));
   setUploads("total", (n) => n + files.length);
@@ -52,13 +58,15 @@ async function run() {
     const { file, tab } = queue.shift()!;
     setUploads("progress", 0);
     try {
-      const result = await api.uploadFile(file, tab, (fraction) =>
-        setUploads("progress", fraction),
-      );
+      // How far a fetch by the server has got is not known.
+      const result =
+        typeof file === "string"
+          ? await api.fetchFile(file, tab)
+          : await api.uploadFile(file, tab, (fraction) => setUploads("progress", fraction));
       setUploads(result.duplicate ? "duplicates" : "added", (n) => n + 1);
     } catch (err) {
       const reason = errorMessage(err);
-      setUploads("failures", (list) => [...list, { name: file.name, reason }]);
+      setUploads("failures", (list) => [...list, { name: nameOf(file), reason }]);
     }
     setUploads("done", (n) => n + 1);
     waiting.add(tab);

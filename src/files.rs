@@ -15,11 +15,16 @@ use http_body_util::BodyExt;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tokio::{fs, io::AsyncWriteExt};
+use tokio::{fs, io::AsyncWriteExt, process::Command};
 use tower::ServiceExt;
 use tower_http::services::ServeFile;
 
-use crate::{AppState, error::ApiError, media};
+use crate::{
+    AppState,
+    entities::{self, SOURCE_URLS},
+    error::ApiError,
+    media,
+};
 
 #[derive(Serialize)]
 pub struct FileEntity {
@@ -46,6 +51,14 @@ struct UploadParams {
 }
 
 #[derive(Deserialize)]
+struct FetchInput {
+    /// The address of the file itself.
+    url: String,
+    /// Upload tab to list the file under.
+    tab: Option<i64>,
+}
+
+#[derive(Deserialize)]
 struct ContentParams {
     /// Present to have the browser save the file instead of showing it.
     download: Option<String>,
@@ -54,6 +67,7 @@ struct ContentParams {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/files", post(upload))
+        .route("/files/fetch", post(fetch))
         .route("/files/{id}/content", get(content))
         .route("/files/{id}/thumbnail", get(thumbnail))
 }
@@ -262,6 +276,128 @@ async fn upload(
     let (hash, size) = receive(body, &temp.0).await?;
     let name = params.name.as_deref();
     let (file, created) = ingest(&state, &temp.0, &hash, size, name, params.tab).await?;
+    let status = if created {
+        StatusCode::CREATED
+    } else {
+        StatusCode::OK
+    };
+    Ok((status, Json(file)))
+}
+
+/// What a browser says it is. Some sites refuse anything else.
+const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 \
+    (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+/// The extension of a content type, for a file whose address has none.
+fn extension_for(content_type: &str) -> Option<&'static str> {
+    let kind = content_type.split(';').next().unwrap_or("").trim();
+    Some(match kind.to_ascii_lowercase().as_str() {
+        "image/jpeg" => "jpg",
+        "image/png" => "png",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "image/avif" => "avif",
+        "image/svg+xml" => "svg",
+        "video/mp4" => "mp4",
+        "video/webm" => "webm",
+        "video/quicktime" => "mov",
+        "audio/mpeg" => "mp3",
+        "audio/ogg" => "ogg",
+        "audio/flac" => "flac",
+        "application/pdf" => "pdf",
+        "application/epub+zip" => "epub",
+        _ => return None,
+    })
+}
+
+/// Undoes the percent-encoding of an address's path.
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = bytes
+            .get(i + 1..i + 3)
+            .and_then(|hex| std::str::from_utf8(hex).ok());
+        match hex.and_then(|hex| u8::from_str_radix(hex, 16).ok()) {
+            Some(byte) if bytes[i] == b'%' => {
+                decoded.push(byte);
+                i += 3;
+            }
+            _ => {
+                decoded.push(bytes[i]);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
+}
+
+/// The name of the file at an address: the last part of its path, with the
+/// extension its content type gives if it has none.
+fn name_at(url: &str, content_type: &str) -> Option<String> {
+    let path = url.split(['?', '#']).next().unwrap_or("");
+    let path = path.split_once("://").map_or(path, |(_, rest)| rest);
+    let last = path.split_once('/').map_or("", |(_, path)| path);
+    let name = percent_decode(last.rsplit('/').next().unwrap_or(""));
+    let name = base_name(&name).unwrap_or("").trim().to_string();
+    match extension_for(content_type) {
+        Some(extension) if extension_of(&name).is_empty() => {
+            let stem = if name.is_empty() { "file" } else { &name };
+            Some(format!("{stem}.{extension}"))
+        }
+        _ => Some(name).filter(|name| !name.is_empty()),
+    }
+}
+
+/// Takes in the file at a web address, as an upload of it would be, with
+/// the address as its source URL. The address has to be of the file
+/// itself: a page is refused. Fetched with `curl`. Answers as `upload`
+/// does.
+async fn fetch(
+    State(state): State<AppState>,
+    Json(input): Json<FetchInput>,
+) -> Result<(StatusCode, Json<FileEntity>), ApiError> {
+    let url = entities::source_url(&input.url)?;
+    let temp = TempFile::new(&state.tmp);
+    let output = Command::new("curl")
+        .args(["--silent", "--show-error", "--fail", "--location"])
+        .args(["--proto", "=http,https", "--proto-redir", "=http,https"])
+        .args(["--connect-timeout", "20", "--max-time", "1800"])
+        .args(["--user-agent", USER_AGENT])
+        // The type it was served as, then where redirects led.
+        .args(["--write-out", "%{content_type}\n%{url_effective}"])
+        .arg("--output")
+        .arg(&temp.0)
+        .args(["--", &url])
+        .kill_on_drop(true)
+        .output()
+        .await
+        .map_err(|err| ApiError::BadRequest(format!("curl is needed to fetch a file: {err}")))?;
+    if !output.status.success() {
+        // curl says what went wrong as `curl: (22) The requested URL…`.
+        let said = String::from_utf8_lossy(&output.stderr);
+        let said = said.trim().trim_start_matches("curl: ");
+        return Err(ApiError::BadRequest(format!("could not fetch it: {said}")));
+    }
+    let written = String::from_utf8_lossy(&output.stdout).into_owned();
+    let (content_type, landed) = written.split_once('\n').unwrap_or((&written, &url));
+    if content_type
+        .trim_start()
+        .to_ascii_lowercase()
+        .starts_with("text/html")
+    {
+        return Err(ApiError::bad_request(
+            "that address is a page, not a file: give the address of the file itself",
+        ));
+    }
+    let name = name_at(landed, content_type);
+    let (hash, size) = hash_file(&temp.0).await?;
+    let (file, created) = ingest(&state, &temp.0, &hash, size, name.as_deref(), input.tab).await?;
+    {
+        let conn = state.db.lock().unwrap();
+        entities::add_to_list(&conn, &entities::ids_json(&[file.id]), SOURCE_URLS, &url)?;
+    }
     let status = if created {
         StatusCode::CREATED
     } else {

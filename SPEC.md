@@ -36,6 +36,8 @@ Uploaded files should be brought into internal storage, with their hash for a fi
 
 Thumbnails should also be stored for each file (in a separate dir).
 
+An upload tab also takes the web address of a file, in a field under its box: the server fetches the file and takes it in as an upload, with the address as its source URL. Several addresses can be pasted at once. The address has to be of the file itself; a page is refused, and nothing is looked for inside it. This does not go through the downloaders.
+
 Uploading a file that is already in the library changes nothing about the existing file, with one exception: if it is in the trash, it is taken out. Its metadata, name and tags stay as they are. It is still listed in the upload tab it was uploaded through, like any other upload.
 
 ## The schema

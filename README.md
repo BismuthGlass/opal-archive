@@ -16,6 +16,7 @@ the search language.
     length, video thumbnails and audio cover art
   - poppler (`pdfinfo` and `pdftoppm`), for PDF page counts and thumbnails
 
+- `curl`, to fetch a file from a web address given in an upload tab
 - For the downloaders, `uv` (which runs their Python scripts, fetching what
   they need the first time) and `ffmpeg` for some videos
 
@@ -93,6 +94,7 @@ is on, for a query of several lines).
 | Method and path                  | Purpose                                                        |
 | -------------------------------- | -------------------------------------------------------------- |
 | `POST /files?name=<filename>`    | Upload; the file is the raw body. 201 if new, 200 if a duplicate, which is only taken out of the trash if it was there. `tab=<id>` lists it under that upload tab either way |
+| `POST /files/fetch`              | `{url, tab}` → have the server fetch the file at that web address, as an upload of it, with the address as its source URL. Answers as an upload does. A page is refused: the address has to be of the file itself |
 | `GET /files/{id}/content`        | The file. `?download=1` to save rather than display            |
 | `GET /files/{id}/thumbnail`      | JPEG thumbnail, 404 if the file has none                       |
 | `GET /search?q=&offset=&limit=`  | One page of results and the total. `seed` fixes `sort=random`; `tab=<id>` searches only what that upload or collection tab holds. Trashed entities only match with `@trashed` in the query, or with `trashed=1` |

@@ -2,9 +2,18 @@ import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { dismiss, upload, uploads } from "../uploads";
 import Icon from "./Icon";
 
-/** The box at the top of an upload tab: click to pick files, or drop them. */
+/**
+ * The box at the top of an upload tab: click to pick files, or drop them.
+ * Under it, a field for the web addresses of files to fetch.
+ */
 export function UploadBox() {
   let input!: HTMLInputElement;
+  const [addresses, setAddresses] = createSignal("");
+  // Several addresses can be pasted at once, with spaces or lines between.
+  const fetchAll = () => {
+    upload(addresses().split(/\s+/).filter(Boolean));
+    setAddresses("");
+  };
   return (
     <>
       <button class="upload-box" onClick={() => input.click()}>
@@ -24,6 +33,27 @@ export function UploadBox() {
           input.value = "";
         }}
       />
+      <form
+        class="upload-url"
+        onSubmit={(event) => {
+          event.preventDefault();
+          fetchAll();
+        }}
+      >
+        <input
+          type="text"
+          aria-label="Address of a file to fetch"
+          placeholder="Or paste the address of a file: https://example.com/picture.jpg"
+          spellcheck={false}
+          autocomplete="off"
+          autocapitalize="off"
+          value={addresses()}
+          onInput={(event) => setAddresses(event.currentTarget.value)}
+        />
+        <button type="submit" class="primary" disabled={addresses().trim() === ""}>
+          Fetch
+        </button>
+      </form>
     </>
   );
 }

@@ -1098,3 +1098,75 @@ async fn a_download_can_be_cancelled_and_can_fail() {
     assert_eq!(ended(broken).await["outcome"], "the site said no");
     assert_eq!(std::fs::read_dir(&api.state.tmp).unwrap().count(), 0);
 }
+
+/// A website of three addresses: a picture served without an extension,
+/// a page, and nothing. Returns where it listens.
+async fn website() -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 4096];
+            let read = socket.read(&mut request).await.unwrap();
+            let request = String::from_utf8_lossy(&request[..read]).into_owned();
+            let (status, kind, body) = if request.starts_with("GET /a%20picture?") {
+                ("200 OK", "image/png", "not really a picture")
+            } else if request.starts_with("GET /page ") {
+                ("200 OK", "text/html; charset=utf-8", "<p>a page</p>")
+            } else {
+                ("404 Not Found", "text/plain", "nothing here")
+            };
+            let answer = format!(
+                "HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\n\
+                 Connection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(answer.as_bytes()).await;
+        }
+    });
+    address
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_file_is_fetched_from_its_address() {
+    let api = Api::new();
+    let site = website().await;
+    let tab = api.post("/tabs", json!({ "kind": "upload" })).await["id"]
+        .as_i64()
+        .unwrap();
+
+    // It comes in as an upload would, named after its address, with the
+    // extension its type gives, and the address as its source URL.
+    let url = format!("{site}/a%20picture?size=large");
+    let fetch = json!({ "url": url, "tab": tab });
+    let (status, file) = api.call("POST", "/files/fetch", Some(fetch.clone())).await;
+    assert_eq!(status, StatusCode::CREATED, "{file}");
+    assert_eq!(file["original_name"], "a picture.png");
+    assert_eq!(file["extension"], "png");
+    let id = file["id"].as_i64().unwrap();
+    assert_eq!(api.in_tab(tab, "file").await, [id]);
+    assert_eq!(
+        api.get(&format!("/entities/{id}")).await["source_urls"],
+        json!([url])
+    );
+
+    // Fetched again, the library has it already.
+    let (status, again) = api.call("POST", "/files/fetch", Some(fetch)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(again["id"], id);
+
+    // A page is not a file, and what is not there cannot be had; neither
+    // is an address that is not of the web.
+    for bad in [
+        format!("{site}/page"),
+        format!("{site}/gone"),
+        "file:///etc/hosts".into(),
+    ] {
+        api.refused("/files/fetch", json!({ "url": bad, "tab": tab }))
+            .await;
+    }
+    assert_eq!(api.found("kind=file").await, [id]);
+    assert_eq!(std::fs::read_dir(&api.state.tmp).unwrap().count(), 0);
+}
