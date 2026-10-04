@@ -159,8 +159,14 @@ def download() -> int:
     whole = {}
     if options.get("collection", True):
         address = THREAD.format(board=board, thread=thread)
-        # Thread numbers are a board's own, but one board never reuses one.
-        whole = {"collection": {"id": f"4chan#{thread}", "type": "sourceset", "url": address}}
+        # Thread numbers are a board's own, so the board is part of the ID.
+        whole = {
+            "collection": {
+                "id": f"4chan:{board}:{thread}",
+                "type": "sourceset",
+                "url": address,
+            }
+        }
 
     todo = []
     for post in posts:

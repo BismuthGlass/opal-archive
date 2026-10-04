@@ -43,7 +43,7 @@ interface FileMetadata {
   // For a collection: its identifier, the `id` its members refer to it
   // by. No two collections share one. Unlike the title, which is for
   // people and need not be unique, it says for certain which collection
-  // is meant: `pinterest#924574998519073090`, or a UUID.
+  // is meant: `pinterest:pin:924574998519073090`, or a UUID.
   collection_id?: string;
 
   // Collections this file belongs to.

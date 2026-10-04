@@ -89,7 +89,7 @@ Nothing is put in a collection unless the item asks. It asks with
 
 ```json
 "collection": {
-  "id": "pinterest#924574998519073090",
+  "id": "pinterest:pin:924574998519073090",
   "type": "set",
   "url": "https://…",
   "title": "…",
@@ -102,7 +102,7 @@ Nothing is put in a collection unless the item asks. It asks with
 
 | Field         | Meaning                                                                  |
 | ------------- | ------------------------------------------------------------------------ |
-| `id`          | Required. Its collection ID, which no two collections in the library share. Start it with the downloader's name, so that it cannot meet another downloader's: `pinterest#…`, `4chan#…` |
+| `id`          | Required. Its collection ID, which no two collections in the library share. Start it with the downloader's name, so that it cannot meet another downloader's, and namespace it with colons: `pinterest:pin:…`, `4chan:<board>:…` |
 | `type`        | `set`, `sourceset`, `sequence`, `variant` or `usercollection`. A `set` if left out |
 | `url`         | Its address on the site, kept as its source URL                          |
 | `title`       | What it is called. The `id` if left out                                  |

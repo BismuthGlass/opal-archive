@@ -175,7 +175,7 @@ For multi-valued fields the term matches if any one of the entity's values
 matches. Write `\*` for a literal asterisk.
 
 `collection_id` is a collection's identifier, which no two collections
-share: `collection_id=pinterest#924574998519073090` finds that one
+share: `collection_id=pinterest:pin:924574998519073090` finds that one
 collection whatever it is titled. `name` is the filename the file was uploaded with, and `ext` its extension
 without the dot.
 

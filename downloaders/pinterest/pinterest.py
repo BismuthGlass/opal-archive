@@ -342,7 +342,7 @@ def download() -> int:
             whole = {}
             if len(files) > 1:
                 whole["collection"] = {
-                    "id": f"pinterest#{pin['id']}",
+                    "id": f"pinterest:pin:{pin['id']}",
                     "type": "set",
                     "url": key,
                     "description": description,
