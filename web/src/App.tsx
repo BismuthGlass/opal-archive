@@ -8,6 +8,7 @@ import { modalOpen } from "./components/Modal";
 import Icon from "./components/Icon";
 import { createStoredFlag, Module } from "./components/Panel";
 import QueryBar from "./components/QueryBar";
+import SearchHelp from "./components/SearchHelp";
 import SettingsModal from "./components/SettingsModal";
 import Sidebar from "./components/Sidebar";
 import TabBar from "./components/TabBar";
@@ -63,6 +64,7 @@ export default function App() {
   const shownCollection = () => (selected().size === 0 ? collectionShown() : undefined);
   const [editingTags, setEditingTags] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
+  const [helpOpen, setHelpOpen] = createSignal(false);
   /** What the tagging hotkey applies to, while the tag editor it opens is up. */
   const [tagging, setTagging] = createSignal<{ ids: number[]; name: string } | null>(null);
   /** What the next digit rates, after the quick-rate key. */
@@ -235,7 +237,20 @@ export default function App() {
         {/* The panel is a stack of modules; add new ones here. */}
         <Show when={panelOpen()}>
           <aside class="panel" aria-label="Side panel">
-            <Module id="search" title="Search">
+            <Module
+              id="search"
+              title="Search"
+              beside={
+                <button
+                  class="help-button"
+                  aria-label="How to search"
+                  title="How to search"
+                  onClick={() => setHelpOpen(true)}
+                >
+                  <Icon name="help-outline" />
+                </button>
+              }
+            >
               <QueryBar />
             </Module>
             <Module
@@ -341,6 +356,9 @@ export default function App() {
       </Show>
       <Show when={editingTags()}>
         <TagEditor onClose={() => setEditingTags(false)} />
+      </Show>
+      <Show when={helpOpen()}>
+        <SearchHelp onClose={() => setHelpOpen(false)} />
       </Show>
       <Show when={settingsOpen()}>
         <SettingsModal onClose={() => setSettingsOpen(false)} />

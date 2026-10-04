@@ -670,6 +670,95 @@ button.primary {
   border: none;
 }
 
+/* With something beside the title, the title is only as wide as it is. */
+.module-toggle:has(+ .module-beside) {
+  flex: none;
+  padding-right: 0;
+}
+
+.module-beside {
+  display: flex;
+  margin-right: auto;
+}
+
+.help-button {
+  display: flex;
+  padding: 2px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 50%;
+}
+
+.help-button:hover {
+  color: var(--text);
+}
+
+/* The guide to the query language. */
+
+.search-help {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Inside the part that scrolls, so the columns are as tall as they need. */
+.search-help-parts {
+  columns: 2 340px;
+  column-gap: 28px;
+}
+
+.search-help section {
+  margin-bottom: 18px;
+  break-inside: avoid;
+}
+
+.search-help h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.search-help .hint {
+  margin-bottom: 6px;
+}
+
+.search-help dl {
+  margin: 0;
+}
+
+.search-help dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  align-items: baseline;
+  padding: 2px 0;
+  font-size: 13px;
+}
+
+.search-help dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+.search-help code {
+  padding: 1px 5px;
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.search-help-types {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 10px;
+  padding: 0;
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  list-style: none;
+}
+
 .chevron {
   display: inline-block;
   margin: 0 2px 0 -6px;

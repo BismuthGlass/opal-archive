@@ -38,6 +38,8 @@ export function Module(props: {
   /** Names the stored folded state; unique within the panel. */
   id: string;
   title: string;
+  /** Shown right after the title, e.g. a help button. */
+  beside?: JSX.Element;
   /** Shown at the right of the header, e.g. a "Clear" link. */
   action?: JSX.Element;
   children: JSX.Element;
@@ -52,6 +54,9 @@ export function Module(props: {
           </span>
           {props.title}
         </button>
+        <Show when={props.beside}>
+          <span class="module-beside">{props.beside}</span>
+        </Show>
         {props.action}
       </header>
       <Show when={open()}>
