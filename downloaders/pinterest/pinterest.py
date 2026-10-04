@@ -312,17 +312,26 @@ def download() -> int:
             key = pin_url(pin["id"])
             if err:
                 emit("error", key=key, message=f"{key}: {err}")
-            else:
-                emit(
-                    "item",
-                    key=key,
-                    source_url=key,
-                    files=files,
-                    title=pin_title(pin),
-                    # A pin of several files becomes a set, named for the pin.
-                    set_title=f"pinterest#{pin['id']}",
-                    description=(pin.get("description") or "").strip(),
-                )
+                continue
+            description = (pin.get("description") or "").strip()
+            # A pin of several files becomes a set, named for the pin.
+            whole = {}
+            if len(files) > 1:
+                whole["collection"] = {
+                    "type": "set",
+                    "url": key,
+                    "title": f"pinterest#{pin['id']}",
+                    "description": description,
+                }
+            emit(
+                "item",
+                key=key,
+                source_url=key,
+                files=files,
+                title=pin_title(pin),
+                description=description,
+                **whole,
+            )
     return 0
 
 

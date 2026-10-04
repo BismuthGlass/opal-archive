@@ -797,8 +797,9 @@ async fn a_bad_query_says_where() {
     assert_eq!(page["items"][0]["trashed"], false);
 }
 
-/// A downloader that fetches from nowhere: two things of one board, the
-/// second of two files, and a complaint.
+/// A downloader that fetches from nowhere: two things, the first put in a
+/// collection for its board and the second, of two files, in a set of its
+/// own, and a complaint.
 const FAKE_DOWNLOADER: &str = r#"
 [ "$1" = download ] || exit 2
 input=$(cat)
@@ -817,7 +818,11 @@ for n in 1 2; do
     printf 'file %s b' "$n" > "$out/$n-b.txt"
     files="$files,\"$out/$n-b.txt\""
   fi
-  more='"title":" Thing '$n' ","set_title":"fake#'$n'","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]},"collection":{"url":"https://example.test/board","title":"Board"}'
+  whole='"type":"sourceset","url":"https://example.test/board","title":"Board"'
+  if [ "$n" = 2 ]; then
+    whole='"url":"'$key'","title":"fake#2","description":" A pair ","tags":{"genre":["Twos"],"nonsense":["x"]}'
+  fi
+  more='"title":" Thing '$n' ","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]},"collection":{'$whole'}'
   echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":\"$key\",\"files\":[$files],$more}"
 done
 echo '{"event":"error","message":"one thing could not be had"}'
@@ -969,7 +974,9 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         ]
     );
 
-    // The thing of two files is also a set, in order, tagged like them.
+    // The second thing asked for a set of its own: it holds its files in
+    // order, under the name, description and tags given for it, with the
+    // tab's tags but not those of the thing.
     let sets = api.found("type=set").await;
     assert_eq!(sets.len(), 1);
     assert_eq!(
@@ -977,22 +984,20 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         [(files[1], Some(0)), (files[2], Some(1))]
     );
     let set = api.metadata(&sets).await;
-    // It has the name the downloader gave it, not the thing's title.
     assert_eq!(set["scalars"]["title"]["value"], "fake#2");
+    assert_eq!(set["scalars"]["description"]["value"], "A pair");
     assert_eq!(carried(&set, "source"), [tag("fakesite", 1)]);
+    assert_eq!(carried(&set, "creator"), [tag("Someone", 1)]);
+    assert_eq!(carried(&set, "genre"), [tag("Twos", 1)]);
     assert_eq!(
         carried(&set, "source_urls"),
         [tag("https://example.test/item/2", 1)]
     );
 
-    // What the things are part of holds them, the set as one, and is
-    // tagged as the tab says but not as each thing is.
+    // The first asked for a collection of another type and address.
     let wholes = api.found("type=sourceset").await;
     assert_eq!(wholes.len(), 1);
-    assert_eq!(
-        api.members(wholes[0]),
-        [(files[0], Some(0)), (sets[0], Some(1))]
-    );
+    assert_eq!(api.members(wholes[0]), [(files[0], Some(0))]);
     let whole = api.metadata(&wholes).await;
     assert_eq!(whole["scalars"]["title"]["value"], "Board");
     assert_eq!(carried(&whole, "source"), [tag("fakesite", 1)]);
@@ -1035,7 +1040,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     assert_eq!(api.in_tab(tab, "collection").await.len(), 2);
     assert_eq!(api.found("type=set").await, sets);
     assert_eq!(api.found("type=sourceset").await, wholes);
-    assert_eq!(api.members(wholes[0]).len(), 2);
+    assert_eq!(api.members(sets[0]).len(), 2);
     assert_eq!(api.get(&path).await["seen"], 2);
     assert_eq!(
         api.post(&format!("{path}/seen/forget"), json!({})).await["forgotten"],

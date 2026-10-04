@@ -37,7 +37,9 @@ use crate::{
     AppState, collections,
     entities::{self, SOURCE_URLS},
     error::ApiError,
-    files, tags,
+    files,
+    query::COLLECTION_TYPES,
+    tags,
 };
 
 /// A tab's choice for each of its downloader's options.
@@ -147,21 +149,29 @@ struct Item {
     /// Given to the files if they have none of their own.
     title: Option<String>,
     description: Option<String>,
-    /// What the set of its files is called, if not as the thing itself.
-    set_title: Option<String>,
     /// Tags of its own, by field, besides the source and the tab's.
     #[serde(default)]
     tags: BaseTags,
-    /// What it is part of on the site, to be kept together in the library.
+    /// The collection its files are to be put in.
     collection: Option<Whole>,
 }
 
-/// What things on a site are part of: a thread, for its posts.
+/// A collection a downloader asks for, to hold what it fetches: a set of
+/// the files of one post, or what several posts are part of, as a thread.
 #[derive(Deserialize)]
 struct Whole {
-    /// Its address, which is what tells it from the others.
+    /// Its type; a `set` if not said.
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    /// Its address, which with its type is what tells it from the others.
     url: String,
     title: Option<String>,
+    description: Option<String>,
+    /// Tags of its own, by field, besides the source and the tab's.
+    #[serde(default)]
+    tags: BaseTags,
+    /// Whether it keeps what is put in it in order. It does if not said.
+    ordered: Option<bool>,
 }
 
 /// One line of a downloader's output.
@@ -674,8 +684,8 @@ impl Download {
 
     /// Takes one downloaded thing into the library: its files go in, are
     /// listed under the tab, and get the source URL, the tags, and the
-    /// title and description where they have none; several files are also
-    /// put in a set. Then the thing is remembered as seen. Returns how many
+    /// title and description where they have none; they are also put in
+    /// the collection it asks for. Then the thing is remembered as seen. Returns how many
     /// files were new, and how many the library had.
     async fn take_in(&self, item: &Item) -> Result<(u64, u64), ApiError> {
         let source_url = item.source_url.as_deref();
@@ -714,53 +724,52 @@ impl Download {
 
         let mut conn = self.state.db.lock().unwrap();
         let tx = conn.transaction()?;
-        let mut tagged = ids.clone();
-        if ids.len() > 1 {
-            let named = text(&item.set_title).or_else(|| title.clone());
-            let set = collection_of(&tx, "set", source_url, named.as_deref(), &ids)?;
-            tagged.push(set);
-        }
-        // What the thing is part of holds it whole: its set, if it has one.
+        let tagged = entities::ids_json(&ids);
+        // The collection the downloader asks for holds the files, in order.
         let whole = match &item.collection {
             Some(whole) if !ids.is_empty() && !whole.url.trim().is_empty() => {
-                let members = if ids.len() > 1 {
-                    &tagged[ids.len()..]
-                } else {
-                    &ids[..]
-                };
-                let title = text(&whole.title);
+                let kind = whole.kind.as_deref().unwrap_or("set");
+                if !COLLECTION_TYPES.contains(&kind) {
+                    return Err(ApiError::BadRequest(format!(
+                        "`{kind}` is not a type of collection"
+                    )));
+                }
                 let url = whole.url.trim();
-                let id = collection_of(&tx, "sourceset", Some(url), title.as_deref(), members)?;
-                entities::add_to_list(&tx, &entities::ids_json(&[id]), SOURCE_URLS, url)?;
-                Some(id)
+                let title = text(&whole.title);
+                let ordered = whole.ordered.unwrap_or(true);
+                let id = collection_of(&tx, kind, url, title.as_deref(), ordered, &ids)?;
+                let json = entities::ids_json(&[id]);
+                entities::add_to_list(&tx, &json, SOURCE_URLS, url)?;
+                // It is listed under the tab beside its files.
+                tx.execute(
+                    "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
+                     SELECT id, ?2 FROM tab WHERE id = ?1",
+                    params![self.tab, id],
+                )?;
+                Some((json, text(&whole.description), &whole.tags))
             }
             _ => None,
         };
-        // The collections are listed under the tab beside their files.
-        for collection in tagged[ids.len()..].iter().chain(&whole) {
-            tx.execute(
-                "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
-                 SELECT id, ?2 FROM tab WHERE id = ?1",
-                params![self.tab, collection],
-            )?;
-        }
-        let tagged = entities::ids_json(&tagged);
         // What the user has written is never written over.
-        for (column, value) in [("title", &title), ("description", &description)] {
-            if let Some(value) = value {
-                tx.execute(
-                    &format!(
-                        "UPDATE entity SET {column} = ?2 WHERE {column} IS NULL
-                         AND id IN (SELECT value FROM json_each(?1))"
-                    ),
-                    params![tagged, value],
-                )?;
-            }
+        let fill = |ids: &str, column: &str, value: &Option<String>| {
+            let Some(value) = value else { return Ok(0) };
+            tx.execute(
+                &format!(
+                    "UPDATE entity SET {column} = ?2 WHERE {column} IS NULL
+                     AND id IN (SELECT value FROM json_each(?1))"
+                ),
+                params![ids, value],
+            )
+        };
+        fill(&tagged, "title", &title)?;
+        fill(&tagged, "description", &description)?;
+        if let Some((whole, description, _)) = &whole {
+            fill(whole, "description", description)?;
         }
         if let Some(url) = source_url {
             entities::add_to_list(&tx, &tagged, SOURCE_URLS, url)?;
         }
-        let source = [("source", self.manifest.source.clone())];
+        let source = [("source".to_string(), self.manifest.source.clone())];
         let each = |tags: &BaseTags| {
             let tags = tags.clone().into_iter();
             tags.flat_map(|(field, values)| {
@@ -769,28 +778,26 @@ impl Download {
         };
         // The tab's tags were checked when they were set. The script's own
         // are checked here, and one that is not a tag is passed over.
-        let own = each(&item.tags).filter_map(|(field, value)| {
-            tags::check_field(&field).ok()?;
-            Some((field.clone(), tags::normalize(&field, &value).ok()?))
-        });
-        let shared = source
-            .into_iter()
-            .map(|(field, value)| (field.to_string(), value))
-            .chain(each(&self.base));
-        // What it is part of gets the source and the tab's tags, but not
-        // those of the one thing.
-        let whole = whole.map(|id| entities::ids_json(&[id]));
-        for (field, value) in shared {
+        let checked = |tags: &BaseTags| {
+            each(tags).filter_map(|(field, value)| {
+                tags::check_field(&field).ok()?;
+                Some((field.clone(), tags::normalize(&field, &value).ok()?))
+            })
+        };
+        // The files and the collection both get the source and the tab's
+        // tags; beyond those, each gets the tags the script gave it.
+        let shared: Vec<_> = source.into_iter().chain(each(&self.base)).collect();
+        let mut given: Vec<(&str, (String, String))> = Vec::new();
+        given.extend(shared.iter().cloned().map(|tag| (tagged.as_str(), tag)));
+        given.extend(checked(&item.tags).map(|tag| (tagged.as_str(), tag)));
+        if let Some((whole, _, tags)) = &whole {
+            given.extend(shared.iter().cloned().map(|tag| (whole.as_str(), tag)));
+            given.extend(checked(tags).map(|tag| (whole.as_str(), tag)));
+        }
+        for (ids, (field, value)) in given {
             // An alias stands for the tag it defers to.
             let value = tags::resolve(&tx, &field, value)?;
-            entities::attach_tag(&tx, &tagged, &field, &value)?;
-            if let Some(whole) = &whole {
-                entities::attach_tag(&tx, whole, &field, &value)?;
-            }
-        }
-        for (field, value) in own {
-            let value = tags::resolve(&tx, &field, value)?;
-            entities::attach_tag(&tx, &tagged, &field, &value)?;
+            entities::attach_tag(&tx, ids, &field, &value)?;
         }
         tx.execute(
             "INSERT OR IGNORE INTO tab_download_seen (tab_id, key)
@@ -807,47 +814,44 @@ impl Download {
     }
 }
 
-/// The collection of the given type holding what was downloaded, in its
-/// order: the one already made for its source URL, or a new one, with the
-/// title given or named for its type. A `set` holds the files of one
-/// thing, a `sourceset` the things that are part of one whole.
+/// The collection of the given type and address, with `files` put in it:
+/// the one already made, found by its source URL, or a new one, with the
+/// title given or named for its type.
 fn collection_of(
     conn: &Connection,
     collection_type: &str,
-    source_url: Option<&str>,
+    url: &str,
     title: Option<&str>,
+    ordered: bool,
     files: &[i64],
 ) -> Result<i64, ApiError> {
-    let made = match source_url {
-        Some(url) => conn
-            .query_row(
-                "SELECT c.entity_id FROM collection c
-                 JOIN source_url s ON s.entity_id = c.entity_id
-                 WHERE s.url = ?1 AND c.collection_type = ?2 ORDER BY c.entity_id LIMIT 1",
-                [url, collection_type],
-                |row| row.get(0),
-            )
-            .optional()?,
-        None => None,
-    };
-    let set = match made {
-        Some(set) => set,
+    let made = conn
+        .query_row(
+            "SELECT c.entity_id FROM collection c
+             JOIN source_url s ON s.entity_id = c.entity_id
+             WHERE s.url = ?1 AND c.collection_type = ?2 ORDER BY c.entity_id LIMIT 1",
+            [url, collection_type],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let collection = match made {
+        Some(collection) => collection,
         None => {
             conn.execute(
                 "INSERT INTO entity (kind, title) VALUES ('collection', ?1)",
                 [title.unwrap_or(collections::default_title(collection_type))],
             )?;
-            let set = conn.last_insert_rowid();
+            let collection = conn.last_insert_rowid();
             conn.execute(
                 "INSERT INTO collection (entity_id, collection_type, ordered)
-                 VALUES (?1, ?2, 1)",
-                params![set, collection_type],
+                 VALUES (?1, ?2, ?3)",
+                params![collection, collection_type, ordered],
             )?;
-            set
+            collection
         }
     };
-    collections::add_members(conn, set, files)?;
-    Ok(set)
+    collections::add_members(conn, collection, files)?;
+    Ok(collection)
 }
 
 /// An error in the words shown to the user.

@@ -67,7 +67,7 @@ The script answers on standard output, one JSON object per line:
 | Event     | Fields                       | Meaning                                                   |
 | --------- | ---------------------------- | --------------------------------------------------------- |
 | `found`   | `total`                      | How many things there are to download, as far as is known |
-| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `set_title`, `tags`, `collection` | One thing has been fetched, as these files, in order |
+| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `tags`, `collection` | One thing has been fetched, as these files, in order |
 | `skipped` | `key`                        | One thing was passed over because its key is in `seen`    |
 | `error`   | `message`, optionally `key`  | Something failed; the download goes on                    |
 | `log`     | `message`                    | What the script is doing, shown while it runs             |
@@ -75,9 +75,7 @@ The script answers on standard output, one JSON object per line:
 A `key` is whatever tells one thing on the site from another, and is what
 the tab remembers; for Pinterest it is the pin's URL. For each `item` the
 server takes in the files, lists them under the tab, adds `source_url` and
-the tags, and remembers the key. An item with several files also gets a
-`set` collection holding them in order, titled with `set_title` if the item
-gives one and as the item is if not.
+the tags, and remembers the key.
 
 The tags are the manifest's `source`, the ones the user gave the tab, and
 any the item brings itself in `tags`: an object of tag field to values,
@@ -86,13 +84,40 @@ is left as it is, and a value that is not a valid tag is passed over.
 `title` and `description` are given to the files, and the set, that have
 none; one the user wrote is never replaced.
 
-An item can say what it is part of on the site, to be kept together in the
-library: `"collection": {"url": "https://…", "title": "…"}`, as a post is
-part of its thread. Everything downloaded with the same `url` is put, in the
-order it arrives, in one `sourceset` collection, which is made the first
-time, with that title, the `url` as its source URL, and the source and the
-tab's tags. An item of several files goes in as its set. Like a set, the
-collection is listed in the tab, beside the files.
+Nothing is put in a collection unless the item asks. It asks with
+`collection`, which describes the collection its files go in:
+
+```json
+"collection": {
+  "type": "set",
+  "url": "https://…",
+  "title": "…",
+  "description": "…",
+  "tags": { "creator": ["Someone"] },
+  "ordered": true
+}
+```
+
+| Field         | Meaning                                                                  |
+| ------------- | ------------------------------------------------------------------------ |
+| `url`         | Its address on the site. Required: with the type, it is what tells one collection from another, and it becomes the collection's source URL |
+| `type`        | `set`, `sourceset`, `sequence`, `variant` or `usercollection`. A `set` if left out |
+| `title`       | What it is called. Named for its type if left out                        |
+| `description` | Given to it if it has none                                               |
+| `tags`        | Tags of its own, as an item's                                            |
+| `ordered`     | Whether it keeps its members in the order they arrive. It does if left out |
+
+The collection is made the first time an item names it, and found again
+after that by its type and `url`, so the title and `ordered` only count
+then. The item's files are added to it. It always gets the manifest's
+`source` and the tab's tags; it does not get the item's own tags, title or
+description, only what `collection` says. It is listed in the tab, beside
+the files.
+
+Two shapes come of this. An item of several files that asks for a `set`
+with its own address makes one collection per post: Pinterest does this for
+a pin of several images. Items that all name the same `url` gather in one
+collection: 4chan does this with a `sourceset` for the thread.
 
 Lines that are not one of these events are ignored. The script ends with
 status 0 when it is done. Any other status means the download failed, and
