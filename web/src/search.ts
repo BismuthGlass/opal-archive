@@ -7,7 +7,7 @@ import { refreshStats } from "./stats";
 /** Results are shown, and fetched, in pages of this many. */
 export const PAGE = 200;
 
-type SearchError = { message: string; position?: number };
+type SearchError = { message: string; position?: number; line?: number };
 
 const [search, setSearch] = createStore({
   query: "",
@@ -110,7 +110,7 @@ function loadPage(page: number) {
     .catch((err) => {
       if (current !== generation) return;
       setPages(reconcile({}));
-      setSearch({ total: 0, ready: true, error: { message: err.message, position: err.position } });
+      setSearch({ total: 0, ready: true, error: { message: err.message, position: err.position, line: err.line } });
     });
 }
 

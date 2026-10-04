@@ -7,6 +7,8 @@ import { createMemo } from "solid-js";
 const ICONS = {
   "add":
     "<path fill=\"currentColor\" d=\"M11.5 12.5H6v-1h5.5V6h1v5.5H18v1h-5.5V18h-1z\"/>",
+  "bookmark-outline":
+    "<path fill=\"currentColor\" d=\"M6 19.5V5.616q0-.691.463-1.153T7.616 4h8.769q.69 0 1.153.463T18 5.616V19.5l-6-2.577zm1-1.55l5-2.15l5 2.15V5.616q0-.231-.192-.424T16.384 5H7.616q-.231 0-.424.192T7 5.616zM7 5h10z\"/>",
   "chevron-left":
     "<path fill=\"currentColor\" d=\"M14 17.308L8.692 12L14 6.692l.708.708l-4.6 4.6l4.6 4.6z\"/>",
   "chevron-right":

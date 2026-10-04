@@ -11,7 +11,12 @@ export type Settings = {
   tagTypeOrder?: string[];
   /** How the viewer plays through results by itself. */
   player?: { seconds?: number; random?: boolean };
+  /** Queries kept to be used again, in the order they are offered. */
+  savedQueries?: SavedQuery[];
 };
+
+/** A query kept under a name. One line: a single row of a stack. */
+export type SavedQuery = { name: string; query: string };
 
 const [settings, setSettings] = createStore<Settings>({});
 

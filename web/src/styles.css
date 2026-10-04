@@ -617,14 +617,21 @@ button.primary {
 
 .query {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
-  justify-content: flex-end;
+}
+
+/* One row of a stacked query, with its buttons beside it. */
+.query-row {
+  display: flex;
+  gap: 2px;
+  align-items: flex-start;
 }
 
 .query textarea {
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 6px 10px;
   overflow: hidden;
   font-family: var(--mono);
@@ -634,8 +641,81 @@ button.primary {
   border-radius: 6px;
 }
 
-.query .form-error {
+.query textarea[aria-invalid="true"] {
+  border-color: var(--danger-text);
+}
+
+.query-row button,
+.query-add > button {
+  padding: 5px 3px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 4px;
+}
+
+.query-row button:hover:not(:disabled),
+.query-add > button:hover {
+  color: var(--text);
+}
+
+.query-row button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.query-name {
+  padding: 4px 10px;
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+}
+
+.query-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.query-add {
+  position: relative;
+  margin-left: -3px;
+}
+
+.query-add .suggestions {
+  right: auto;
+  min-width: 180px;
+  max-width: 280px;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+}
+
+.query-add .suggestions li {
+  display: block;
+  padding: 0;
+}
+
+.query-add .suggestions li.menu-divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+  cursor: default;
+}
+
+.query-add .suggestions button {
   width: 100%;
+  padding: 3px 8px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  border-radius: 4px;
+}
+
+.query .form-error {
   margin: 0;
 }
 
@@ -1739,6 +1819,24 @@ span.chip-label:hover {
 
 .setting-rows li.dragging .drag-handle {
   cursor: grabbing;
+}
+
+/* A saved query: its name, and the query itself taking the room left. */
+.setting-rows input[type="text"] {
+  min-width: 0;
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.setting-rows .saved-name {
+  flex: 1;
+}
+
+.setting-rows .saved-query {
+  flex: 2;
+  font-family: var(--mono);
 }
 
 .setting-text {

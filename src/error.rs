@@ -12,7 +12,8 @@ use crate::query::QueryError;
 pub enum ApiError {
     NotFound,
     BadRequest(String),
-    /// A search query that does not parse; also carries the character offset.
+    /// A search query that does not parse; also carries where: the line of
+    /// a stacked query, and the character offset into it.
     Query(QueryError),
     Internal(String),
 }
@@ -58,7 +59,7 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(message) => (StatusCode::BAD_REQUEST, json!({ "error": message })),
             ApiError::Query(err) => (
                 StatusCode::BAD_REQUEST,
-                json!({ "error": err.message, "position": err.position }),
+                json!({ "error": err.message, "position": err.position, "line": err.line }),
             ),
             ApiError::Internal(detail) => {
                 eprintln!("internal error: {detail}");

@@ -68,8 +68,10 @@ pub const FROM: &str = "entity e0
 #[derive(Debug)]
 pub struct QueryError {
     pub message: String,
-    /// Character offset into the query.
+    /// Character offset into the line.
     pub position: usize,
+    /// Which line of a stacked query, from 0.
+    pub line: usize,
 }
 
 pub struct Compiled {
@@ -89,6 +91,7 @@ fn error<T>(message: impl Into<String>, position: usize) -> Res<T> {
     Err(QueryError {
         message: message.into(),
         position,
+        line: 0,
     })
 }
 
@@ -190,6 +193,7 @@ struct Sort {
     key: &'static str,
     descending: bool,
     pos: usize,
+    line: usize,
 }
 
 /// Turns a value into a LIKE pattern (escape character `\`). `\*` and `\\`
@@ -318,6 +322,8 @@ struct Parser<'a> {
     aliases: &'a Aliases,
     chars: Vec<char>,
     pos: usize,
+    /// The line of a stacked query being parsed, from 0.
+    line: usize,
     /// Subquery nesting; numbers the table aliases.
     depth: usize,
     /// Non-zero inside parentheses, negations and subqueries, where `sort=`
@@ -780,6 +786,7 @@ impl Parser<'_> {
                 key,
                 descending,
                 pos: value.pos,
+                line: self.line,
             });
         }
         Ok(())
@@ -1070,10 +1077,12 @@ fn order_by(sorts: &[Sort], top_level_in: &[i64], seed: i64) -> Res<(String, Vec
             }
             "position" => {
                 let [collection] = top_level_in[..] else {
-                    return error(
-                        "`sort=position` needs exactly one top-level `in=<id>` term",
-                        sort.pos,
-                    );
+                    return Err(QueryError {
+                        message: "`sort=position` needs exactly one top-level `in=<id>` term"
+                            .to_string(),
+                        position: sort.pos,
+                        line: sort.line,
+                    });
                 };
                 // The expression appears twice below.
                 order_params.extend([Value::Integer(collection), Value::Integer(collection)]);
@@ -1100,7 +1109,9 @@ fn order_by(sorts: &[Sort], top_level_in: &[i64], seed: i64) -> Res<(String, Vec
     Ok((clauses.join(", "), order_params))
 }
 
-/// Compiles a query. `seed` fixes the order of `sort=random` so that pages
+/// Compiles a query. A query of several lines is a stack: each line is a
+/// query of its own, and what is found is what all of them match. Their
+/// `sort=` terms apply in the order written. `seed` fixes the order of `sort=random` so that pages
 /// of one search agree with each other.
 ///
 /// Trashed entities are left out unless the query mentions `@trashed` or
@@ -1108,8 +1119,9 @@ fn order_by(sorts: &[Sort], top_level_in: &[i64], seed: i64) -> Res<(String, Vec
 pub fn compile(source: &str, seed: i64, aliases: &Aliases, include_trashed: bool) -> Res<Compiled> {
     let mut parser = Parser {
         aliases,
-        chars: source.chars().collect(),
+        chars: Vec::new(),
         pos: 0,
+        line: 0,
         depth: 0,
         restricted: 0,
         params: Vec::new(),
@@ -1117,15 +1129,28 @@ pub fn compile(source: &str, seed: i64, aliases: &Aliases, include_trashed: bool
         top_level_in: Vec::new(),
         asks_trashed: false,
     };
-    parser.skip_whitespace();
-    let filter = if parser.at_end() {
-        "1".to_string()
-    } else {
-        let sql = parser.parse_or()?;
-        if !parser.at_end() {
-            return error("unexpected `)`", parser.pos);
+    let mut filters = Vec::new();
+    for (line, text) in source.lines().enumerate() {
+        parser.chars = text.chars().collect();
+        parser.pos = 0;
+        parser.line = line;
+        parser.skip_whitespace();
+        if parser.at_end() {
+            continue;
         }
-        sql
+        let parsed = parser.parse_or().and_then(|sql| {
+            if parser.at_end() {
+                Ok(sql)
+            } else {
+                error("unexpected `)`", parser.pos)
+            }
+        });
+        filters.push(parsed.map_err(|err| QueryError { line, ..err })?);
+    }
+    let filter = match filters.len() {
+        0 => "1".to_string(),
+        1 => filters.remove(0),
+        _ => format!("({})", filters.join(") AND (")),
     };
 
     // Trashed entities stay out of every search that does not ask about
@@ -1143,6 +1168,7 @@ pub fn compile(source: &str, seed: i64, aliases: &Aliases, include_trashed: bool
             key: "added",
             descending: true,
             pos: 0,
+            line: 0,
         });
     }
     let (order, order_params) = order_by(&parser.sorts, &parser.top_level_in, seed)?;
@@ -1221,6 +1247,22 @@ mod tests {
 
     fn fails(source: &str) -> bool {
         compile(source, 7, &Aliases::new(), false).is_err()
+    }
+
+    #[test]
+    fn lines_stack() {
+        let conn = library();
+        // A line is taken whole: its `or` does not reach into the next.
+        assert_eq!(found(&conn, "cat or dog\n\nscore<5"), [2]);
+        assert_eq!(found(&conn, "cat or dog score<5"), [1, 2]);
+        // Every line is a top level: each may sort, in the order written.
+        let aliases = Aliases::new();
+        assert_eq!(
+            ordered(&conn, "sort=score\nsort=-id", &aliases),
+            ordered(&conn, "sort=score sort=-id", &aliases)
+        );
+        let err = compile("cat\ndog (cat", 7, &aliases, false).err().unwrap();
+        assert_eq!((err.line, err.position), (1, 4));
     }
 
     #[test]

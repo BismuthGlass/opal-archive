@@ -22,14 +22,16 @@ const KINDS: { kind: TabKind; label: string }[] = [
 
 /** What a tab is called when it has not been given a name. */
 function described(tab: Tab) {
-  if (tab.kind === "gallery") return tab.query || "Gallery";
+  // A stacked query is one line each; here they go side by side.
+  const query = tab.query.replaceAll("\n", " + ");
+  if (tab.kind === "gallery") return query || "Gallery";
   const what =
     tab.kind === "upload"
       ? "Upload"
       : tab.kind === "download"
         ? fieldLabel(tab.downloader ?? "download")
         : tab.collection?.title || `Collection #${tab.collection?.id}`;
-  return tab.query ? `${what}: ${tab.query}` : what;
+  return query ? `${what}: ${query}` : what;
 }
 
 /** The + button, and the menu of tab kinds it opens. */

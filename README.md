@@ -87,7 +87,8 @@ The icons are from [Material Symbols Light](https://icon-sets.iconify.design/mat
 ## API
 
 Everything is under `/api`. Bodies are JSON unless noted, and errors are
-`{"error": "..."}` (query errors add a character `position`).
+`{"error": "..."}` (query errors add a character `position` and the `line` it
+is on, for a query of several lines).
 
 | Method and path                  | Purpose                                                        |
 | -------------------------------- | -------------------------------------------------------------- |

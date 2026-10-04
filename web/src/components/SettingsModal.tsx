@@ -2,6 +2,8 @@ import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { ACTIONS, bind, isDefault, keyFor, keyLabel, keyOf } from "../hotkeys";
 import type { Action } from "../hotkeys";
 import { errorMessage, fieldLabel } from "../format";
+import { savedQueries, setSavedQueries } from "../savedQueries";
+import type { SavedQuery } from "../settings";
 import {
   isCustom,
   isCustomOrder,
@@ -19,35 +21,39 @@ import Modal from "./Modal";
 /** The sections of the settings pane; add new ones here. */
 const SECTIONS = [
   { id: "tagTypes", label: "Tag types" },
+  { id: "savedQueries", label: "Saved queries" },
   { id: "hotkeys", label: "Hotkeys" },
 ] as const;
 
-/** Each tag type's pill colours, and whether it joins the one list. */
-function TagTypes() {
-  let list!: HTMLUListElement;
-  const [error, setError] = createSignal<string | null>(null);
+/**
+ * Rows of a list dragged by their handles into another order. A row moves
+ * in the list as the pointer passes the others, and the order is saved on
+ * release. `keys` names the rows in their saved order.
+ */
+function createRowDrag<K>(
+  list: () => HTMLUListElement,
+  keys: () => K[],
+  save: (next: K[]) => Promise<unknown>,
+  report: (err: unknown) => void,
+) {
   /** The order while a row is being dragged, and the row. */
-  const [dragOrder, setDragOrder] = createSignal<string[] | null>(null);
-  const [dragging, setDragging] = createSignal<string | null>(null);
-  const order = () => dragOrder() ?? orderedTypes();
+  const [dragOrder, setDragOrder] = createSignal<K[] | null>(null);
+  const [dragging, setDragging] = createSignal<K | null>(null);
+  const order = () => dragOrder() ?? keys();
 
-  const report = (err: unknown) => setError(errorMessage(err));
-
-  // A row is dragged by its handle. It moves in the list as the pointer
-  // passes the other rows, and the order is saved on release.
-  const startDrag = (field: string, down: PointerEvent) => {
+  const start = (key: K, down: PointerEvent) => {
     down.preventDefault();
-    setDragging(field);
-    setDragOrder(orderedTypes());
+    setDragging(() => key);
+    setDragOrder(keys());
     const onMove = (event: PointerEvent) => {
-      const others = [...list.querySelectorAll<HTMLElement>("li:not(.dragging)")];
+      const others = [...list().querySelectorAll<HTMLElement>("li:not(.dragging)")];
       // Its place is after every other row whose middle the pointer passed.
       const index = others.filter((row) => {
         const box = row.getBoundingClientRect();
         return box.top + box.height / 2 < event.clientY;
       }).length;
-      const rest = order().filter((other) => other !== field);
-      rest.splice(index, 0, field);
+      const rest = order().filter((other) => other !== key);
+      rest.splice(index, 0, key);
       if (rest.some((other, i) => other !== order()[i])) setDragOrder(rest);
     };
     const onUp = () => {
@@ -56,16 +62,33 @@ function TagTypes() {
       window.removeEventListener("pointercancel", onUp);
       const next = order();
       setDragging(null);
-      const moved = next.some((other, i) => other !== orderedTypes()[i]);
+      const moved = next.some((other, i) => other !== keys()[i]);
       if (!moved) return setDragOrder(null);
-      setTagTypeOrder(next)
-        .then(() => setError(null), report)
+      save(next)
+        .catch(report)
         .finally(() => setDragOrder(null));
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
   };
+
+  return { order, dragging, start };
+}
+
+/** Each tag type's pill colours, and whether it joins the one list. */
+function TagTypes() {
+  let list!: HTMLUListElement;
+  const [error, setError] = createSignal<string | null>(null);
+
+  const report = (err: unknown) => setError(errorMessage(err));
+
+  const drag = createRowDrag(
+    () => list,
+    orderedTypes,
+    (next) => setTagTypeOrder(next).then(() => setError(null)),
+    report,
+  );
 
   const change = (field: string, changes: Partial<TagType> | null) =>
     setTagType(field, changes).then(
@@ -93,13 +116,13 @@ function TagTypes() {
         </Show>
       </p>
       <ul class="setting-rows" ref={list}>
-        <For each={order()}>
+        <For each={drag.order()}>
           {(field) => (
-            <li classList={{ dragging: dragging() === field }}>
+            <li classList={{ dragging: drag.dragging() === field }}>
               <span
                 class="drag-handle"
                 title="Drag to reorder"
-                onPointerDown={(event) => startDrag(field, event)}
+                onPointerDown={(event) => drag.start(field, event)}
               >
                 <Icon name="drag-indicator" />
               </span>
@@ -147,6 +170,93 @@ function TagTypes() {
           )}
         </For>
       </ul>
+      <Show when={error()}>
+        <p class="form-error" role="alert">
+          {error()}
+        </p>
+      </Show>
+    </>
+  );
+}
+
+/** The queries kept to be used again: their names, text and order. */
+function SavedQueries() {
+  let list!: HTMLUListElement;
+  const [error, setError] = createSignal<string | null>(null);
+
+  const report = (err: unknown) => setError(errorMessage(err));
+  const save = (next: SavedQuery[]) => setSavedQueries(next).then(() => setError(null), report);
+
+  // A saved query has nothing to tell it apart but its place in the list.
+  const places = () => savedQueries().map((_, index) => index);
+  const drag = createRowDrag(
+    () => list,
+    places,
+    (next) => setSavedQueries(next.map((index) => savedQueries()[index])).then(() => setError(null)),
+    report,
+  );
+
+  const change = (index: number, changes: Partial<SavedQuery>) =>
+    save(savedQueries().map((saved, i) => (i === index ? { ...saved, ...changes } : saved)));
+
+  return (
+    <>
+      <h3>Saved queries</h3>
+      <p class="hint">
+        Queries kept to be used again. The + under the search box adds one as a row of the search,
+        narrowing the results down to what it matches as well; the row is a copy, so changing a
+        saved query here leaves the tabs that used it as they are. The bookmark beside a row of
+        the search box saves that row here. Drag a row by its handle to change the order they are
+        offered in.
+      </p>
+      <Show when={savedQueries().length > 0}>
+        <ul class="setting-rows" ref={list}>
+          <For each={drag.order()}>
+            {(index) => (
+              <li classList={{ dragging: drag.dragging() === index }}>
+                <span
+                  class="drag-handle"
+                  title="Drag to reorder"
+                  onPointerDown={(event) => drag.start(index, event)}
+                >
+                  <Icon name="drag-indicator" />
+                </span>
+                <input
+                  class="saved-name"
+                  type="text"
+                  aria-label="Name"
+                  placeholder="Name"
+                  value={savedQueries()[index]?.name ?? ""}
+                  onChange={(event) => change(index, { name: event.currentTarget.value.trim() })}
+                />
+                <input
+                  class="saved-query"
+                  type="text"
+                  aria-label="Query"
+                  placeholder="rating=safe score>=5"
+                  spellcheck={false}
+                  autocomplete="off"
+                  autocapitalize="off"
+                  value={savedQueries()[index]?.query ?? ""}
+                  onChange={(event) => change(index, { query: event.currentTarget.value.trim() })}
+                />
+                <button
+                  aria-label="Delete this saved query"
+                  title="Delete this saved query"
+                  onClick={() => save(savedQueries().filter((_, i) => i !== index))}
+                >
+                  <Icon name="delete-outline" />
+                </button>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
+      <p>
+        <button onClick={() => save([...savedQueries(), { name: "", query: "" }])}>
+          Add a query
+        </button>
+      </p>
       <Show when={error()}>
         <p class="form-error" role="alert">
           {error()}
@@ -256,6 +366,9 @@ export default function SettingsModal(props: { onClose: () => void }) {
           <Switch>
             <Match when={section() === "tagTypes"}>
               <TagTypes />
+            </Match>
+            <Match when={section() === "savedQueries"}>
+              <SavedQueries />
             </Match>
             <Match when={section() === "hotkeys"}>
               <Hotkeys />

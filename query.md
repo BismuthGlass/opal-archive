@@ -251,6 +251,22 @@ only when the query has exactly one top-level `in=<id>` term).
 Entities with no value for the key sort last in either direction. The default
 is `sort=-added`. Ties are broken by `id`, in the direction of the first key.
 
+## Stacked queries
+
+A query may be several lines. Each line is a query of its own, and the
+result is what every line matches: each narrows down what the ones before it
+found. The search box shows them as rows.
+
+```
+cat or dog
+rating=safe score>=5
+```
+
+is `(cat or dog) (rating=safe score>=5)`, without the parentheses having to be
+written. Every line is a top level, so each may carry `sort=` terms (they
+apply in the order written, across lines) and `@trashed`. Empty lines are
+skipped.
+
 ## Semantics worth knowing
 
 - Results include both files and collections unless `kind=` says otherwise.
@@ -259,7 +275,8 @@ is `sort=-added`. Ties are broken by `id`, in the direction of the first key.
   the other kind: `-ext=png` returns collections too.
 - Negating a multi-valued term means "has no matching value": `-genre=horror`
   excludes anything with horror among its genres.
-- Errors are reported with the character position and nothing is searched.
+- Errors are reported with the character position, and the line for a
+  stacked query, and nothing is searched.
   There is no fallback to a looser interpretation.
 
 ## Not in this draft

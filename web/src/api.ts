@@ -154,8 +154,10 @@ export const COLLECTION_TYPES = ["usercollection", "set", "sequence", "variant",
 export const CONTENT_RATINGS = ["safe", "risky", "nsfw"];
 
 export class ApiError extends Error {
-  /** Character offset into the query, for query errors. */
+  /** Character offset into the line, for query errors. */
   position?: number;
+  /** The line of a stacked query the error is in, from 0. */
+  line?: number;
   /** The HTTP status the server answered with. */
   status?: number;
 }
@@ -170,6 +172,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     const detail = await res.json().catch(() => null);
     const error = new ApiError(detail?.error ?? `HTTP ${res.status}`);
     error.position = detail?.position;
+    error.line = detail?.line;
     error.status = res.status;
     throw error;
   }

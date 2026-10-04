@@ -1,25 +1,77 @@
-import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, Index, onCleanup, onMount, Show } from "solid-js";
+import { errorMessage } from "../format";
+import { queryLabel, savedQueries, saveQuery } from "../savedQueries";
 import { search } from "../search";
 import { activeTab, setQuery } from "../tabs";
+import Icon from "./Icon";
 
-/** The query of the active tab, with the error it produced, if any. */
+/** A stacked query is kept as one line per row. */
+const rowsOf = (query: string) => query.split("\n");
+
+/**
+ * The query of the active tab, with the error it produced, if any. It is a
+ * stack of rows, each a query of its own: what is found is what every row
+ * matches.
+ */
 export default function QueryBar() {
-  let input!: HTMLTextAreaElement;
-  const [draft, setDraft] = createSignal("");
+  const inputs: HTMLTextAreaElement[] = [];
+  const [rows, setRows] = createSignal([""]);
+  /** Whether the + button's menu of saved queries is open. */
+  const [menu, setMenu] = createSignal(false);
+  /** The row being saved, while its name is typed. */
+  const [naming, setNaming] = createSignal<number | null>(null);
+  const [saveError, setSaveError] = createSignal<string | null>(null);
 
-  // Switching tabs, or a saved change, resets the box to the tab's query.
-  createEffect(() => setDraft(activeTab()?.query ?? ""));
+  const stored = () => activeTab()?.query ?? "";
+  /** The saved queries there is something to add from. */
+  const offered = () => savedQueries().filter((saved) => saved.query.trim() !== "");
 
-  // The box grows with the query instead of scrolling sideways.
+  // Switching tabs, or a saved change, resets the rows to the tab's query.
   createEffect(() => {
-    draft();
-    input.style.height = "auto";
-    input.style.height = `${input.scrollHeight + 2}px`;
+    setRows(rowsOf(stored()));
+    setNaming(null);
   });
 
+  // Rows left empty are not part of the query.
   const submit = () => {
     const tab = activeTab();
-    if (tab && draft() !== tab.query) setQuery(tab.id, draft());
+    const query = rows()
+      .map((row) => row.trim())
+      .filter((row) => row !== "")
+      .join("\n");
+    if (tab && query !== tab.query) setQuery(tab.id, query);
+  };
+
+  const setRow = (index: number, text: string) =>
+    setRows(rows().map((row, i) => (i === index ? text : row)));
+
+  const focus = (index: number) => queueMicrotask(() => inputs[index]?.focus());
+
+  const addRow = () => {
+    setRows([...rows(), ""]);
+    focus(rows().length - 1);
+  };
+
+  /** Adds a saved query as a row, in place of a last row left empty. */
+  const addSaved = (query: string) => {
+    const kept = rows().at(-1)?.trim() === "" ? rows().slice(0, -1) : rows();
+    setRows([...kept, query]);
+    submit();
+  };
+
+  const removeRow = (index: number) => {
+    const rest = rows().filter((_, i) => i !== index);
+    setRows(rest.length > 0 ? rest : [""]);
+    setNaming(null);
+    submit();
+  };
+
+  const save = (index: number, name: string) => {
+    setNaming(null);
+    saveQuery(name.trim(), rows()[index].trim()).then(
+      () => setSaveError(null),
+      (err) => setSaveError(errorMessage(err)),
+    );
   };
 
   // "/" focuses the search box from anywhere outside a text field.
@@ -28,12 +80,19 @@ export default function QueryBar() {
     const typing = target.matches("input, textarea, select, [contenteditable]");
     if (event.key === "/" && !typing && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
-      input.focus();
-      input.select();
+      inputs[0].focus();
+      inputs[0].select();
     }
   };
   onMount(() => document.addEventListener("keydown", onKeyDown));
   onCleanup(() => document.removeEventListener("keydown", onKeyDown));
+
+  const placeholder = () =>
+    activeTab()?.kind === "upload"
+      ? "Filter these uploads"
+      : activeTab()?.kind === "collection"
+        ? "Filter this collection"
+        : "cat creator=someone score>=5";
 
   return (
     <form
@@ -44,46 +103,165 @@ export default function QueryBar() {
         submit();
       }}
     >
-      <textarea
-        ref={input}
-        rows={1}
-        aria-label="Search query"
-        placeholder={
-          activeTab()?.kind === "upload"
-            ? "Filter these uploads"
-            : activeTab()?.kind === "collection"
-              ? "Filter this collection"
-              : "cat creator=someone score>=5"
-        }
-        spellcheck={false}
-        autocomplete="off"
-        autocapitalize="off"
-        value={draft()}
-        // A query is one line: line breaks become spaces.
-        onInput={(event) => setDraft(event.currentTarget.value.replace(/\n/g, " "))}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            submit();
-          } else if (event.key === "Escape") {
-            setDraft(activeTab()?.query ?? "");
-            input.blur();
-          }
+      <Index each={rows()}>
+        {(row, index) => {
+          // The box grows with the query instead of scrolling sideways.
+          createEffect(() => {
+            row();
+            const input = inputs[index];
+            input.style.height = "auto";
+            input.style.height = `${input.scrollHeight + 2}px`;
+          });
+          return (
+            <>
+              <div class="query-row">
+                <textarea
+                  ref={(el) => (inputs[index] = el)}
+                  rows={1}
+                  aria-label={rows().length > 1 ? `Search query, row ${index + 1}` : "Search query"}
+                  aria-invalid={search.error?.line === index && rows().length > 1}
+                  placeholder={index === 0 ? placeholder() : "Narrow it down"}
+                  spellcheck={false}
+                  autocomplete="off"
+                  autocapitalize="off"
+                  value={row()}
+                  // A row is one line: line breaks become spaces.
+                  onInput={(event) => setRow(index, event.currentTarget.value.replace(/\n/g, " "))}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      submit();
+                    } else if (event.key === "Escape") {
+                      setRows(rowsOf(stored()));
+                      event.currentTarget.blur();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  aria-label="Save this query"
+                  title="Save this query, to use it again"
+                  disabled={row().trim() === ""}
+                  onClick={() => setNaming(naming() === index ? null : index)}
+                >
+                  <Icon name="bookmark-outline" />
+                </button>
+                <Show when={rows().length > 1}>
+                  <button
+                    type="button"
+                    aria-label="Remove this row"
+                    title="Remove this row"
+                    onClick={() => removeRow(index)}
+                  >
+                    <Icon name="close" />
+                  </button>
+                </Show>
+              </div>
+              <Show when={naming() === index}>
+                <input
+                  class="query-name"
+                  type="text"
+                  aria-label="Name of the saved query"
+                  placeholder="Name it, then Enter"
+                  ref={(el) => queueMicrotask(() => el.focus())}
+                  onBlur={() => setNaming(null)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      save(index, event.currentTarget.value);
+                    } else if (event.key === "Escape") {
+                      setNaming(null);
+                    }
+                  }}
+                />
+              </Show>
+            </>
+          );
         }}
-      />
-      <button type="submit" class="primary">
-        Search
-      </button>
+      </Index>
+      <div class="query-actions">
+        <div
+          class="query-add"
+          // Closes when focus leaves the button and its menu.
+          onFocusOut={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMenu(false);
+          }}
+          // A native listener, so stopping the event keeps Escape from also
+          // clearing the selection.
+          on:keydown={(event) => {
+            if (event.key === "Escape" && menu()) {
+              event.stopPropagation();
+              setMenu(false);
+            }
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Add a row"
+            title="Add a row, to narrow the results down"
+            aria-haspopup={offered().length > 0 ? "menu" : undefined}
+            aria-expanded={offered().length > 0 ? menu() : undefined}
+            // With nothing saved there is nothing to choose from.
+            onClick={() => (offered().length > 0 ? setMenu(!menu()) : addRow())}
+          >
+            <Icon name="add" />
+          </button>
+          <Show when={menu()}>
+            <ul class="suggestions" role="menu">
+              <li role="none">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenu(false);
+                    addRow();
+                  }}
+                >
+                  Empty row
+                </button>
+              </li>
+              <li class="menu-divider" role="separator" />
+              <For each={offered()}>
+                {(saved) => (
+                  <li role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      title={saved.query}
+                      onClick={() => {
+                        setMenu(false);
+                        addSaved(saved.query);
+                      }}
+                    >
+                      {queryLabel(saved)}
+                    </button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
+        </div>
+        <button type="submit" class="primary">
+          Search
+        </button>
+      </div>
       <Show when={search.error}>
         {(error) => (
           <p class="form-error" role="alert">
             {error().message}
             <Show when={error().position !== undefined}>
               {" "}
-              (at character {error().position! + 1})
+              (
+              <Show when={search.query.includes("\n")}>row {(error().line ?? 0) + 1}, </Show>
+              at character {error().position! + 1})
             </Show>
           </p>
         )}
+      </Show>
+      <Show when={saveError()}>
+        <p class="form-error" role="alert">
+          {saveError()}
+        </p>
       </Show>
     </form>
   );

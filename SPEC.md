@@ -56,6 +56,14 @@ What a view lists is decided when its search is calculated, and stays put after 
 
 The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab or downloaded into a download tab, a collection created inside the collection a tab shows).
 
+## Stacked and saved queries
+
+A search is a stack of queries, shown as rows in the search box. Each row is a query of its own, and narrows down what the rows before it found. A + under the rows adds one; a row can be taken out again. Rows left empty count for nothing.
+
+A row can be saved under a name, to be used again: the + then offers the saved queries, and choosing one adds it as a row and runs the search. The row is a copy. Changing or deleting a saved query afterwards leaves the tabs that used it as they are.
+
+The saved queries are a setting. The settings list them, to write, rename, delete and drag into the order they are offered in.
+
 ## Playing a view
 
 The viewer, opened on any result of a view, can play through the results by itself. A button starts and stops it; beside it are how many seconds each result stays up, and whether they come in the view's order or at random. Both are settings, kept for next time.
