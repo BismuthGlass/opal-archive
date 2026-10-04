@@ -16,6 +16,7 @@ metroid:samus                         has the tag "metroid:samus"
 @ge:horror,scifi                      horror or scifi
 (cat or dog) rating=safe              grouping and alternatives
 media=video -@cr:*                    videos with no creator
+@bu:reference                         what is kept in the bucket "reference"
 @trashed                              what is in the trash
 in=(type=sequence title~holiday)      members of matching collections
 width>=1920 length<30s sort=-score    attribute filters and ordering
@@ -115,6 +116,22 @@ A namespace is part of the tag, so the wildcard is how to search one:
 @ch:*:samus                 samus in any namespace
 @ch:samus                   only the samus that has no namespace
 ```
+
+A bucket (`@bu:`) is the tag type for keeping apart things that have little
+to do with each other: the broad pile something is kept in, such as
+`reference` or `wallpapers`. Something can be in several buckets, and buckets
+nest with namespaces like any tag. A bucket narrows a search only when the
+query names one; otherwise every bucket is searched.
+
+```
+@bu:reference               kept in the bucket reference
+@bu:reference:*             in any bucket under reference
+@bu:reference cat           cats, among the reference only
+-@bu:*                      not in any bucket yet
+```
+
+In a stacked query a bucket does well as a row of its own, and as a saved
+query to add that row with.
 
 A tag can be an alias of another tag. Searching for an alias searches for the
 tag it stands for, so if `kitty` is an alias of `cat`, `kitty` and `-kitty`
