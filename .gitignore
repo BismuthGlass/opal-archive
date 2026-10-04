@@ -4,3 +4,9 @@
 /web/dist
 *.swp
 __pycache__/
+.DS_Store
+*.log
+.env
+.env.*
+/.claude/settings.local.json
+/web/vite.scratch.config.ts
