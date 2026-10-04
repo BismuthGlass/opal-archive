@@ -176,6 +176,9 @@ struct Whole {
     tags: BaseTags,
     /// Whether it keeps what is put in it in order. It does if not said.
     ordered: Option<bool>,
+    /// The collection it is itself to be put in: a board, for the set of
+    /// one of its posts.
+    collection: Option<Box<Whole>>,
 }
 
 /// One line of a downloader's output.
@@ -729,34 +732,37 @@ impl Download {
         let mut conn = self.state.db.lock().unwrap();
         let tx = conn.transaction()?;
         let tagged = entities::ids_json(&ids);
-        // The collection the downloader asks for holds the files, in order.
-        let whole = match &item.collection {
-            Some(whole) if !ids.is_empty() && !whole.id.trim().is_empty() => {
-                let kind = whole.kind.as_deref().unwrap_or("set");
-                if !COLLECTION_TYPES.contains(&kind) {
-                    return Err(ApiError::BadRequest(format!(
-                        "`{kind}` is not a type of collection"
-                    )));
-                }
-                let wanted = whole.id.trim();
-                let title = text(&whole.title);
-                let title = title.as_deref().unwrap_or(wanted);
-                let ordered = whole.ordered.unwrap_or(true);
-                let id = collection_of(&tx, wanted, kind, title, ordered, &ids)?;
-                let json = entities::ids_json(&[id]);
-                if let Some(url) = text(&whole.url) {
-                    entities::add_to_list(&tx, &json, SOURCE_URLS, &url)?;
-                }
-                // It is listed under the tab beside its files.
-                tx.execute(
-                    "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
-                     SELECT id, ?2 FROM tab WHERE id = ?1",
-                    params![self.tab, id],
-                )?;
-                Some((json, text(&whole.description), &whole.tags))
+        // The collection the downloader asks for holds the files, in order;
+        // the one that collection is in holds it, and so on outwards.
+        let mut wholes = Vec::new();
+        let mut members = ids.clone();
+        let mut next = item.collection.as_ref().filter(|_| !ids.is_empty());
+        while let Some(whole) = next.filter(|whole| !whole.id.trim().is_empty()) {
+            let kind = whole.kind.as_deref().unwrap_or("set");
+            if !COLLECTION_TYPES.contains(&kind) {
+                return Err(ApiError::BadRequest(format!(
+                    "`{kind}` is not a type of collection"
+                )));
             }
-            _ => None,
-        };
+            let wanted = whole.id.trim();
+            let title = text(&whole.title);
+            let title = title.as_deref().unwrap_or(wanted);
+            let ordered = whole.ordered.unwrap_or(true);
+            let id = collection_of(&tx, wanted, kind, title, ordered, &members)?;
+            let json = entities::ids_json(&[id]);
+            if let Some(url) = text(&whole.url) {
+                entities::add_to_list(&tx, &json, SOURCE_URLS, &url)?;
+            }
+            // It is listed under the tab beside its files.
+            tx.execute(
+                "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
+                 SELECT id, ?2 FROM tab WHERE id = ?1",
+                params![self.tab, id],
+            )?;
+            wholes.push((json, text(&whole.description), &whole.tags));
+            members = vec![id];
+            next = whole.collection.as_deref();
+        }
         // What the user has written is never written over.
         let fill = |ids: &str, column: &str, value: &Option<String>| {
             let Some(value) = value else { return Ok(0) };
@@ -770,7 +776,7 @@ impl Download {
         };
         fill(&tagged, "title", &title)?;
         fill(&tagged, "description", &description)?;
-        if let Some((whole, description, _)) = &whole {
+        for (whole, description, _) in &wholes {
             fill(whole, "description", description)?;
         }
         if let Some(url) = source_url {
@@ -791,13 +797,13 @@ impl Download {
                 Some((field.clone(), tags::normalize(&field, &value).ok()?))
             })
         };
-        // The files and the collection both get the source and the tab's
+        // The files and the collections all get the source and the tab's
         // tags; beyond those, each gets the tags the script gave it.
         let shared: Vec<_> = source.into_iter().chain(each(&self.base)).collect();
         let mut given: Vec<(&str, (String, String))> = Vec::new();
         given.extend(shared.iter().cloned().map(|tag| (tagged.as_str(), tag)));
         given.extend(checked(&item.tags).map(|tag| (tagged.as_str(), tag)));
-        if let Some((whole, _, tags)) = &whole {
+        for (whole, _, tags) in &wholes {
             given.extend(shared.iter().cloned().map(|tag| (whole.as_str(), tag)));
             given.extend(checked(tags).map(|tag| (whole.as_str(), tag)));
         }

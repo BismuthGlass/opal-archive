@@ -799,7 +799,7 @@ async fn a_bad_query_says_where() {
 
 /// A downloader that fetches from nowhere: two things, the first put in a
 /// collection for its board and the second, of two files, in a set of its
-/// own, and a complaint.
+/// own that is in the board's collection too, and a complaint.
 const FAKE_DOWNLOADER: &str = r#"
 [ "$1" = download ] || exit 2
 input=$(cat)
@@ -820,7 +820,7 @@ for n in 1 2; do
   fi
   whole='"id":"fake:board","type":"sourceset","url":"https://example.test/board","title":"Board"'
   if [ "$n" = 2 ]; then
-    whole='"id":"fake#2","url":"'$key'","description":" A pair ","tags":{"genre":["Twos"],"nonsense":["x"]}'
+    whole='"id":"fake#2","url":"'$key'","description":" A pair ","tags":{"genre":["Twos"],"nonsense":["x"]},"collection":{'$whole'}'
   fi
   more='"title":" Thing '$n' ","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]},"collection":{'$whole'}'
   echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":\"$key\",\"files\":[$files],$more}"
@@ -997,10 +997,15 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         [tag("https://example.test/item/2", 1)]
     );
 
-    // The first asked for a collection of another type and address.
+    // The first asked for a collection of another type and address, and
+    // the second for its set to be put in the same one: it holds the file
+    // of the one and the set of the other.
     let wholes = api.found("type=sourceset").await;
     assert_eq!(wholes.len(), 1);
-    assert_eq!(api.members(wholes[0]), [(files[0], Some(0))]);
+    assert_eq!(
+        api.members(wholes[0]),
+        [(files[0], Some(0)), (sets[0], Some(1))]
+    );
     let whole = api.metadata(&wholes).await;
     assert_eq!(whole["scalars"]["title"]["value"], "Board");
     assert_eq!(carried(&whole, "source"), [tag("fakesite", 1)]);
@@ -1054,6 +1059,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     assert_eq!(api.found("type=set").await, sets);
     assert_eq!(api.found("type=sourceset").await, wholes);
     assert_eq!(api.members(sets[0]).len(), 2);
+    assert_eq!(api.members(wholes[0]).len(), 2);
     assert_eq!(
         api.metadata(&sets).await["scalars"]["title"]["value"],
         "A pair of mine"

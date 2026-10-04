@@ -95,7 +95,8 @@ Nothing is put in a collection unless the item asks. It asks with
   "title": "…",
   "description": "…",
   "tags": { "creator": ["Someone"] },
-  "ordered": true
+  "ordered": true,
+  "collection": { "id": "pinterest:someone:a-board", "type": "sourceset" }
 }
 ```
 
@@ -108,6 +109,7 @@ Nothing is put in a collection unless the item asks. It asks with
 | `description` | Given to it if it has none                                               |
 | `tags`        | Tags of its own, as an item's                                            |
 | `ordered`     | Whether it keeps its members in the order they arrive. It does if left out |
+| `collection`  | The collection this one is itself to be put in, described the same way, and so on to any depth |
 
 The `id` is what the collection is found by. The first item to name one
 makes the collection, with that type, title and `ordered`; every later one,
@@ -122,7 +124,17 @@ The collection always gets the manifest's `source` and the tab's tags; it
 does not get the item's own tags, title or description, only what
 `collection` says. It is listed in the tab, beside the files.
 
-Two shapes come of this. An item of several files that asks for a `set`
+A collection that names a `collection` of its own is put in that one, as a
+member like any other, and the files are not: a board then holds the files
+of its posts of one file and the sets of its posts of several. Every
+collection named is made, found, tagged and listed as described above.
+
+IDs can be namespaced with colons, as tags are, to say what a collection is
+part of: `pinterest:<user>:<board>:<section>`.
+
+Three shapes come of this. Pinterest puts what it downloads from a board in
+a `sourceset` for the board, and from a section in one for the section,
+which is in the board's. An item of several files that asks for a `set`
 with an ID of its own makes one collection per post: Pinterest does this
 for a pin of several images. Items that all give the same `id` gather in
 one collection: 4chan does this with a `sourceset` for the thread.

@@ -13,6 +13,11 @@
       "default": true
     },
     {
+      "key": "collection",
+      "label": "Put the pins of a board or section in a collection for it",
+      "default": true
+    },
+    {
       "key": "video",
       "label": "Download videos",
       "default": true

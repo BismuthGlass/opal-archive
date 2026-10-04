@@ -134,6 +134,27 @@ def board_pins(user: str, slug: str, only_section: str | None, recursive: bool) 
     """
     board = get_board(user, slug)
     emit("log", message=f"Listing {board['name']}")
+    # The collections its pins go in: one for the board, and inside it one
+    # for each section. Named as Pinterest names them, not as was typed.
+    names = [unquote(p) for p in (board.get("url") or "").split("/") if p]
+    owner, name = names if len(names) == 2 else (user, slug)
+    address = f"https://www.pinterest.com/{owner}/{name}/"
+    in_board = {
+        "id": f"pinterest:{owner}:{name}",
+        "type": "sourceset",
+        "url": address,
+        "title": board["name"],
+    }
+
+    def in_section(section: dict) -> dict:
+        return {
+            "id": f"{in_board['id']}:{section['slug']}",
+            "type": "sourceset",
+            "url": f"{address}{section['slug']}/",
+            "title": section.get("title") or section["slug"],
+            "collection": in_board,
+        }
+
     sections = list_sections(board["id"]) if board.get("section_count") or only_section else []
     if only_section:
         sections = [s for s in sections if s["slug"] == only_section]
@@ -145,10 +166,10 @@ def board_pins(user: str, slug: str, only_section: str | None, recursive: bool) 
         found = list_pins("BoardSectionPins", {"section_id": section["id"]})
         in_sections.update(p["id"] for p in found)
         if recursive or only_section:
-            pins += found
+            pins += [{**p, "_in": in_section(section)} for p in found]
     if not only_section:
         feed = list_pins("BoardFeed", {"board_id": board["id"], "field_set_key": "react_grid_pin"})
-        pins += [p for p in feed if p["id"] not in in_sections]
+        pins += [{**p, "_in": in_board} for p in feed if p["id"] not in in_sections]
     return pins
 
 
@@ -314,7 +335,10 @@ def download() -> int:
                 emit("error", key=key, message=f"{key}: {err}")
                 continue
             description = (pin.get("description") or "").strip()
-            # A pin of several files becomes a set, named for the pin.
+            # A pin of several files becomes a set, named for the pin. What is
+            # downloaded from a board goes in the board's collection: the
+            # pin's files, or its set.
+            inside = pin.get("_in") if options.get("collection", True) else None
             whole = {}
             if len(files) > 1:
                 whole["collection"] = {
@@ -323,6 +347,10 @@ def download() -> int:
                     "url": key,
                     "description": description,
                 }
+                if inside:
+                    whole["collection"]["collection"] = inside
+            elif inside:
+                whole["collection"] = inside
             emit(
                 "item",
                 key=key,
