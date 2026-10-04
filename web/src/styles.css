@@ -749,6 +749,11 @@ button.primary {
   justify-content: space-between;
 }
 
+.query-actions > button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .query-add {
   position: relative;
   margin-left: -3px;

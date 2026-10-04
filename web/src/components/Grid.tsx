@@ -244,11 +244,13 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
         <p class="empty">
           {stats()?.files === 0 && stats()?.collections === 0
             ? "The library is empty. Open an upload tab with +, or drop files here."
-            : inside() && search.query === ""
-              ? EMPTY.collection
-              : search.scope !== null && search.query === ""
-                ? EMPTY[activeTab()?.kind ?? "upload"]
-                : "No results."}
+            : search.idle
+              ? "Press Search to list the whole library, or type a query first."
+              : inside() && search.query === ""
+                ? EMPTY.collection
+                : search.scope !== null && search.query === ""
+                  ? EMPTY[activeTab()?.kind ?? "upload"]
+                  : "No results."}
         </p>
       </Show>
       <div class="grid" style={{ height: `${rows() * rowHeight() + 2 * PADDING - GAP}px` }}>

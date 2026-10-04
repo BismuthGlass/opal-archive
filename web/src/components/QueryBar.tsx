@@ -1,7 +1,7 @@
 import { createEffect, createSignal, For, Index, onCleanup, onMount, Show } from "solid-js";
 import { errorMessage } from "../format";
 import { queryLabel, savedQueries, saveQuery } from "../savedQueries";
-import { search } from "../search";
+import { refresh, search } from "../search";
 import { activeTab, filterInside, inside, setQuery } from "../tabs";
 import Icon from "./Icon";
 
@@ -34,13 +34,21 @@ export default function QueryBar() {
   });
 
   // Rows left empty are not part of the query.
-  const submit = () => {
-    const tab = activeTab();
-    const query = rows()
+  const typed = () =>
+    rows()
       .map((row) => row.trim())
       .filter((row) => row !== "")
       .join("\n");
-    if (inside()) {
+  /** Whether searching would do anything: the query on show is this one. */
+  const unchanged = () => typed() === stored() && !search.idle;
+
+  const submit = () => {
+    const tab = activeTab();
+    const query = typed();
+    if (query === stored() && search.idle) {
+      // The search a newly opened tab was waiting to be asked for.
+      refresh();
+    } else if (inside()) {
       if (query !== inside()!.query) filterInside(query);
     } else if (tab && query !== tab.query) {
       setQuery(tab.id, query);
@@ -246,7 +254,16 @@ export default function QueryBar() {
             </ul>
           </Show>
         </div>
-        <button type="submit" class="primary">
+        <button
+          type="submit"
+          class="primary"
+          disabled={unchanged()}
+          title={
+            unchanged()
+              ? "These are the results of this query. Refresh calculates them again."
+              : undefined
+          }
+        >
           Search
         </button>
       </div>

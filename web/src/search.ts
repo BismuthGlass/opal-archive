@@ -22,6 +22,11 @@ const [search, setSearch] = createStore({
   total: 0,
   /** False until the first page of the current query has arrived. */
   ready: false,
+  /**
+   * Whether the search is waiting to be asked for: a gallery tab opened on
+   * the whole library lists nothing until Search is pressed.
+   */
+  idle: false,
   error: null as SearchError | null,
 });
 const [pages, setPages] = createStore<Record<number, Item[]>>({});
@@ -243,6 +248,8 @@ export function runSearch(
   tab: number | null = null,
   /** A collection to show the members of, in place of what `scope` holds. */
   collection: number | null = null,
+  /** Whether to wait to be asked, if the tab has no view of this query yet. */
+  wait = false,
 ) {
   // The view being left is saved now, not after its delay.
   flushSave();
@@ -251,6 +258,8 @@ export function runSearch(
   generation += 1;
   seed = Math.floor(Math.random() * 2 ** 31);
   requested = new Set();
+  /** Whether the tab on show goes back to a query it has shown before. */
+  const back = tab !== null && viewTab === tab;
   viewKey = key;
   viewTab = tab;
   known.clear();
@@ -268,6 +277,7 @@ export function runSearch(
     custom: seen?.custom ?? false,
     total: 0,
     ready: false,
+    idle: false,
     error: null,
   });
   setSelected(left?.selected ?? new Set<number>());
@@ -278,6 +288,8 @@ export function runSearch(
     // Voids a calculation still running for the view just left.
     calculation += 1;
     calculated = Promise.resolve();
+    // It is the tab's view again, in place of the one saved with it.
+    if (back) remember();
   } else if (tab === null) {
     calculate();
   } else {
@@ -293,6 +305,9 @@ export function runSearch(
           ids = saved.ids;
           setSearch("custom", saved.custom);
           views.set(viewKey, { ids, custom: saved.custom });
+        } else if (wait) {
+          // Nothing is listed, and nothing saved, until it is asked for.
+          setSearch("idle", true);
         } else {
           calculate();
           return calculated;
@@ -363,6 +378,7 @@ export function refresh() {
   requested = new Set();
   anchor = null;
   known.clear();
+  setSearch("idle", false);
   calculate();
   setDataVersion((n) => n + 1);
   loadPage(search.page);

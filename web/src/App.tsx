@@ -78,6 +78,8 @@ export default function App() {
   // Each tab shows a search, over the library or over what the tab holds
   // (its uploads, or a collection's members): run it when the tab or its
   // query changes.
+  /** The tab the last search was shown in, and whether inside a collection. */
+  let shown: { tab: number; inside: boolean } | null = null;
   createEffect(
     on(
       () => {
@@ -94,11 +96,16 @@ export default function App() {
         setViewing(null);
         const tab = activeTab()!;
         const step = inside();
+        // The query of the tab on show changed: the search was asked for.
+        const asked = shown?.tab === tab.id && !shown.inside && !step;
+        shown = { tab: tab.id, inside: !!step };
         if (step) {
           // Not saved with the tab: the trail is the page's alone.
           runSearch(step.query, null, key, null, step.id);
         } else {
-          runSearch(tab.query, tab.kind === "gallery" ? null : tab.id, key, tab.id);
+          // Listing the whole library is not done just for opening a tab.
+          const wait = tab.kind === "gallery" && tab.query === "" && !asked;
+          runSearch(tab.query, tab.kind === "gallery" ? null : tab.id, key, tab.id, null, wait);
         }
       },
     ),
