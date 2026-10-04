@@ -19,6 +19,7 @@ media=video -@cr:*                    videos with no creator
 @bu:reference                         what is kept in the bucket "reference"
 @trashed                              what is in the trash
 in=(type=sequence title~holiday)      members of matching collections
+within=12                             what is in collection 12, at any depth
 width>=1920 length<30s sort=-score    attribute filters and ordering
 ```
 
@@ -191,12 +192,15 @@ collection_id=*:celebs                           whatever ends in celebs
 has=collection_id                                collections that have an ID
 ```
 
-These find the collections themselves. What is in them is found with `in=`:
+These find the collections themselves. What is in them is found with `in=`
+(their own members) or `within=` (those, and whatever is inside the
+collections among them):
 
 ```
 in=(collection_id=4chan:g:*)                     the files of those threads
-in=(collection_id=pinterest:someone:women,pinterest:someone:women:*)
-                                                 what is in the board or in a section of it
+within=(collection_id=pinterest:someone:women)   everything in the board, sections and all
+within=(collection_id=pinterest:someone:women) kind=file
+                                                 only the files of it
 ```
 
 ### Choice fields
@@ -269,12 +273,20 @@ with no title. For tags, use the wildcard instead: `@cr:*` has a creator.
 | `id=12`         | The entity with that ID. Takes a list: `id=12,15`.        |
 | `in=12`         | Direct members of collection 12                           |
 | `in=(…)`        | Direct members of any collection matching the subquery    |
+| `within=12`     | What is inside collection 12 at any depth: its members, their members, and so on |
+| `within=(…)`    | The same, for every collection matching the subquery      |
 | `contains=12`   | Collections that directly contain entity 12               |
 | `contains=(…)`  | Collections that directly contain a match of the subquery |
 | `has=in`        | Entities that belong to at least one collection           |
 | `has=contains`  | Collections with at least one member                      |
 
 Subqueries are full queries and can nest.
+
+`in` looks one level down and `within` every level: with a board that holds
+a section that holds a file, `in=<board>` finds the section, and
+`within=<board>` the section and the file. A trashed collection on the way
+does not hide what is inside it. `sort=position` goes with `in`, not
+`within`: only direct members have a position.
 
 ## Sorting
 
@@ -321,6 +333,7 @@ skipped.
 ## Not in this draft
 
 - Relative dates (`added>7d`).
-- Transitive membership (members of members).
+- Transitive containment (`contains` through several levels); membership
+  has it, as `within`.
 - Counting values (`tags` has more than five entries).
 - Full-text ranking; `~` is a plain substring match.

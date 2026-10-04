@@ -50,7 +50,7 @@ Every file and collection records when it was added to the library, as a date an
 
 A collection has a title, like a file, which is for people and need not be unique. It may also have a collection ID, which no two collections share: that, and not the title, is what says for certain which collection is meant. It is shown with the collection's details and can be set, changed or cleared there; one that another collection has is refused. `collection_id=` searches for it, and by namespace as a tag is: `collection_id=pinterest:someone:*` finds every collection whose ID is under that.
 
-Collections should behave as their own entities that may also be categorized and searched in the same way as files. The hierarchical directory concept of categories does not apply, as the system isn't directory based. Groups can still belong to other groups, however.
+Collections should behave as their own entities that may also be categorized and searched in the same way as files. The hierarchical directory concept of categories does not apply, as the system isn't directory based. Groups can still belong to other groups, however. A search can ask for what is directly in a collection (`in=`) or for everything inside it at any depth, through the collections it holds (`within=`).
 
 There is no need to support injesting existing sidecar files on file upload for now. We will also support exporting sidecar files, but that's in the future.
 

@@ -147,6 +147,8 @@ enum Field {
     Has,
     Id,
     In,
+    /// In a collection, or in one inside it, at any depth.
+    Within,
     Contains,
     Sort,
 }
@@ -179,6 +181,7 @@ fn lookup(name: &str) -> Option<Field> {
         "has" => Field::Has,
         "id" => Field::Id,
         "in" => Field::In,
+        "within" => Field::Within,
         "contains" => Field::Contains,
         "sort" => Field::Sort,
         _ => return None,
@@ -329,6 +332,8 @@ struct Parser<'a> {
     line: usize,
     /// Subquery nesting; numbers the table aliases.
     depth: usize,
+    /// How many `within` terms there have been; numbers their tables.
+    walks: usize,
     /// Non-zero inside parentheses, negations and subqueries, where `sort=`
     /// is not allowed.
     restricted: usize,
@@ -617,6 +622,21 @@ impl Parser<'_> {
                     let sql = self.relation_subquery(matches!(field, Field::In))?;
                     Ok(negate_if(op == Op::Ne, sql))
                 }
+                Field::Within => {
+                    allow(EQUALITY)?;
+                    self.depth += 1;
+                    let n = self.depth;
+                    let inner = self.parse_group();
+                    self.depth -= 1;
+                    let from = format!(
+                        "SELECT e{n}.id FROM entity e{n}
+                         LEFT JOIN file f{n} ON f{n}.entity_id = e{n}.id
+                         LEFT JOIN collection c{n} ON c{n}.entity_id = e{n}.id
+                         WHERE {}",
+                        inner?
+                    );
+                    Ok(negate_if(op == Op::Ne, self.within(&from)))
+                }
                 _ => error(format!("`{name}` does not take a subquery"), self.pos),
             };
         }
@@ -687,6 +707,11 @@ impl Parser<'_> {
             Field::In | Field::Contains => {
                 allow(EQUALITY)?;
                 self.membership_term(name, matches!(field, Field::In), op, &values)?
+            }
+            Field::Within => {
+                allow(EQUALITY)?;
+                let ids = self.id_list(name, &values)?;
+                self.within(&format!("VALUES {}", ids.replace('?', "(?)")))
             }
             Field::Sort => {
                 if op != Op::Eq {
@@ -763,6 +788,24 @@ impl Parser<'_> {
             "(EXISTS (SELECT 1 FROM membership m WHERE m.{near} = {} AND m.{far} IN ({ids})))",
             self.column('e', "id")
         ))
+    }
+
+    /// Whether the entity is inside one of the collections `from` selects
+    /// the IDs of: a member, or a member of a member, at any depth. What
+    /// is inside them is worked out once, not for every entity.
+    fn within(&mut self, from: &str) -> String {
+        self.walks += 1;
+        let inside = format!("inside{}", self.walks);
+        format!(
+            "({} IN (
+                WITH RECURSIVE {inside} (id) AS (
+                    SELECT member_id FROM membership WHERE collection_id IN ({from})
+                    UNION
+                    SELECT m.member_id FROM membership m JOIN {inside} ON m.collection_id = {inside}.id
+                )
+                SELECT id FROM {inside}))",
+            self.column('e', "id")
+        )
     }
 
     /// Records the keys of a `sort=` term.
@@ -993,7 +1036,7 @@ impl Parser<'_> {
             Some(Field::List(table, _)) => {
                 format!("EXISTS (SELECT 1 FROM {table} l WHERE l.entity_id = {entity})")
             }
-            Some(Field::In) => {
+            Some(Field::In | Field::Within) => {
                 format!("EXISTS (SELECT 1 FROM membership m WHERE m.member_id = {entity})")
             }
             Some(Field::Contains) => {
@@ -1126,6 +1169,7 @@ pub fn compile(source: &str, seed: i64, aliases: &Aliases, include_trashed: bool
         pos: 0,
         line: 0,
         depth: 0,
+        walks: 0,
         restricted: 0,
         params: Vec::new(),
         sorts: Vec::new(),
@@ -1301,6 +1345,51 @@ mod tests {
         );
         assert_eq!(found(&conn, "has=collection_id"), [10, 11, 12]);
         assert_eq!(found(&conn, "kind=collection -has=collection_id"), [4]);
+    }
+
+    #[test]
+    fn within_reaches_through_collections() {
+        let conn = library();
+        // 10 holds 11 and the book; 11 holds 12 and the cat; 12 the dog.
+        conn.execute_batch(
+            "INSERT INTO entity (id, kind, date_added) VALUES
+                 (10, 'collection', '2026-01-02T00:00:00Z'),
+                 (11, 'collection', '2026-01-02T00:00:01Z'),
+                 (12, 'collection', '2026-01-02T00:00:02Z');
+             INSERT INTO collection (entity_id, collection_type, collection_id) VALUES
+                 (10, 'sourceset', 'site:board'),
+                 (11, 'sourceset', 'site:board:section'),
+                 (12, 'set', 'site:pin:77');
+             INSERT INTO membership (collection_id, member_id) VALUES
+                 (10, 11), (10, 5), (11, 12), (11, 1), (12, 2);",
+        )
+        .unwrap();
+        // `in` is one level; `within` is every level.
+        assert_eq!(found(&conn, "in=10"), [5, 11]);
+        assert_eq!(found(&conn, "within=10"), [1, 2, 5, 11, 12]);
+        assert_eq!(found(&conn, "within=11"), [1, 2, 12]);
+        assert_eq!(found(&conn, "within=12"), [2]);
+        assert_eq!(found(&conn, "within=12,4"), [1, 2]);
+        assert_eq!(found(&conn, "within=10 kind=file"), [1, 2, 5]);
+        assert_eq!(found(&conn, "within=10 dog"), [2]);
+        // Negated, and with the collections found by a query of their own.
+        assert_eq!(found(&conn, "kind=file -within=11"), [5]);
+        assert_eq!(found(&conn, "kind=file within!=11"), [5]);
+        assert_eq!(
+            found(&conn, "within=(collection_id=site:board)"),
+            [1, 2, 5, 11, 12]
+        );
+        assert_eq!(
+            found(&conn, "within=(collection_id=site:board:*) kind=file"),
+            [1, 2]
+        );
+        assert_eq!(found(&conn, "within=(type=set)"), [1, 2]);
+        // Inside one another, and beside one another.
+        assert_eq!(found(&conn, "within=(within=10 type=set)"), [2]);
+        assert_eq!(found(&conn, "within=4 within=10 kind=file"), [1, 2]);
+        assert_eq!(found(&conn, "in=(within=10)"), [1, 2, 12]);
+        assert!(fails("within=cat"));
+        assert!(fails("within>10"));
     }
 
     #[test]
