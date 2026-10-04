@@ -231,6 +231,13 @@ a {
   padding: 0;
 }
 
+.tab-new .suggestions li.menu-divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+  cursor: default;
+}
+
 .tab-new .suggestions button {
   display: flex;
   gap: 6px;
