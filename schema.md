@@ -40,6 +40,12 @@ interface FileMetadata {
   // Title of the work.
   title?: string;
 
+  // For a collection: its identifier, the `id` its members refer to it
+  // by. No two collections share one. Unlike the title, which is for
+  // people and need not be unique, it says for certain which collection
+  // is meant: `pinterest#924574998519073090`, or a UUID.
+  collection_id?: string;
+
   // Collections this file belongs to.
   // Since collections may have their own metadata, they can
   // also belong to other collections.

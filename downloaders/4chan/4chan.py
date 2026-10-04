@@ -159,9 +159,8 @@ def download() -> int:
     whole = {}
     if options.get("collection", True):
         address = THREAD.format(board=board, thread=thread)
-        whole = {
-            "collection": {"type": "sourceset", "url": address, "title": f"4chan#{thread}"}
-        }
+        # Thread numbers are a board's own, but one board never reuses one.
+        whole = {"collection": {"id": f"4chan#{thread}", "type": "sourceset", "url": address}}
 
     todo = []
     for post in posts:

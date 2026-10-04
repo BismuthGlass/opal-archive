@@ -148,7 +148,8 @@ fn file_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
 fn collection_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
     conn.query_row(
         "SELECT collection_type,
-                (SELECT count(*) FROM membership WHERE collection_id = ?1), ordered
+                (SELECT count(*) FROM membership WHERE collection_id = ?1), ordered,
+                collection_id
          FROM collection WHERE entity_id = ?1",
         [id],
         |row| {
@@ -156,6 +157,7 @@ fn collection_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Val
                 "collection_type": row.get::<_, String>(0)?,
                 "member_count": row.get::<_, i64>(1)?,
                 "ordered": row.get::<_, bool>(2)?,
+                "collection_id": row.get::<_, Option<String>>(3)?,
             }))
         },
     )
@@ -348,6 +350,7 @@ async fn metadata(
         "scalars": scalars,
         "collection_type": shared_of_collections::<String>(&conn, &ids, "collection_type")?,
         "ordered": shared_of_collections::<bool>(&conn, &ids, "ordered")?,
+        "collection_id": shared_of_collections::<String>(&conn, &ids, "collection_id")?,
         "tags": counted_tags(&conn, &ids)?,
         "source_urls": counted(&conn, &ids, SOURCE_URLS)?,
         "identifiers": counted(&conn, &ids, IDENTIFIERS)?,
@@ -467,11 +470,42 @@ fn prune_tags(conn: &Connection) -> rusqlite::Result<()> {
 /// The table a field that can be set lives on, and that table's ID column.
 fn home(field: &str) -> Option<(&'static str, &'static str)> {
     match field {
-        "collection_type" | "ordered" => Some(("collection", "entity_id")),
+        "collection_type" | "ordered" | "collection_id" => Some(("collection", "entity_id")),
         "original_name" => Some(("file", "entity_id")),
         field if SCALARS.contains(&field) => Some(("entity", "id")),
         _ => None,
     }
+}
+
+/// Checks that a collection ID can be given to the collections among `ids`:
+/// it is one collection's alone, so there can be only one of them, and no
+/// other collection may have it.
+pub fn claim_collection_id(conn: &Connection, ids: &[i64], wanted: &str) -> Result<(), ApiError> {
+    let json = ids_json(ids);
+    let collections: i64 = conn.query_row(
+        &format!("SELECT count(*) FROM collection WHERE entity_id {IN_IDS}"),
+        [&json],
+        |row| row.get(0),
+    )?;
+    if collections > 1 {
+        return Err(ApiError::bad_request(
+            "a collection ID is one collection's alone: it cannot be given to several",
+        ));
+    }
+    let taken: bool = conn.query_row(
+        &format!(
+            "SELECT EXISTS (SELECT 1 FROM collection
+                            WHERE collection_id = ?2 AND entity_id NOT {IN_IDS})"
+        ),
+        params![json, wanted],
+        |row| row.get(0),
+    )?;
+    if taken {
+        return Err(ApiError::BadRequest(format!(
+            "another collection already has the ID `{wanted}`"
+        )));
+    }
+    Ok(())
 }
 
 /// Gives positions to the members of ordered collections that have none,
@@ -588,6 +622,11 @@ async fn edit(
 
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
+    for (field, _, value) in &updates {
+        if let ("collection_id", SqlValue::Text(wanted)) = (*field, value) {
+            claim_collection_id(&tx, &input.ids, wanted)?;
+        }
+    }
     for (field, (table, key), value) in updates {
         tx.execute(
             &format!("UPDATE {table} SET {field} = ?2 WHERE {key} {IN_IDS}"),

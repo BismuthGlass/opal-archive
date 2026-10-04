@@ -160,11 +160,15 @@ struct Item {
 /// the files of one post, or what several posts are part of, as a thread.
 #[derive(Deserialize)]
 struct Whole {
+    /// Its collection ID, which is what tells it from every other: the
+    /// collection that has it is the one used, and no second is made.
+    id: String,
     /// Its type; a `set` if not said.
     #[serde(rename = "type")]
     kind: Option<String>,
-    /// Its address, which with its type is what tells it from the others.
-    url: String,
+    /// Its address on the site, kept as its source URL.
+    url: Option<String>,
+    /// What it is called when it is made; the ID if not said.
     title: Option<String>,
     description: Option<String>,
     /// Tags of its own, by field, besides the source and the tab's.
@@ -727,19 +731,22 @@ impl Download {
         let tagged = entities::ids_json(&ids);
         // The collection the downloader asks for holds the files, in order.
         let whole = match &item.collection {
-            Some(whole) if !ids.is_empty() && !whole.url.trim().is_empty() => {
+            Some(whole) if !ids.is_empty() && !whole.id.trim().is_empty() => {
                 let kind = whole.kind.as_deref().unwrap_or("set");
                 if !COLLECTION_TYPES.contains(&kind) {
                     return Err(ApiError::BadRequest(format!(
                         "`{kind}` is not a type of collection"
                     )));
                 }
-                let url = whole.url.trim();
+                let wanted = whole.id.trim();
                 let title = text(&whole.title);
+                let title = title.as_deref().unwrap_or(wanted);
                 let ordered = whole.ordered.unwrap_or(true);
-                let id = collection_of(&tx, kind, url, title.as_deref(), ordered, &ids)?;
+                let id = collection_of(&tx, wanted, kind, title, ordered, &ids)?;
                 let json = entities::ids_json(&[id]);
-                entities::add_to_list(&tx, &json, SOURCE_URLS, url)?;
+                if let Some(url) = text(&whole.url) {
+                    entities::add_to_list(&tx, &json, SOURCE_URLS, &url)?;
+                }
                 // It is listed under the tab beside its files.
                 tx.execute(
                     "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
@@ -814,38 +821,40 @@ impl Download {
     }
 }
 
-/// The collection of the given type and address, with `files` put in it:
-/// the one already made, found by its source URL, or a new one, with the
-/// title given or named for its type.
+/// The collection with the given collection ID, with `files` put in it:
+/// the one that has it, whatever it has been retitled or made into since,
+/// or a new one of the type and title given.
 fn collection_of(
     conn: &Connection,
+    collection_id: &str,
     collection_type: &str,
-    url: &str,
-    title: Option<&str>,
+    title: &str,
     ordered: bool,
     files: &[i64],
 ) -> Result<i64, ApiError> {
     let made = conn
         .query_row(
-            "SELECT c.entity_id FROM collection c
-             JOIN source_url s ON s.entity_id = c.entity_id
-             WHERE s.url = ?1 AND c.collection_type = ?2 ORDER BY c.entity_id LIMIT 1",
-            [url, collection_type],
+            "SELECT entity_id FROM collection WHERE collection_id = ?1",
+            [collection_id],
             |row| row.get(0),
         )
         .optional()?;
     let collection = match made {
-        Some(collection) => collection,
+        Some(collection) => {
+            // Like a file that arrives again, it comes back out of the trash.
+            conn.execute("UPDATE entity SET trashed = 0 WHERE id = ?1", [collection])?;
+            collection
+        }
         None => {
             conn.execute(
                 "INSERT INTO entity (kind, title) VALUES ('collection', ?1)",
-                [title.unwrap_or(collections::default_title(collection_type))],
+                [title],
             )?;
             let collection = conn.last_insert_rowid();
             conn.execute(
-                "INSERT INTO collection (entity_id, collection_type, ordered)
-                 VALUES (?1, ?2, ?3)",
-                params![collection, collection_type, ordered],
+                "INSERT INTO collection (entity_id, collection_type, ordered, collection_id)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![collection, collection_type, ordered, collection_id],
             )?;
             collection
         }

@@ -89,6 +89,7 @@ Nothing is put in a collection unless the item asks. It asks with
 
 ```json
 "collection": {
+  "id": "pinterest#924574998519073090",
   "type": "set",
   "url": "https://…",
   "title": "…",
@@ -100,24 +101,31 @@ Nothing is put in a collection unless the item asks. It asks with
 
 | Field         | Meaning                                                                  |
 | ------------- | ------------------------------------------------------------------------ |
-| `url`         | Its address on the site. Required: with the type, it is what tells one collection from another, and it becomes the collection's source URL |
+| `id`          | Required. Its collection ID, which no two collections in the library share. Start it with the downloader's name, so that it cannot meet another downloader's: `pinterest#…`, `4chan#…` |
 | `type`        | `set`, `sourceset`, `sequence`, `variant` or `usercollection`. A `set` if left out |
-| `title`       | What it is called. Named for its type if left out                        |
+| `url`         | Its address on the site, kept as its source URL                          |
+| `title`       | What it is called. The `id` if left out                                  |
 | `description` | Given to it if it has none                                               |
 | `tags`        | Tags of its own, as an item's                                            |
 | `ordered`     | Whether it keeps its members in the order they arrive. It does if left out |
 
-The collection is made the first time an item names it, and found again
-after that by its type and `url`, so the title and `ordered` only count
-then. The item's files are added to it. It always gets the manifest's
-`source` and the tab's tags; it does not get the item's own tags, title or
-description, only what `collection` says. It is listed in the tab, beside
-the files.
+The `id` is what the collection is found by. The first item to name one
+makes the collection, with that type, title and `ordered`; every later one,
+in any tab and after any restart, finds the collection that has the ID and
+adds its files to it, so no second collection is ever made of the same
+thing. The user is free to retitle it, change its type or take its source
+URL off: none of that is looked at again. If it is in the trash it comes
+back out. Only if it was deleted for good, or its ID was changed, is a new
+one made.
+
+The collection always gets the manifest's `source` and the tab's tags; it
+does not get the item's own tags, title or description, only what
+`collection` says. It is listed in the tab, beside the files.
 
 Two shapes come of this. An item of several files that asks for a `set`
-with its own address makes one collection per post: Pinterest does this for
-a pin of several images. Items that all name the same `url` gather in one
-collection: 4chan does this with a `sourceset` for the thread.
+with an ID of its own makes one collection per post: Pinterest does this
+for a pin of several images. Items that all give the same `id` gather in
+one collection: 4chan does this with a `sourceset` for the thread.
 
 Lines that are not one of these events are ignored. The script ends with
 status 0 when it is done. Any other status means the download failed, and

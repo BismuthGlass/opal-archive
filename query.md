@@ -157,7 +157,7 @@ Trashed entities are left out of every search that does not mention
 Multi-valued: `identifier` `source_url`. These are plain lists, not tags.
 
 Single-valued: `title` `description` `ai_description` `version` `name` `ext`
-`hash`
+`hash` `collection_id`
 
 | Operator | Matches when                                               |
 | -------- | ---------------------------------------------------------- |
@@ -174,7 +174,9 @@ hash=3fa9*                  hash prefix
 For multi-valued fields the term matches if any one of the entity's values
 matches. Write `\*` for a literal asterisk.
 
-`name` is the filename the file was uploaded with, and `ext` its extension
+`collection_id` is a collection's identifier, which no two collections
+share: `collection_id=pinterest#924574998519073090` finds that one
+collection whatever it is titled. `name` is the filename the file was uploaded with, and `ext` its extension
 without the dot.
 
 ### Choice fields

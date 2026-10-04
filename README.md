@@ -101,7 +101,7 @@ is on, for a query of several lines).
 | `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed` and `tab` too      |
 | `GET /entities/{id}`             | Everything about one file or collection                        |
 | `POST /entities/metadata`        | `{ids}` → what those entities have in common                   |
-| `POST /entities/edit`            | `{ids, set, add, remove, add_urls, remove_urls, add_identifiers, remove_identifiers}` → the same edit applied to all. `set` takes `ordered` (true or false) for collections; the `_urls` and `_identifiers` lists change those plain lists |
+| `POST /entities/edit`            | `{ids, set, add, remove, add_urls, remove_urls, add_identifiers, remove_identifiers}` → the same edit applied to all. `set` takes `ordered` (true or false) and `collection_id` for collections (an ID another collection has is refused, as is giving one to several); the `_urls` and `_identifiers` lists change those plain lists |
 | `POST /entities/trash`           | `{ids}` → move to the trash: hidden from searches, nothing removed |
 | `POST /entities/restore`         | `{ids}` → take back out of the trash                           |
 | `POST /entities/delete`          | `{ids}` → delete for good those that are in the trash; files leave storage |
@@ -113,7 +113,7 @@ is on, for a query of several lines).
 | `POST /tags/rename`              | `{field, from, to}` → rename a tag, merging it into `to` if that exists |
 | `POST /tags/alias`               | `{field, alias, target}` → make `alias` stand for `target`; an empty `target` removes the alias |
 | `POST /tags/aliases/apply`       | Replace aliases still on entities with the tags they stand for |
-| `POST /collections`              | `{collection_type, title, members, ordered, parent}` → new collection, put inside `parent` if given. Without a title it is named after its type (`Sequence`, `User Collection`…) |
+| `POST /collections`              | `{collection_type, title, members, ordered, parent, collection_id}` → new collection, put inside `parent` if given. A `collection_id` another collection has is refused. Without a title it is named after its type (`Sequence`, `User Collection`…) |
 | `POST /collections/{id}/members` | `{add, remove}` → change membership                            |
 | `PUT /collections/{id}/order`    | `{ids}` → set member positions; members left out follow        |
 | `POST /export`                   | Form field `ids=1,2,3` → zip of those files                    |

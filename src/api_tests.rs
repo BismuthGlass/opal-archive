@@ -426,7 +426,7 @@ async fn collections_hold_members() {
     assert_eq!(made["title"], "Set");
     assert_eq!(
         made["collection"],
-        json!({ "collection_type": "set", "member_count": 2, "ordered": false })
+        json!({ "collection_type": "set", "member_count": 2, "ordered": false, "collection_id": null })
     );
     assert_eq!(api.members(set), [(a, None), (b, None)]);
     assert_eq!(api.found(&format!("in={set}")).await, [a, b]);
@@ -818,9 +818,9 @@ for n in 1 2; do
     printf 'file %s b' "$n" > "$out/$n-b.txt"
     files="$files,\"$out/$n-b.txt\""
   fi
-  whole='"type":"sourceset","url":"https://example.test/board","title":"Board"'
+  whole='"id":"fake:board","type":"sourceset","url":"https://example.test/board","title":"Board"'
   if [ "$n" = 2 ]; then
-    whole='"url":"'$key'","title":"fake#2","description":" A pair ","tags":{"genre":["Twos"],"nonsense":["x"]}'
+    whole='"id":"fake#2","url":"'$key'","description":" A pair ","tags":{"genre":["Twos"],"nonsense":["x"]}'
   fi
   more='"title":" Thing '$n' ","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]},"collection":{'$whole'}'
   echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":\"$key\",\"files\":[$files],$more}"
@@ -975,8 +975,9 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     );
 
     // The second thing asked for a set of its own: it holds its files in
-    // order, under the name, description and tags given for it, with the
-    // tab's tags but not those of the thing.
+    // order, under the ID, description and tags given for it, with the
+    // tab's tags but not those of the thing. Given no title, it is called
+    // by its ID.
     let sets = api.found("type=set").await;
     assert_eq!(sets.len(), 1);
     assert_eq!(
@@ -985,6 +986,8 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     );
     let set = api.metadata(&sets).await;
     assert_eq!(set["scalars"]["title"]["value"], "fake#2");
+    assert_eq!(set["collection_id"]["value"], "fake#2");
+    assert_eq!(api.found("collection_id=fake#2").await, sets);
     assert_eq!(set["scalars"]["description"]["value"], "A pair");
     assert_eq!(carried(&set, "source"), [tag("fakesite", 1)]);
     assert_eq!(carried(&set, "creator"), [tag("Someone", 1)]);
@@ -1027,9 +1030,19 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         )
         .await;
     assert_eq!(forgotten["forgotten"], 1);
-    // A title the user wrote stays when the thing is fetched again.
+    // A title the user wrote stays when the thing is fetched again. The
+    // set is found by its ID, whatever else about it has changed, even
+    // from the trash.
     api.edit(&files[1..2], json!({ "set": { "title": "Mine" } }))
         .await;
+    api.edit(&sets, json!({ "set": { "title": "A pair of mine" } }))
+        .await;
+    api.edit(
+        &sets,
+        json!({ "remove_urls": ["https://example.test/item/2"] }),
+    )
+    .await;
+    api.post("/entities/trash", json!({ "ids": sets })).await;
     let third = api.download(tab, "https://example.test/board").await;
     assert_eq!(
         api.get(&format!("/entities/{}", files[1])).await["title"],
@@ -1041,6 +1054,27 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     assert_eq!(api.found("type=set").await, sets);
     assert_eq!(api.found("type=sourceset").await, wholes);
     assert_eq!(api.members(sets[0]).len(), 2);
+    assert_eq!(
+        api.metadata(&sets).await["scalars"]["title"]["value"],
+        "A pair of mine"
+    );
+
+    // No two collections share an ID, and one is one collection's alone.
+    let taken = json!({ "ids": wholes, "set": { "collection_id": "fake#2" } });
+    api.refused("/entities/edit", taken).await;
+    let both = json!({ "ids": [sets[0], wholes[0]], "set": { "collection_id": "new" } });
+    api.refused("/entities/edit", both).await;
+    let made = json!({ "collection_type": "set", "collection_id": "fake:board" });
+    api.refused("/collections", made).await;
+    api.edit(&wholes, json!({ "set": { "collection_id": " board " } }))
+        .await;
+    assert_eq!(
+        api.get(&format!("/entities/{}", wholes[0])).await["collection"]["collection_id"],
+        "board"
+    );
+    api.edit(&wholes, json!({ "set": { "collection_id": null } }))
+        .await;
+    assert_eq!(api.found("has=collection_id").await, sets);
     assert_eq!(api.get(&path).await["seen"], 2);
     assert_eq!(
         api.post(&format!("{path}/seen/forget"), json!({})).await["forgotten"],

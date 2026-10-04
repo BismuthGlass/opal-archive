@@ -230,6 +230,15 @@ export default function Sidebar(props: {
                   required
                   onCommit={(value) => apply({ set: { ordered: value === "yes" } })}
                 />
+                {/* One collection's alone, so only shown for one. */}
+                <Show when={data().count === 1}>
+                  <Detail
+                    label="Collection ID"
+                    scalar={data().collection_id}
+                    placeholder="None"
+                    onCommit={set("collection_id")}
+                  />
+                </Show>
               </Show>
 
               <Show when={single()}>

@@ -318,9 +318,9 @@ def download() -> int:
             whole = {}
             if len(files) > 1:
                 whole["collection"] = {
+                    "id": f"pinterest#{pin['id']}",
                     "type": "set",
                     "url": key,
-                    "title": f"pinterest#{pin['id']}",
                     "description": description,
                 }
             emit(

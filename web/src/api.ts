@@ -100,7 +100,13 @@ export type Entity = {
   kind: "file" | "collection";
   date_added: string;
   file: Omit<FileEntity, "id" | "date_added"> | null;
-  collection: { collection_type: string; member_count: number; ordered: boolean } | null;
+  collection: {
+    collection_type: string;
+    member_count: number;
+    ordered: boolean;
+    /** Its identifier, which no other collection has. */
+    collection_id: string | null;
+  } | null;
 };
 
 export type Scalar = { value: string | number | null; mixed: boolean };
@@ -116,6 +122,8 @@ export type Metadata = {
   collection_type: { value: string | null; mixed: boolean };
   /** Whether the selected collections keep their members in order. */
   ordered: { value: boolean | null; mixed: boolean };
+  /** The identifier of the selected collection: one collection's alone. */
+  collection_id: { value: string | null; mixed: boolean };
   tags: Record<string, { value: string; count: number; description: string | null }[]>;
   source_urls: { value: string; count: number }[];
   identifiers: { value: string; count: number }[];

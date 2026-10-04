@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::{AppState, error::ApiError, query::COLLECTION_TYPES};
+use crate::{AppState, entities, error::ApiError, query::COLLECTION_TYPES};
 
 #[derive(Deserialize)]
 struct NewCollection {
@@ -20,6 +20,8 @@ struct NewCollection {
     ordered: Option<bool>,
     /// A collection to put the new one into.
     parent: Option<i64>,
+    /// An identifier of its own, which no other collection has.
+    collection_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -123,8 +125,17 @@ async fn create(
         .map(str::trim)
         .filter(|title| !title.is_empty());
 
+    let collection_id = input
+        .collection_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty());
+
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
+    if let Some(wanted) = collection_id {
+        entities::claim_collection_id(&tx, &[], wanted)?;
+    }
     tx.execute(
         "INSERT INTO entity (kind, title) VALUES ('collection', ?1)",
         [title.unwrap_or(default_title(&input.collection_type))],
@@ -132,8 +143,9 @@ async fn create(
     let id = tx.last_insert_rowid();
     let ordered = input.ordered.unwrap_or(input.collection_type == "sequence");
     tx.execute(
-        "INSERT INTO collection (entity_id, collection_type, ordered) VALUES (?1, ?2, ?3)",
-        params![id, input.collection_type, ordered],
+        "INSERT INTO collection (entity_id, collection_type, ordered, collection_id)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![id, input.collection_type, ordered, collection_id],
     )?;
     add_members(&tx, id, &input.members)?;
     if let Some(parent) = input.parent {

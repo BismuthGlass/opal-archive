@@ -239,6 +239,7 @@ function BaseTags(props: {
     scalars: {},
     collection_type: { value: null, mixed: false },
     ordered: { value: null, mixed: false },
+    collection_id: { value: null, mixed: false },
     tags: Object.fromEntries(
       Object.entries(props.data.tags).map(([field, values]) => [
         field,

@@ -165,6 +165,7 @@ fn lookup(name: &str) -> Option<Field> {
         "kind" => Field::Choice('e', "kind", KINDS),
         "media" => Field::Choice('f', "media_type", MEDIA_TYPES),
         "type" => Field::Choice('c', "collection_type", COLLECTION_TYPES),
+        "collection_id" => Field::Text('c', "collection_id"),
         "score" => Field::Number('e', "score", Unit::Plain),
         "width" => Field::Number('f', "width", Unit::Plain),
         "height" => Field::Number('f', "height", Unit::Plain),
