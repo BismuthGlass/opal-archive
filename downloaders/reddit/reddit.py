@@ -10,8 +10,8 @@
 
 It takes a post URL and downloads the post's image, video or gallery. A post
 of several files becomes a set. Each file is tagged with its poster, as the
-source `reddit:<username>`. Public posts need no login; private and
-quarantined subreddits do.
+source `reddit:<username>`. A crosspost is downloaded as the post it points
+to. Public posts need no login; private and quarantined subreddits do.
 """
 from __future__ import annotations
 
@@ -147,10 +147,6 @@ def uploaded(media_id: str, meta: dict, want_video: bool) -> tuple[str, str] | N
 
 def media_of(post: dict, want_video: bool, want_external: bool) -> list[tuple[str, str]]:
     """Everything a post shows, in display order."""
-    # A crosspost shows what the post it points to holds.
-    for parent in post.get("crosspost_parent_list") or []:
-        post = {**post, **parent}
-        break
     metadata = post.get("media_metadata") or {}
     if post.get("gallery_data"):
         ids = [item["media_id"] for item in post["gallery_data"].get("items") or []]
@@ -276,6 +272,16 @@ def download() -> int:
 
     emit("log", message="Reading the post")
     post = read_post(id)
+    # A crosspost only points to another post, and that one is what is
+    # downloaded: its files, under its own poster, address and ID.
+    while post.get("crosspost_parent_list"):
+        post = post["crosspost_parent_list"][0]
+        id = post["id"]
+    if POST.format(id=id) != key:
+        key = POST.format(id=id)
+        if key in seen:
+            emit("skipped", key=key)
+            return 0
     media = media_of(post, options.get("video", True), options.get("external", True))
     if not media:
         raise RuntimeError("the post has nothing to download, with the options as they are")
