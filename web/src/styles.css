@@ -1317,7 +1317,7 @@ button.primary {
   border-color: var(--accent);
 }
 
-/* The namespace part of a tag, where no heading shows it. */
+/* The namespace part of a tag: fainter than its name. */
 .chip-namespace {
   opacity: 0.6;
 }
@@ -1462,7 +1462,6 @@ span.chip-label:hover {
 }
 
 /* The input sits above its chips, so it stays put as values come and go. */
-.list-label + .tag-groups,
 .list-label + .chips,
 .list-label + .links {
   margin-top: 4px;
@@ -1496,7 +1495,7 @@ span.chip-label:hover {
   text-decoration: none;
 }
 
-/* Inside a modal, chips, namespace headings and link rows keep their own
+/* Inside a modal, chips and link rows keep their own
    look rather than taking that of the modal's buttons. */
 .dialog .chip button:not(.primary),
 .dialog .links button:not(.primary) {
@@ -1542,7 +1541,6 @@ span.chip-label:hover {
   flex: none;
 }
 
-.field-editor > .field > .tag-groups,
 .field-editor > .field > .chips,
 .field-editor > .field > .links {
   flex: 1 1 0;
@@ -1551,41 +1549,9 @@ span.chip-label:hover {
   overflow-y: auto;
 }
 
-.field-editor > .field > .tag-groups .chips {
-  flex: none;
-  overflow: visible;
-}
-
 .field-editor .plain-chips,
 .field-editor .links {
   margin-top: 10px;
-}
-
-/* One row of chips per namespace, headed by its name. */
-.tag-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.namespace {
-  display: inline-flex;
-  align-items: center;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.namespace button {
-  padding: 1px 2px;
-  color: inherit;
-  background: none;
-  border: none;
-  border-radius: 4px;
-}
-
-.namespace-label:hover {
-  color: var(--text);
-  text-decoration: underline;
 }
 
 .suggestion-count {

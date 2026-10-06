@@ -278,27 +278,6 @@ function createTagBox(props: FieldProps & { initial?: string }) {
   return { input, suggestions };
 }
 
-/**
- * The heading of a group of chips in the panel: the namespace they share.
- * Clicking it adds the namespace to the search.
- */
-function Namespace(props: { field: string; name: string }) {
-  return (
-    <span class="namespace">
-      <button
-        class="namespace-label"
-        title="Click to add everything in this namespace to the search; right click for more"
-        onClick={() => addToQuery(tagQuery(props.field, props.name, true))}
-        onContextMenu={(event) =>
-          openTagMenu(event, { field: props.field, value: props.name, under: true })
-        }
-      >
-        {props.name}:
-      </button>
-    </span>
-  );
-}
-
 type Tag = Metadata["tags"][string][number];
 
 /**
@@ -311,18 +290,12 @@ function TagChip(
     field: string;
     tag: Tag;
     editing?: boolean;
-    /** The namespace the pill is listed under, and so leaves out. */
-    under?: string;
   },
 ) {
   const partial = () => props.tag.count < props.data.count;
-  /** The tag's namespace, with its colon, unless a heading shows it. */
-  const namespace = () => {
-    if (props.under !== undefined) return "";
-    return props.tag.value.slice(0, props.tag.value.lastIndexOf(":") + 1);
-  };
-  const name = () =>
-    props.tag.value.slice(props.under ? props.under.length + 1 : namespace().length);
+  /** The tag's namespace, with its colon. */
+  const namespace = () => props.tag.value.slice(0, props.tag.value.lastIndexOf(":") + 1);
+  const name = () => props.tag.value.slice(namespace().length);
   return (
     <span class="chip tinted" classList={{ partial: partial() }} style={pillStyle(props.field)}>
       <button
@@ -456,26 +429,19 @@ export function TagsModal(props: {
 }
 
 /**
- * The tags of one type that is not aggregated, in a section of their own,
- * grouped by namespace. In the panel the label opens the tag editor.
+ * The tags of one type that is not aggregated, in a section of their own.
+ * In the panel the label opens the tag editor.
  */
 export function TagField(props: FieldProps & ListMode & { field: string }) {
   const values = () => props.data.tags[props.field] ?? [];
 
-  /** The values by namespace: those without one first, then by name. */
-  const groups = createMemo(() => {
-    type Group = { namespace: string; tags: Tag[] };
-    const byNamespace = new Map<string, Group>();
-    for (const tag of values()) {
-      const colon = tag.value.lastIndexOf(":");
-      const namespace = colon < 0 ? "" : tag.value.slice(0, colon);
-      const key = namespace.toLowerCase();
-      if (!byNamespace.has(key)) byNamespace.set(key, { namespace, tags: [] });
-      byNamespace.get(key)!.tags.push(tag);
-    }
-    return [...byNamespace.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([, group]) => group);
+  /** Those without a namespace first, then by namespace. */
+  const sorted = createMemo(() => {
+    const namespace = (tag: Tag) => tag.value.slice(0, Math.max(0, tag.value.lastIndexOf(":")));
+    // The sort is stable: within a namespace the order given is kept.
+    return [...values()].sort((a, b) =>
+      namespace(a).toLowerCase().localeCompare(namespace(b).toLowerCase()),
+    );
   });
 
   return (
@@ -486,33 +452,16 @@ export function TagField(props: FieldProps & ListMode & { field: string }) {
       >
         <span class="label">{fieldLabel(props.field)}</span>
       </Show>
-      <div class="tag-groups">
-        <For each={groups()}>
-          {(group) => (
-            <div class="chips">
-              <Show when={group.namespace}>
-                {/* In the editor the heading is only a heading; in the panel
-                    it searches the namespace. */}
-                <Show
-                  when={props.editing}
-                  fallback={<Namespace field={props.field} name={group.namespace} />}
-                >
-                  <span class="namespace">{group.namespace}:</span>
-                </Show>
-              </Show>
-              <For each={group.tags}>
-                {(tag) => (
-                  <TagChip
-                    field={props.field}
-                    tag={tag}
-                    under={group.namespace}
-                    data={props.data}
-                    apply={props.apply}
-                    editing={props.editing}
-                  />
-                )}
-              </For>
-            </div>
+      <div class="chips">
+        <For each={sorted()}>
+          {(tag) => (
+            <TagChip
+              field={props.field}
+              tag={tag}
+              data={props.data}
+              apply={props.apply}
+              editing={props.editing}
+            />
           )}
         </For>
       </div>
