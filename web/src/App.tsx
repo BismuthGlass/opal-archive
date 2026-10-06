@@ -19,7 +19,7 @@ import { DropTarget, UploadBox, UploadPanel } from "./components/Upload";
 import Viewer from "./components/Viewer";
 import * as api from "./api";
 import { errorMessage, plural } from "./format";
-import { actionFor } from "./hotkeys";
+import { actionFor, keyFor, keyLabel } from "./hotkeys";
 import {
   MARKS,
   PAGE,
@@ -74,6 +74,8 @@ export default function App() {
   const [rating, setRating] = createSignal<{ ids: number[]; name: string } | null>(null);
   /** What the next digit marks, after the mark-as key. */
   const [marking, setMarking] = createSignal<{ ids: number[]; name: string } | null>(null);
+  /** The mark the mark key gives: the one last picked with the mark-as key. */
+  let usualMark = 1;
   const [panelOpen, setPanelOpen] = createStoredFlag("opalarchive.panel", true);
 
   onMount(() => {
@@ -217,7 +219,17 @@ export default function App() {
       if (number !== null || event.key === "Escape") {
         event.preventDefault();
         event.stopImmediatePropagation();
-        if (number !== null) mark(marked, number || null);
+        if (number) {
+          // Picked once, it is what the mark key gives from then on. Given
+          // to what already has it, it would be taken off: it is kept on.
+          usualMark = number;
+          if (!toggleMark(marked.ids, number)) toggleMark(marked.ids, number);
+          showToast(
+            `Gave ${marked.name} mark ${number}. ${keyLabel(keyFor("mark"))} now gives mark ${number}`,
+          );
+        } else if (number === 0) {
+          mark(marked, null);
+        }
         return;
       }
     }
@@ -231,10 +243,13 @@ export default function App() {
       if (action === "quickTag") {
         setTagging(on);
       } else if (action === "mark") {
-        mark(on, 1);
+        mark(on, usualMark);
       } else if (action === "markAs") {
         setMarking(on);
-        showToast(`Mark ${on.name}: press 1 to ${MARKS}, or 0 to take the mark off`, true);
+        showToast(
+          `Mark ${on.name}: press 1 to ${MARKS}, which the mark key then gives too, or 0 to take the mark off`,
+          true,
+        );
       } else if (action === "trash" || action === "restore") {
         trash(on, action === "restore");
       } else {
