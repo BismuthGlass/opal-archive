@@ -288,6 +288,12 @@ export function runSearch(
   collection: number | null = null,
   /** Whether to wait to be asked, if the tab has no view of this query yet. */
   wait = false,
+  /**
+   * Whether to calculate a view already seen again. It comes back where it
+   * was left, and in the order it was dragged into, but with what it holds
+   * now.
+   */
+  fresh = false,
 ) {
   // The view being left is saved now, not after its delay.
   flushSave();
@@ -323,7 +329,7 @@ export function runSearch(
   setSearchCount((n) => n + 1);
   // After the count: the grid goes to the top first, then to where it was.
   setScrollTo(left?.scroll || null);
-  if (seen) {
+  if (seen && !fresh) {
     // Voids a calculation still running for the view just left.
     calculation += 1;
     calculated = Promise.resolve();

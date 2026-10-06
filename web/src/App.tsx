@@ -87,8 +87,8 @@ export default function App() {
   // Each tab shows a search, over the library or over what the tab holds
   // (its uploads, or a collection's members): run it when the tab or its
   // query changes.
-  /** The tab the last search was shown in, and whether inside a collection. */
-  let shown: { tab: number; inside: boolean } | null = null;
+  /** The tab the last search was shown in, and how far inside collections. */
+  let shown: { tab: number; inside: boolean; depth: number } | null = null;
   createEffect(
     on(
       () => {
@@ -107,10 +107,13 @@ export default function App() {
         const step = inside();
         // The query of the tab on show changed: the search was asked for.
         const asked = shown?.tab === tab.id && !shown.inside && !step;
-        shown = { tab: tab.id, inside: !!step };
+        // A collection just gone into is listed afresh, though it was seen
+        // before: what is in it may have changed since.
+        const entered = shown?.tab === tab.id && trail().length > shown.depth;
+        shown = { tab: tab.id, inside: !!step, depth: trail().length };
         if (step) {
           // Not saved with the tab: the trail is the page's alone.
-          runSearch(step.query, null, key, null, step.id);
+          runSearch(step.query, null, key, null, step.id, false, entered);
         } else {
           // Listing the whole library is not done just for opening a tab.
           const wait = tab.kind === "gallery" && tab.query === "" && !asked;
