@@ -292,13 +292,17 @@ export const edit = (ids: number[], changes: Changes) =>
 /** Moves entities to the trash: out of searches, but not yet gone. */
 export const trashEntities = (ids: number[]) =>
   request<{ changed: number }>("POST", "/entities/trash", { ids });
-/** What is inside these collections, at any depth, and not in the trash. */
-export async function insideOf(ids: number[]): Promise<number[]> {
+/**
+ * What is inside these collections, at any depth: what of it is not in the
+ * trash or, with `trashed`, what of it is.
+ */
+export async function insideOf(ids: number[], trashed = false): Promise<number[]> {
   const found = new Set<number>();
   // In batches, to keep each address a reasonable length.
   for (let at = 0; at < ids.length; at += 200) {
     const batch = ids.slice(at, at + 200).join(",");
-    for (const id of await searchIds(`within=(id=${batch})`, 0, null)) found.add(id);
+    const query = `within=(id=${batch})${trashed ? " @trashed" : ""}`;
+    for (const id of await searchIds(query, 0, null)) found.add(id);
   }
   return [...found];
 }

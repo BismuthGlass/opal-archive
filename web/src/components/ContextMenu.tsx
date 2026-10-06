@@ -66,13 +66,27 @@ export function openTrashMenu(event: MouseEvent, shown: { id: number; title: str
 const close = () => setOpened(null);
 
 /**
- * Moves entities to the trash and, with `whole`, everything inside the
- * collections among them. Returns how many of what was inside went too.
+ * These and, with `whole`, everything inside the collections among them:
+ * what of it is in the trash, or with `trashed` false what of it is not.
  */
-async function trash(ids: number[], whole: boolean): Promise<number> {
-  const within = whole ? (await api.insideOf(ids)).filter((id) => !ids.includes(id)) : [];
-  await api.trashEntities([...ids, ...within]);
-  return within.length;
+async function withInside(ids: number[], whole: boolean, trashed: boolean): Promise<number[]> {
+  if (!whole) return ids;
+  const within = (await api.insideOf(ids, trashed)).filter((id) => !ids.includes(id));
+  return [...ids, ...within];
+}
+
+/**
+ * Deletes trashed entities for good, once it has been agreed to, and with
+ * `whole` what is inside them and in the trash too. What is not in the
+ * trash is never deleted. Returns whether anything was.
+ */
+async function removeForGood(ids: number[], whole: boolean): Promise<boolean> {
+  const going = await withInside(ids, whole, true);
+  if (!confirm(`Delete ${plural(going.length, "item")} for good? This cannot be undone.`)) {
+    return false;
+  }
+  await api.deleteEntities(going);
+  return true;
 }
 
 /**
@@ -99,52 +113,120 @@ export default function ContextMenu() {
   );
 }
 
-/** The ways to trash the collection on show. */
+/** What can be done with the collection on show: trashing it, or once trashed the rest. */
 function TrashMenu(props: { at: Opened; shown: { id: number; title: string | null } }) {
   const shown = props.shown;
-  const run = async (whole: boolean) => {
+  const [state] = createResource(() => api.getMetadata([shown.id]));
+  const trashed = () => (state()?.trashed ?? 0) > 0;
+
+  /** Does it and says so; with `gone`, the tab leaves the collection. */
+  const run = async (action: () => Promise<string | null>, gone: boolean) => {
     close();
     try {
-      const within = await trash([shown.id], whole);
-      showToast(
-        whole
-          ? `Moved the collection and ${plural(within, "item")} inside it to the trash`
-          : "Moved the collection to the trash",
-      );
+      const said = await action();
+      if (said === null) return;
+      showToast(said);
       // Out of it, if the tab had gone into it; its own tab stays on it.
-      if (inside()?.id === shown.id) leave();
+      if (gone && inside()?.id === shown.id) leave();
     } catch (err) {
       showToast(errorMessage(err));
     }
     changed();
   };
+  const within = (count: number) => plural(count - 1, "item");
+  const trash = (whole: boolean) =>
+    run(async () => {
+      const going = await withInside([shown.id], whole, false);
+      await api.trashEntities(going);
+      return whole
+        ? `Moved the collection and ${within(going.length)} inside it to the trash`
+        : "Moved the collection to the trash";
+    }, true);
+  const restore = (whole: boolean) =>
+    run(async () => {
+      const back = await withInside([shown.id], whole, true);
+      await api.restoreEntities(back);
+      return whole
+        ? `Took the collection and ${within(back.length)} inside it out of the trash`
+        : "Took the collection out of the trash";
+    }, false);
+  const remove = (whole: boolean) =>
+    run(async () => ((await removeForGood([shown.id], whole)) ? "Deleted for good" : null), true);
+
   return (
-    <Shell at={props.at} label="Trash this collection">
+    <Shell at={props.at} label="Actions on this collection">
       <li class="context-menu-title" role="none">
         This collection
       </li>
-      <li role="none">
-        <button
-          class="danger"
-          role="menuitem"
-          title="Move the collection to the trash. What is in it stays in the library."
-          onClick={() => run(false)}
-        >
-          <Icon name="delete-outline" />
-          Trash the collection
-        </button>
-      </li>
-      <li role="none">
-        <button
-          class="danger"
-          role="menuitem"
-          title="Move the collection to the trash, with everything inside it, at any depth"
-          onClick={() => run(true)}
-        >
-          <Icon name="delete-outline" />
-          Trash it and what is inside
-        </button>
-      </li>
+      <Show
+        when={trashed()}
+        fallback={
+          <>
+            <li role="none">
+              <button
+                class="danger"
+                role="menuitem"
+                title="Move the collection to the trash. What is in it stays in the library."
+                onClick={() => trash(false)}
+              >
+                <Icon name="delete-outline" />
+                Trash the collection
+              </button>
+            </li>
+            <li role="none">
+              <button
+                class="danger"
+                role="menuitem"
+                title="Move the collection to the trash, with everything inside it, at any depth"
+                onClick={() => trash(true)}
+              >
+                <Icon name="delete-outline" />
+                Trash it and what is inside
+              </button>
+            </li>
+          </>
+        }
+      >
+        <li role="none">
+          <button role="menuitem" title="Take the collection out of the trash" onClick={() => restore(false)}>
+            <Icon name="restore-from-trash-outline" />
+            Restore the collection
+          </button>
+        </li>
+        <li role="none">
+          <button
+            role="menuitem"
+            title="Take the collection out of the trash, with everything inside it that is in the trash"
+            onClick={() => restore(true)}
+          >
+            <Icon name="restore-from-trash-outline" />
+            Restore it and what is inside
+          </button>
+        </li>
+        <li class="menu-divider" role="separator" />
+        <li role="none">
+          <button
+            class="danger"
+            role="menuitem"
+            title="Delete the collection for good. What is in it is left as it is."
+            onClick={() => remove(false)}
+          >
+            <Icon name="delete-forever-outline" />
+            Delete the collection for good
+          </button>
+        </li>
+        <li role="none">
+          <button
+            class="danger"
+            role="menuitem"
+            title="Delete the collection for good, with everything inside it that is in the trash"
+            onClick={() => remove(true)}
+          >
+            <Icon name="delete-forever-outline" />
+            Delete it and what is inside
+          </button>
+        </li>
+      </Show>
     </Shell>
   );
 }
@@ -330,11 +412,19 @@ function Menu(props: { at: Opened; item: Item }) {
     action().catch((err) => showToast(errorMessage(err)));
   };
 
-  const remove = () => {
+  /** Whether there are collections selected, to have what is inside them. */
+  const collections = () => (state()?.collections ?? 0) > 0;
+
+  const remove = async (whole: boolean) => {
     close();
-    if (confirm(`Delete ${plural(ids.length, "item")} for good? This cannot be undone.`)) {
-      run(api.deleteEntities, true);
+    try {
+      if (!(await removeForGood(ids, whole))) return;
+      // What was deleted is gone from the view, and so from the selection.
+      clearSelection();
+    } catch (err) {
+      showToast(errorMessage(err));
     }
+    changed();
   };
 
   return (
@@ -396,13 +486,15 @@ function Menu(props: { at: Opened; item: Item }) {
               </button>
             </li>
             {/* For collections: what is in them goes too. */}
-            <Show when={(state()?.collections ?? 0) > 0}>
+            <Show when={collections()}>
               <li role="none">
                 <button
                   class="danger"
                   role="menuitem"
                   title="Move to the trash, with everything inside the collections, at any depth"
-                  onClick={() => run((ids) => trash(ids, true))}
+                  onClick={() =>
+                    run(async (ids) => api.trashEntities(await withInside(ids, true, false)))
+                  }
                 >
                   <Icon name="delete-outline" />
                   Trash with what is inside
@@ -422,12 +514,44 @@ function Menu(props: { at: Opened; item: Item }) {
             Restore
           </button>
         </li>
+        <Show when={collections()}>
+          <li role="none">
+            <button
+              role="menuitem"
+              title="Take out of the trash, with everything inside the collections that is in the trash"
+              onClick={() =>
+                run(async (ids) => api.restoreEntities(await withInside(ids, true, true)))
+              }
+            >
+              <Icon name="restore-from-trash-outline" />
+              Restore with what is inside
+            </button>
+          </li>
+        </Show>
         <li role="none">
-          <button class="danger" role="menuitem" title="Delete for good" onClick={remove}>
+          <button
+            class="danger"
+            role="menuitem"
+            title="Delete for good"
+            onClick={() => remove(false)}
+          >
             <Icon name="delete-forever-outline" />
             Delete for good
           </button>
         </li>
+        <Show when={collections()}>
+          <li role="none">
+            <button
+              class="danger"
+              role="menuitem"
+              title="Delete for good, with everything inside the collections that is in the trash"
+              onClick={() => remove(true)}
+            >
+              <Icon name="delete-forever-outline" />
+              Delete with what is inside
+            </button>
+          </li>
+        </Show>
       </Show>
     </Shell>
   );

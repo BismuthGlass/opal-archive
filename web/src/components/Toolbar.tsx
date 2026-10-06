@@ -56,7 +56,7 @@ export default function Toolbar() {
           <button
             aria-label="Trash this collection"
             aria-haspopup="menu"
-            title="Trash this collection, with or without what is inside it"
+            title="Trash this collection, with or without what is inside it. Once trashed: restore or delete it."
             onClick={(event) => openTrashMenu(event, collection())}
           >
             <Icon name="delete-outline" />
