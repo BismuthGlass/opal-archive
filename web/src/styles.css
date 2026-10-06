@@ -921,6 +921,12 @@ button.primary {
   justify-content: space-between;
 }
 
+.query-trashed {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .query-actions > button:disabled {
   opacity: 0.45;
   cursor: default;

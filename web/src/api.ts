@@ -278,10 +278,12 @@ export const searchIds = (
   seed: number,
   tab: number | null,
   collection: number | null = null,
+  /** Without this, trashed entities only match a query with `@trashed`. */
+  withTrashed = false,
 ) =>
   request<{ ids: number[] }>(
     "GET",
-    `/search/ids?${params({ q, seed, ...scoped(tab, collection) })}`,
+    `/search/ids?${params({ q, seed, ...scoped(tab, collection), ...(withTrashed ? { trashed: 1 } : {}) })}`,
   ).then((r) => r.ids);
 
 export const getEntity = (id: number) => request<Entity>("GET", `/entities/${id}`);

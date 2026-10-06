@@ -1,7 +1,7 @@
 import { createEffect, createSignal, For, Index, onCleanup, onMount, Show } from "solid-js";
 import { errorMessage } from "../format";
 import { queryLabel, savedQueries, saveQuery } from "../savedQueries";
-import { refresh, search } from "../search";
+import { refresh, search, setShowTrashed, showTrashed } from "../search";
 import { activeTab, filterInside, inside, setQuery } from "../tabs";
 import Icon from "./Icon";
 
@@ -289,6 +289,21 @@ export default function QueryBar() {
           Search
         </button>
       </div>
+      <label
+        class="check query-trashed"
+        title="List what is in the trash along with the rest, in every search and filter. Without it, only a query that says @trashed finds it."
+      >
+        <input
+          type="checkbox"
+          checked={showTrashed()}
+          onChange={(event) => {
+            setShowTrashed(event.currentTarget.checked);
+            // Left with the focus, it would keep the gallery's hotkeys.
+            event.currentTarget.blur();
+          }}
+        />
+        Show trashed
+      </label>
       <Show when={search.error}>
         {(error) => (
           <p class="form-error" role="alert">

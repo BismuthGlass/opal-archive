@@ -39,6 +39,28 @@ export const MARKS = 5;
  * is changed by them.
  */
 const [marks, setMarks] = createSignal<ReadonlyMap<number, number>>(new Map());
+// Whether searches list what is in the trash along with the rest, without
+// the query having to say `@trashed`. Remembered per browser.
+const TRASHED_KEY = "opalarchive.showTrashed";
+const [showTrashed, setShown] = createSignal(readShowTrashed());
+
+function readShowTrashed(): boolean {
+  try {
+    return localStorage.getItem(TRASHED_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+export { showTrashed };
+
+/**
+ * A query as it is saved with a tab's view: marked, by a character that
+ * cannot be typed, when the view was calculated with the trash on show, so
+ * that a view calculated the other way is not taken for this one.
+ */
+const savedAs = (query: string) => (showTrashed() ? `${query}\u0002` : query);
+
 // Bumped when a new search is shown (the grid scrolls back to the top) and
 // when library data changes (dependent views reload).
 const [searchCount, setSearchCount] = createSignal(0);
@@ -170,7 +192,7 @@ function remember() {
   views.set(viewKey, { ids, custom: search.custom });
   const tab = viewTab;
   if (tab === null) return;
-  const view = { query: search.query, ids, custom: search.custom };
+  const view = { query: savedAs(search.query), ids, custom: search.custom };
   // A drag or a run of removals saves once, when it settles.
   clearTimeout(saving);
   saving = window.setTimeout(() => {
@@ -258,7 +280,7 @@ function calculate() {
   const current = (calculation += 1);
   // What the tab was left with is asked for only when the view is opened;
   // a refresh always runs the search.
-  const found = api.searchIds(search.query, seed, search.scope, search.collection);
+  const found = api.searchIds(search.query, seed, search.scope, search.collection, showTrashed());
   calculated = found.then((found) => {
     if (current !== calculation) return;
     if (search.custom) {
@@ -346,7 +368,7 @@ export function runSearch(
       .catch(() => null)
       .then((saved) => {
         if (current !== calculation) return;
-        if (saved && saved.query === query) {
+        if (saved && saved.query === savedAs(query)) {
           ids = saved.ids;
           setSearch("custom", saved.custom);
           views.set(viewKey, { ids, custom: saved.custom });
@@ -400,7 +422,7 @@ function flushSave() {
   clearTimeout(saving);
   saving = 0;
   if (viewTab !== null) {
-    const view = { query: search.query, ids, custom: search.custom };
+    const view = { query: savedAs(search.query), ids, custom: search.custom };
     api.saveTabView(viewTab, view).catch(() => {});
   }
 }
@@ -410,6 +432,25 @@ window.addEventListener("pagehide", () => {
   flushSave();
   noteLeft();
 });
+
+/**
+ * Sets whether searches list what is in the trash too. The view on show is
+ * calculated again, unless it is still waiting to be asked for; the others
+ * are when they are next shown.
+ */
+export function setShowTrashed(show: boolean) {
+  if (show === showTrashed()) return;
+  // A change still waiting to be saved belongs to the view as it was.
+  flushSave();
+  setShown(show);
+  try {
+    localStorage.setItem(TRASHED_KEY, show ? "on" : "off");
+  } catch {
+    // Storage unavailable; the choice just won't survive a reload.
+  }
+  views.clear();
+  if (!search.idle) refresh();
+}
 
 /** Calculates the current search again. */
 export function refresh() {
