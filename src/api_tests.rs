@@ -474,6 +474,40 @@ async fn collections_hold_members() {
 }
 
 #[tokio::test]
+async fn a_trashed_collection_shows_its_trashed_members() {
+    let api = Api::new();
+    let (a, b) = (api.file("a.png"), api.file("b.png"));
+    let set = api
+        .post("/collections", json!({ "collection_type": "set", "members": [a, b] }))
+        .await["id"]
+        .as_i64()
+        .unwrap();
+    let inside = async || {
+        let answer = api.get(&format!("/search/ids?q=&collection={set}")).await;
+        let mut ids: Vec<i64> = serde_json::from_value(answer["ids"].clone()).unwrap();
+        ids.sort();
+        ids
+    };
+    let count = async || {
+        let q: String = format!("id={set}").bytes().map(|b| format!("%{b:02X}")).collect();
+        api.get(&format!("/search?q={q}&trashed=1")).await["items"][0]["member_count"].clone()
+    };
+
+    // In a collection that is not in the trash, a trashed member is left out.
+    api.post("/entities/trash", json!({ "ids": [a] })).await;
+    assert_eq!(inside().await, [b]);
+    assert_eq!(count().await, 1);
+
+    // In the trash itself, it shows every member, and counts them.
+    api.post("/entities/trash", json!({ "ids": [set] })).await;
+    assert_eq!(inside().await, [a, b]);
+    assert_eq!(count().await, 2);
+
+    api.post("/entities/restore", json!({ "ids": [set] })).await;
+    assert_eq!(inside().await, [b]);
+}
+
+#[tokio::test]
 async fn collections_nest_but_never_in_themselves() {
     let api = Api::new();
     let a = api.file("a.png");

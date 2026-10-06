@@ -62,7 +62,8 @@ pub fn router() -> Router<AppState> {
 /// Compiles `source`, narrowed to the members of `collection` if one is
 /// given, and otherwise to what `tab` holds if it is an upload, a download
 /// or a collection tab. An ordered collection is shown in its own order
-/// unless the query asks for another.
+/// unless the query asks for another. A collection in the trash is shown
+/// with its trashed members too: they went there with it.
 fn compile(
     conn: &Connection,
     source: &str,
@@ -71,7 +72,6 @@ fn compile(
     collection: Option<i64>,
     include_trashed: bool,
 ) -> Result<query::Compiled, ApiError> {
-    let mut compiled = query::compile(source, seed, &tags::aliases(conn)?, include_trashed)?;
     // What to narrow to: a tab's own list, or a collection and whether it
     // is ordered. A collection that is gone has no members.
     let scope: Option<(String, Option<i64>, Option<bool>)> = match (collection, tab) {
@@ -95,6 +95,23 @@ fn compile(
             .optional()?,
         (None, None) => None,
     };
+    let in_trash = match &scope {
+        Some((_, Some(collection), _)) => conn
+            .query_row(
+                "SELECT trashed FROM entity WHERE id = ?1",
+                [collection],
+                |row| row.get(0),
+            )
+            .optional()?
+            .unwrap_or(false),
+        _ => false,
+    };
+    let mut compiled = query::compile(
+        source,
+        seed,
+        &tags::aliases(conn)?,
+        include_trashed || in_trash,
+    )?;
     match (scope, tab) {
         (Some((kind, _, _)), Some(tab)) if kind == "upload" || kind == "download" => {
             compiled.filter = format!(
@@ -182,13 +199,13 @@ async fn search(
                         JOIN file mf ON mf.entity_id = m.member_id
                         JOIN entity me ON me.id = m.member_id
                         WHERE m.collection_id = e0.id AND mf.has_thumbnail = 1
-                          AND me.trashed = 0
+                          AND (me.trashed = 0 OR e0.trashed = 1)
                         ORDER BY m.position IS NULL, m.position, m.member_id LIMIT 1)
                 END,
                 CASE WHEN c0.entity_id IS NOT NULL THEN
                     (SELECT count(*) FROM membership m
                      JOIN entity me ON me.id = m.member_id
-                     WHERE m.collection_id = e0.id AND me.trashed = 0)
+                     WHERE m.collection_id = e0.id AND (me.trashed = 0 OR e0.trashed = 1))
                 END,
                 e0.trashed
          FROM {} WHERE {} ORDER BY {} LIMIT ? OFFSET ?",
