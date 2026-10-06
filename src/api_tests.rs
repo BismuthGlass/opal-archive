@@ -434,7 +434,7 @@ async fn collections_hold_members() {
     let shared = api.metadata(&[a, c]).await;
     assert_eq!(
         shared["memberships"],
-        json!([{ "id": set, "title": "Set", "collection_type": "set", "count": 1 }])
+        json!([{ "id": set, "title": "Set", "collection_type": "set", "count": 1, "collection_id": null }])
     );
 
     let answer = api

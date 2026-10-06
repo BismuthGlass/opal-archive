@@ -1,7 +1,18 @@
-import { createEffect, createSignal, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { contentUrl } from "../api";
+import {
+  createEffect,
+  createResource,
+  createSignal,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+} from "solid-js";
+import { contentUrl, getMetadata } from "../api";
 import { ensureRange, itemAt, marks, search } from "../search";
 import { saveSetting, settings } from "../settings";
+import { inside } from "../tabs";
 import Icon from "./Icon";
 import { modalOpen } from "./Modal";
 
@@ -19,6 +30,23 @@ export default function Viewer(props: { index: number; onMove: (index: number | 
   const item = () => itemAt(props.index);
 
   createEffect(() => ensureRange(props.index, props.index));
+
+  // The collections the result is in, named before its title.
+  const [memberships] = createResource(
+    () => item()?.id,
+    async (id) => ({ of: id, list: (await getMetadata([id])).memberships }),
+  );
+  const collections = () => {
+    const found = memberships.error ? undefined : memberships();
+    // Those of the result shown before are not this one's.
+    if (!found || found.of !== item()?.id) return "";
+    // The one the tab is inside comes first.
+    const here = inside()?.id;
+    return [...found.list]
+      .sort((a, b) => Number(b.id === here) - Number(a.id === here))
+      .map((collection) => collection.title || collection.collection_id || `#${collection.id}`)
+      .join(", ");
+  };
 
   const step = (delta: number) => {
     const next = props.index + delta;
@@ -89,7 +117,19 @@ export default function Viewer(props: { index: number; onMove: (index: number | 
   return (
     <div class="viewer" role="dialog" aria-modal="true" aria-label="Viewer">
       <header>
-        <span class="viewer-title">{item()?.title ?? ""}</span>
+        <span class="viewer-title">
+          <Show when={collections()}>
+            <span class="viewer-collection" title="The collection this is in">
+              {collections()}
+            </span>
+            <Show when={item()?.title}>
+              <span class="viewer-inside" aria-hidden="true">
+                ›
+              </span>
+            </Show>
+          </Show>
+          <span class="viewer-name">{item()?.title ?? ""}</span>
+        </span>
         <Show when={item() && marks().get(item()!.id)}>
           {(mark) => <span class={`mark-badge mark-${mark()}`}>Mark {mark()}</span>}
         </Show>

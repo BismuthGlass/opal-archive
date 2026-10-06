@@ -1800,11 +1800,34 @@ span.chip-label:hover {
 }
 
 .viewer-title {
+  display: flex;
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.viewer-name,
+.viewer-collection {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+/* A long collection title leaves the result's own half the room. */
+.viewer-collection {
+  flex: 0 1 auto;
+  max-width: 50%;
+  opacity: 0.7;
+}
+
+.viewer-name {
+  flex: 0 1 auto;
+}
+
+.viewer-inside {
+  flex: none;
+  margin: 0 6px;
+  opacity: 0.5;
 }
 
 .viewer-trashed {

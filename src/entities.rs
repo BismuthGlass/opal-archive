@@ -310,7 +310,7 @@ fn counted_tags(conn: &Connection, ids: &str) -> rusqlite::Result<BTreeMap<Strin
 /// The collections any of the entities are in, and how many are in each.
 fn memberships(conn: &Connection, ids: &str) -> rusqlite::Result<Vec<Value>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT c.entity_id, e.title, c.collection_type, count(*)
+        "SELECT c.entity_id, e.title, c.collection_type, count(*), c.collection_id
          FROM membership m
          JOIN collection c ON c.entity_id = m.collection_id
          JOIN entity e ON e.id = c.entity_id
@@ -322,6 +322,7 @@ fn memberships(conn: &Connection, ids: &str) -> rusqlite::Result<Vec<Value>> {
             "title": row.get::<_, Option<String>>(1)?,
             "collection_type": row.get::<_, String>(2)?,
             "count": row.get::<_, i64>(3)?,
+            "collection_id": row.get::<_, Option<String>>(4)?,
         }))
     })?
     .collect()

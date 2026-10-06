@@ -130,7 +130,14 @@ export type Metadata = {
   tags: Record<string, { value: string; count: number; description: string | null }[]>;
   source_urls: { value: string; count: number }[];
   identifiers: { value: string; count: number }[];
-  memberships: { id: number; title: string | null; collection_type: string; count: number }[];
+  memberships: {
+    id: number;
+    title: string | null;
+    collection_type: string;
+    count: number;
+    /** Its identifier, if it has one. */
+    collection_id: string | null;
+  }[];
 };
 
 export type Changes = {
