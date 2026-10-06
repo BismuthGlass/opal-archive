@@ -14,7 +14,7 @@ import {
   selectMarked,
   selected,
 } from "../search";
-import { open as openTab } from "../tabs";
+import { inside, leave, open as openTab } from "../tabs";
 import { editTag } from "../tagEditing";
 import { fieldLabel, tagQuery } from "../format";
 import { showToast } from "../toast";
@@ -24,7 +24,15 @@ import Icon from "./Icon";
 export type MenuTag = { field: string; value: string; under?: boolean };
 
 /** Where the menu is, and the item, tag or mark that was right-clicked. */
-type Opened = { x: number; y: number; item?: Item; tag?: MenuTag; mark?: number };
+type Opened = {
+  x: number;
+  y: number;
+  item?: Item;
+  tag?: MenuTag;
+  mark?: number;
+  /** The collection on show, to be trashed. */
+  shown?: { id: number; title: string | null };
+};
 
 const [opened, setOpened] = createSignal<Opened | null>(null);
 
@@ -49,7 +57,23 @@ export function openMarkMenu(event: MouseEvent, mark: number) {
   setOpened({ x: event.clientX, y: event.clientY, mark });
 }
 
+/** Opens the menu of ways to trash the collection on show, under what was pressed. */
+export function openTrashMenu(event: MouseEvent, shown: { id: number; title: string | null }) {
+  const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  setOpened({ x: box.left, y: box.bottom + 2, shown });
+}
+
 const close = () => setOpened(null);
+
+/**
+ * Moves entities to the trash and, with `whole`, everything inside the
+ * collections among them. Returns how many of what was inside went too.
+ */
+async function trash(ids: number[], whole: boolean): Promise<number> {
+  const within = whole ? (await api.insideOf(ids)).filter((id) => !ids.includes(id)) : [];
+  await api.trashEntities([...ids, ...within]);
+  return within.length;
+}
 
 /**
  * The menu a right click on the grid brings up: what can be done with the
@@ -61,7 +85,9 @@ export default function ContextMenu() {
   return (
     <Show when={opened()} keyed>
       {(at) =>
-        at.mark ? (
+        at.shown ? (
+          <TrashMenu at={at} shown={at.shown} />
+        ) : at.mark ? (
           <MarkMenu at={at} mark={at.mark} />
         ) : at.tag ? (
           <TagMenu at={at} tag={at.tag} />
@@ -70,6 +96,56 @@ export default function ContextMenu() {
         )
       }
     </Show>
+  );
+}
+
+/** The ways to trash the collection on show. */
+function TrashMenu(props: { at: Opened; shown: { id: number; title: string | null } }) {
+  const shown = props.shown;
+  const run = async (whole: boolean) => {
+    close();
+    try {
+      const within = await trash([shown.id], whole);
+      showToast(
+        whole
+          ? `Moved the collection and ${plural(within, "item")} inside it to the trash`
+          : "Moved the collection to the trash",
+      );
+      // Out of it, if the tab had gone into it; its own tab stays on it.
+      if (inside()?.id === shown.id) leave();
+    } catch (err) {
+      showToast(errorMessage(err));
+    }
+    changed();
+  };
+  return (
+    <Shell at={props.at} label="Trash this collection">
+      <li class="context-menu-title" role="none">
+        This collection
+      </li>
+      <li role="none">
+        <button
+          class="danger"
+          role="menuitem"
+          title="Move the collection to the trash. What is in it stays in the library."
+          onClick={() => run(false)}
+        >
+          <Icon name="delete-outline" />
+          Trash the collection
+        </button>
+      </li>
+      <li role="none">
+        <button
+          class="danger"
+          role="menuitem"
+          title="Move the collection to the trash, with everything inside it, at any depth"
+          onClick={() => run(true)}
+        >
+          <Icon name="delete-outline" />
+          Trash it and what is inside
+        </button>
+      </li>
+    </Shell>
   );
 }
 
@@ -307,17 +383,33 @@ function Menu(props: { at: Opened; item: Item }) {
       <Show
         when={allTrashed()}
         fallback={
-          <li role="none">
-            <button
-              class="danger"
-              role="menuitem"
-              title="Move to the trash"
-              onClick={() => run(api.trashEntities)}
-            >
-              <Icon name="delete-outline" />
-              Trash
-            </button>
-          </li>
+          <>
+            <li role="none">
+              <button
+                class="danger"
+                role="menuitem"
+                title="Move to the trash"
+                onClick={() => run(api.trashEntities)}
+              >
+                <Icon name="delete-outline" />
+                Trash
+              </button>
+            </li>
+            {/* For collections: what is in them goes too. */}
+            <Show when={(state()?.collections ?? 0) > 0}>
+              <li role="none">
+                <button
+                  class="danger"
+                  role="menuitem"
+                  title="Move to the trash, with everything inside the collections, at any depth"
+                  onClick={() => run((ids) => trash(ids, true))}
+                >
+                  <Icon name="delete-outline" />
+                  Trash with what is inside
+                </button>
+              </li>
+            </Show>
+          </>
         }
       >
         <li role="none">

@@ -16,7 +16,7 @@ import {
   selectMarked,
   selected,
 } from "../search";
-import { openMarkMenu } from "./ContextMenu";
+import { openMarkMenu, openTrashMenu } from "./ContextMenu";
 import { shownCollection } from "../tabs";
 import Icon from "./Icon";
 
@@ -51,6 +51,19 @@ export default function Toolbar() {
         <Icon name="refresh" />
         Refresh
       </button>
+      <Show when={shownCollection()}>
+        {(collection) => (
+          <button
+            aria-label="Trash this collection"
+            aria-haspopup="menu"
+            title="Trash this collection, with or without what is inside it"
+            onClick={(event) => openTrashMenu(event, collection())}
+          >
+            <Icon name="delete-outline" />
+            Trash collection
+          </button>
+        )}
+      </Show>
       <Show when={search.total > 0}>
         <button
           onClick={selectAll}
