@@ -3,14 +3,15 @@ import { thumbnailUrl } from "../api";
 import type { Item } from "../api";
 import { duration, plural } from "../format";
 import {
-  PAGE,
   clickSelect,
   dataVersion,
   ensureRange,
   goToPage,
   itemAt,
+  marks,
   moveItems,
   noteScroll,
+  PAGE,
   scrollTo,
   search,
   searchCount,
@@ -322,6 +323,13 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                           <span class="trash-mark" title="In the trash">
                             <Icon name="delete-outline" />
                           </span>
+                        </Show>
+                        <Show when={marks().get(current().id)}>
+                          {(mark) => (
+                            <span class={`mark-flag mark-${mark()}`} title={`Mark ${mark()}`}>
+                              {mark()}
+                            </span>
+                          )}
                         </Show>
                         <Show when={badge(current())}>
                           {(text) => <span class="badge">{text()}</span>}

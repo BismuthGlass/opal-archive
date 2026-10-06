@@ -3,7 +3,17 @@ import type { JSX } from "solid-js";
 import * as api from "../api";
 import type { Item } from "../api";
 import { errorMessage, plural } from "../format";
-import { changed, clearSelection, moveItems, removeFromView, search, selected } from "../search";
+import {
+  changed,
+  clearMark,
+  clearSelection,
+  markCounts,
+  moveItems,
+  removeFromView,
+  search,
+  selectMarked,
+  selected,
+} from "../search";
 import { open as openTab } from "../tabs";
 import { editTag } from "../tagEditing";
 import { fieldLabel, tagQuery } from "../format";
@@ -13,8 +23,8 @@ import Icon from "./Icon";
 /** A tag that was right-clicked, or with `under` the namespace of that name. */
 export type MenuTag = { field: string; value: string; under?: boolean };
 
-/** Where the menu is, and the item or tag that was right-clicked. */
-type Opened = { x: number; y: number; item?: Item; tag?: MenuTag };
+/** Where the menu is, and the item, tag or mark that was right-clicked. */
+type Opened = { x: number; y: number; item?: Item; tag?: MenuTag; mark?: number };
 
 const [opened, setOpened] = createSignal<Opened | null>(null);
 
@@ -33,6 +43,12 @@ export function openTagMenu(event: MouseEvent, tag: MenuTag) {
   setOpened({ x: event.clientX, y: event.clientY, tag });
 }
 
+/** Opens the menu of what can be done with a mark, at the pointer. */
+export function openMarkMenu(event: MouseEvent, mark: number) {
+  event.preventDefault();
+  setOpened({ x: event.clientX, y: event.clientY, mark });
+}
+
 const close = () => setOpened(null);
 
 /**
@@ -44,8 +60,53 @@ export default function ContextMenu() {
   // Keyed, so the menu is given the value itself and can use it as it closes.
   return (
     <Show when={opened()} keyed>
-      {(at) => (at.tag ? <TagMenu at={at} tag={at.tag} /> : <Menu at={at} item={at.item!} />)}
+      {(at) =>
+        at.mark ? (
+          <MarkMenu at={at} mark={at.mark} />
+        ) : at.tag ? (
+          <TagMenu at={at} tag={at.tag} />
+        ) : (
+          <Menu at={at} item={at.item!} />
+        )
+      }
     </Show>
+  );
+}
+
+/** What a right click on a mark's count brings up. */
+function MarkMenu(props: { at: Opened; mark: number }) {
+  const mark = props.mark;
+  return (
+    <Shell at={props.at} label={`Actions on mark ${mark}`}>
+      <li class="context-menu-title" role="none">
+        Mark {mark}: {plural(markCounts()[mark], "item")}
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          onClick={() => {
+            close();
+            selectMarked(mark);
+          }}
+        >
+          <Icon name="select-all" />
+          Select
+        </button>
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          title="Take this mark off everything that has it"
+          onClick={() => {
+            close();
+            clearMark(mark);
+          }}
+        >
+          <Icon name="close" />
+          Clear mark
+        </button>
+      </li>
+    </Shell>
   );
 }
 

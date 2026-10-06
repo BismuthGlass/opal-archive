@@ -1,18 +1,22 @@
-import { Show } from "solid-js";
+import { For, Show } from "solid-js";
 import { plural } from "../format";
 import * as api from "../api";
 import {
+  MARKS,
   PAGE,
   clearSelection,
   goToPage,
+  markCounts,
   pageCount,
   refresh,
   resetOrder,
   resultIds,
   search,
   selectAll,
+  selectMarked,
   selected,
 } from "../search";
+import { openMarkMenu } from "./ContextMenu";
 import { shownCollection } from "../tabs";
 import Icon from "./Icon";
 
@@ -62,6 +66,22 @@ export default function Toolbar() {
             Clear
           </button>
         </Show>
+        {/* One badge for each mark in use, with how many results have it. */}
+        <For each={Array.from({ length: MARKS }, (_, index) => index + 1)}>
+          {(mark) => (
+            <Show when={markCounts()[mark] > 0}>
+              <button
+                class={`mark-badge mark-${mark}`}
+                aria-label={`Mark ${mark}: ${plural(markCounts()[mark], "item")}`}
+                title={`${plural(markCounts()[mark], "item")} with mark ${mark}. Click to select, right click for more.`}
+                onClick={() => selectMarked(mark)}
+                onContextMenu={(event) => openMarkMenu(event, mark)}
+              >
+                {markCounts()[mark]}
+              </button>
+            </Show>
+          )}
+        </For>
         <Show when={ordered()}>
           {(collection) => (
             <button

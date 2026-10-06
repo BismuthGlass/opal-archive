@@ -17,6 +17,30 @@ export const ACTIONS = [
     description: "Then press 1 to 7 to set the score, or 0 to clear it.",
     key: "r",
   },
+  {
+    id: "mark",
+    label: "Mark",
+    description: "Gives mark 1, or takes it off what already has it.",
+    key: "m",
+  },
+  {
+    id: "markAs",
+    label: "Mark as",
+    description: "Then press 1 to 5 to give that mark, or 0 to take the mark off.",
+    key: "shift+m",
+  },
+  {
+    id: "trash",
+    label: "Trash",
+    description: "Moves to the trash.",
+    key: "ctrl+x",
+  },
+  {
+    id: "restore",
+    label: "Restore",
+    description: "Takes out of the trash.",
+    key: "ctrl+shift+x",
+  },
 ] as const;
 
 export type Action = (typeof ACTIONS)[number]["id"];
@@ -58,7 +82,10 @@ export const isDefault = (action: Action) => settings.hotkeys?.[action] === unde
 /** The action bound to the key an event stands for, if any. */
 export function actionFor(event: KeyboardEvent): Action | null {
   const key = keyOf(event);
-  return ACTIONS.find((entry) => keyFor(entry.id) === key)?.id ?? null;
+  if (key === null) return null;
+  const bound = (name: string) => ACTIONS.find((entry) => keyFor(entry.id) === name)?.id ?? null;
+  // Cmd stands in for Ctrl, unless the key with Cmd is bound to something.
+  return bound(key) ?? (event.metaKey && !event.ctrlKey ? bound(key.replace("meta", "ctrl")) : null);
 }
 
 /**

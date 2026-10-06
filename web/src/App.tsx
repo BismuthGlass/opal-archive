@@ -21,6 +21,7 @@ import * as api from "./api";
 import { errorMessage, plural } from "./format";
 import { actionFor } from "./hotkeys";
 import {
+  MARKS,
   PAGE,
   clearSelection,
   changed,
@@ -31,6 +32,8 @@ import {
   search,
   selectAll,
   selected,
+  toggleMark,
+  unmark,
 } from "./search";
 import { loadSettings } from "./settings";
 import { closeTagEditor, openTagEditor, tagEditor } from "./tagEditing";
@@ -69,6 +72,8 @@ export default function App() {
   const [tagging, setTagging] = createSignal<{ ids: number[]; name: string } | null>(null);
   /** What the next digit rates, after the quick-rate key. */
   const [rating, setRating] = createSignal<{ ids: number[]; name: string } | null>(null);
+  /** What the next digit marks, after the mark-as key. */
+  const [marking, setMarking] = createSignal<{ ids: number[]; name: string } | null>(null);
   const [panelOpen, setPanelOpen] = createStoredFlag("opalarchive.panel", true);
 
   onMount(() => {
@@ -143,6 +148,40 @@ export default function App() {
     changed();
   };
 
+  const mark = (target: { ids: number[]; name: string }, number: number | null) => {
+    if (number === null) {
+      unmark(target.ids);
+      showToast(`Took the mark off ${target.name}`);
+    } else if (toggleMark(target.ids, number)) {
+      showToast(`Gave ${target.name} mark ${number}`);
+    } else {
+      showToast(`Took mark ${number} off ${target.name}`);
+    }
+  };
+
+  /** Moves to the trash, or with `restore` out of it. */
+  const trash = async (target: { ids: number[]; name: string }, restore: boolean) => {
+    try {
+      const { changed } = await (restore ? api.restoreEntities : api.trashEntities)(target.ids);
+      showToast(
+        changed === 0
+          ? `${restore ? "Nothing was" : "Already"} in the trash`
+          : restore
+            ? `Took ${target.name} out of the trash`
+            : `Moved ${target.name} to the trash`,
+      );
+    } catch (err) {
+      showToast(errorMessage(err));
+    }
+    changed();
+  };
+
+  /** The digit a key stands for, with Shift still down or not. */
+  const digitOf = (event: KeyboardEvent) => {
+    const digit = /^\d$/.test(event.key) ? event.key : /^(?:Digit|Numpad)(\d)$/.exec(event.code)?.[1];
+    return digit === undefined ? null : Number(digit);
+  };
+
   // On the window and capturing, so that it hears keys before the viewer
   // does and can keep the ones it uses from it.
   const onKeyDown = (event: KeyboardEvent) => {
@@ -166,6 +205,23 @@ export default function App() {
       // Any other key calls the rating off and does what it usually does.
     }
 
+    // After the mark-as key, likewise, the next key is the mark.
+    const marked = marking();
+    if (marked) {
+      // Letting go of Shift, or holding it, is not an answer.
+      if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return;
+      setMarking(null);
+      hideToast();
+      const digit = digitOf(event);
+      const number = digit !== null && digit <= MARKS ? digit : null;
+      if (number !== null || event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (number !== null) mark(marked, number || null);
+        return;
+      }
+    }
+
     const action = actionFor(event);
     if (action) {
       event.preventDefault();
@@ -174,6 +230,13 @@ export default function App() {
       if (!on) return showToast("Select something first");
       if (action === "quickTag") {
         setTagging(on);
+      } else if (action === "mark") {
+        mark(on, 1);
+      } else if (action === "markAs") {
+        setMarking(on);
+        showToast(`Mark ${on.name}: press 1 to ${MARKS}, or 0 to take the mark off`, true);
+      } else if (action === "trash" || action === "restore") {
+        trash(on, action === "restore");
       } else {
         setRating(on);
         showToast(`Rate ${on.name}: press 1 to 7, or 0 to clear`, true);

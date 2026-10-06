@@ -1,6 +1,6 @@
 import { createEffect, createSignal, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { contentUrl } from "../api";
-import { ensureRange, itemAt, search } from "../search";
+import { ensureRange, itemAt, marks, search } from "../search";
 import { saveSetting, settings } from "../settings";
 import Icon from "./Icon";
 import { modalOpen } from "./Modal";
@@ -90,6 +90,14 @@ export default function Viewer(props: { index: number; onMove: (index: number | 
     <div class="viewer" role="dialog" aria-modal="true" aria-label="Viewer">
       <header>
         <span class="viewer-title">{item()?.title ?? ""}</span>
+        <Show when={item() && marks().get(item()!.id)}>
+          {(mark) => <span class={`mark-badge mark-${mark()}`}>Mark {mark()}</span>}
+        </Show>
+        <Show when={item()?.trashed}>
+          <span class="viewer-trashed" title="In the trash">
+            <Icon name="delete-outline" />
+          </span>
+        </Show>
         <span class="viewer-count">
           {props.index + 1} / {search.total}
         </span>

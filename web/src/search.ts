@@ -31,6 +31,14 @@ const [search, setSearch] = createStore({
 });
 const [pages, setPages] = createStore<Record<number, Item[]>>({});
 const [selected, setSelected] = createSignal<ReadonlySet<number>>(new Set());
+/** How many marks there are, numbered from 1. */
+export const MARKS = 5;
+/**
+ * The results of the view on show that are marked, and with which mark.
+ * Marks are the view's own, as its selection is: nothing in the library
+ * is changed by them.
+ */
+const [marks, setMarks] = createSignal<ReadonlyMap<number, number>>(new Map());
 // Bumped when a new search is shown (the grid scrolls back to the top) and
 // when library data changes (dependent views reload).
 const [searchCount, setSearchCount] = createSignal(0);
@@ -46,7 +54,7 @@ export function noteScroll(top: number) {
   scrolled = top;
 }
 
-export { search, selected, searchCount, dataVersion, scrollTo, setScrollTo };
+export { search, selected, marks, searchCount, dataVersion, scrollTo, setScrollTo };
 
 // Responses from an older generation are dropped.
 let generation = 0;
@@ -75,8 +83,22 @@ let viewTab: number | null = null;
  */
 const views = new Map<string, { ids: number[]; custom: boolean }>();
 
-/** How a view was left: where it was, and what was selected in it. */
-type Left = { page: number; scroll: number; selected: ReadonlySet<number>; anchor: number | null };
+/** How a view was left: where it was, and what was selected and marked in it. */
+type Left = {
+  page: number;
+  scroll: number;
+  selected: ReadonlySet<number>;
+  marks: ReadonlyMap<number, number>;
+  anchor: number | null;
+};
+/** A view as it is stored. */
+type StoredLeft = {
+  page: number;
+  scroll: number;
+  selected: number[];
+  marks?: [number, number][];
+  anchor: number | null;
+};
 
 // How each view was left is remembered per browser, like the active tab,
 // so that reloading the page brings every view back to where it was.
@@ -91,9 +113,10 @@ const lefts = new Map<string, Left>(readLefts());
 function readLefts(): [string, Left][] {
   try {
     const stored = JSON.parse(localStorage.getItem(LEFT_KEY) ?? "[]");
-    return (stored as [string, { page: number; scroll: number; selected: number[]; anchor: number | null }][]).map(
-      ([key, left]) => [key, { ...left, selected: new Set(left.selected) }],
-    );
+    return (stored as [string, StoredLeft][]).map(([key, left]) => [
+      key,
+      { ...left, selected: new Set(left.selected), marks: new Map(left.marks ?? []) },
+    ]);
   } catch {
     return [];
   }
@@ -102,7 +125,11 @@ function readLefts(): [string, Left][] {
 function writeLefts() {
   const stored = [...lefts].map(([key, left]) => [
     key,
-    { ...left, selected: left.selected.size > SELECTED_MOST ? [] : [...left.selected] },
+    {
+      ...left,
+      selected: left.selected.size > SELECTED_MOST ? [] : [...left.selected],
+      marks: [...left.marks],
+    },
   ]);
   try {
     localStorage.setItem(LEFT_KEY, JSON.stringify(stored));
@@ -116,7 +143,13 @@ function noteLeft() {
   if (viewKey === "") return;
   // Put last: it is the one left most recently.
   lefts.delete(viewKey);
-  lefts.set(viewKey, { page: search.page, scroll: scrolled, selected: selected(), anchor });
+  lefts.set(viewKey, {
+    page: search.page,
+    scroll: scrolled,
+    selected: selected(),
+    marks: marks(),
+    anchor,
+  });
   for (const key of lefts.keys()) {
     if (lefts.size <= LEFT_MOST) break;
     lefts.delete(key);
@@ -158,9 +191,7 @@ async function fetchPage(page: number): Promise<Item[]> {
     const gone = new Set(slice.filter((id) => !known.has(id)));
     if (gone.size === 0) return slice.map((id) => known.get(id)!);
     ids = ids.filter((id) => !gone.has(id));
-    if ([...selected()].some((id) => gone.has(id))) {
-      setSelected(new Set([...selected()].filter((id) => !gone.has(id))));
-    }
+    keepListed();
     remember();
   }
 }
@@ -190,6 +221,17 @@ const lastPage = () => pageCount() - 1;
 
 export function goToPage(page: number) {
   setSearch("page", Math.max(0, Math.min(lastPage(), page)));
+}
+
+/** What the view no longer lists is no longer selected, nor marked. */
+function keepListed() {
+  const listed = new Set(ids);
+  if ([...selected()].some((id) => !listed.has(id))) {
+    setSelected(new Set([...selected()].filter((id) => listed.has(id))));
+  }
+  if ([...marks().keys()].some((id) => !listed.has(id))) {
+    setMarks(new Map([...marks()].filter(([id]) => listed.has(id))));
+  }
 }
 
 /** Makes sure the pages covering these result indices are loaded. */
@@ -227,11 +269,7 @@ function calculate() {
       ids = found;
     }
     remember();
-    // What is no longer listed is no longer selected.
-    const listed = new Set(ids);
-    if ([...selected()].some((id) => !listed.has(id))) {
-      setSelected(new Set([...selected()].filter((id) => listed.has(id))));
-    }
+    keepListed();
   });
   // Failures are reported by the page load that waits on this.
   calculated.catch(() => {});
@@ -281,6 +319,7 @@ export function runSearch(
     error: null,
   });
   setSelected(left?.selected ?? new Set<number>());
+  setMarks(left?.marks ?? new Map<number, number>());
   setSearchCount((n) => n + 1);
   // After the count: the grid goes to the top first, then to where it was.
   setScrollTo(left?.scroll || null);
@@ -315,17 +354,12 @@ export function runSearch(
       });
     calculated.catch(() => {});
   }
-  if (left && left.selected.size > 0) {
-    // The view may have changed since it was left: what it no longer
-    // lists is no longer selected.
+  if (left && left.selected.size + left.marks.size > 0) {
+    // The view may have changed since it was left.
     const current = generation;
     calculated
       .then(() => {
-        if (current !== generation) return;
-        const listed = new Set(ids);
-        if ([...selected()].some((id) => !listed.has(id))) {
-          setSelected(new Set([...selected()].filter((id) => listed.has(id))));
-        }
+        if (current === generation) keepListed();
       })
       .catch(() => {});
   }
@@ -454,7 +488,7 @@ export async function removeFromView(removed: number[]) {
   ids = current.filter((id) => !going.has(id));
   anchor = null;
   remember();
-  setSelected(new Set([...selected()].filter((id) => !going.has(id))));
+  keepListed();
   reload();
 }
 
@@ -495,4 +529,45 @@ export async function selectAll() {
 export function clearSelection() {
   anchor = null;
   setSelected(new Set<number>());
+}
+
+/** How many results carry each mark; index 0 is not used. */
+export function markCounts(): number[] {
+  const counts = Array<number>(MARKS + 1).fill(0);
+  for (const mark of marks().values()) counts[mark] += 1;
+  return counts;
+}
+
+/**
+ * Gives results a mark, in place of any they had. Given to results that
+ * all have it already, it is taken off them instead. Returns whether it
+ * was put on.
+ */
+export function toggleMark(marked: number[], mark: number): boolean {
+  if (marked.every((id) => marks().get(id) === mark)) {
+    unmark(marked);
+    return false;
+  }
+  const next = new Map(marks());
+  for (const id of marked) next.set(id, mark);
+  setMarks(next);
+  return true;
+}
+
+/** Takes whatever mark these results have off them. */
+export function unmark(marked: number[]) {
+  const next = new Map(marks());
+  for (const id of marked) next.delete(id);
+  setMarks(next);
+}
+
+/** Takes a mark off everything that has it. */
+export function clearMark(mark: number) {
+  setMarks(new Map([...marks()].filter(([, given]) => given !== mark)));
+}
+
+/** Selects every result with a mark, on every page. */
+export function selectMarked(mark: number) {
+  anchor = null;
+  setSelected(new Set([...marks()].filter(([, given]) => given === mark).map(([id]) => id)));
 }
