@@ -1,0 +1,21 @@
+{
+  "title": "Reddit",
+  "source": "reddit",
+  "command": ["uv", "run", "--quiet", "--script", "reddit.py"],
+  "url_hint": "A post URL",
+  "cookies": {
+    "browsers": ["chrome", "firefox", "safari", "brave", "edge", "chromium", "opera", "vivaldi"]
+  },
+  "options": [
+    {
+      "key": "video",
+      "label": "Download videos",
+      "default": true
+    },
+    {
+      "key": "external",
+      "label": "Download what a post links to on another site, such as Imgur, Redgifs or YouTube",
+      "default": true
+    }
+  ]
+}
