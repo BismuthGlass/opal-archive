@@ -2,11 +2,11 @@
   "title": "4chan",
   "source": "4chan",
   "command": ["uv", "run", "--quiet", "--script", "4chan.py"],
-  "url_hint": "A thread URL",
+  "url_hint": "A thread, post or file URL",
   "options": [
     {
       "key": "collection",
-      "label": "Put the files in a collection for the thread",
+      "label": "Put the files of a thread in a collection for it",
       "default": true
     },
     {

@@ -11,6 +11,10 @@ It takes a thread URL and downloads the files posted in it, into a collection
 named for the thread, through 4chan's
 read-only JSON API (https://github.com/4chan/4chan-API). A thread still on
 the board or in its archive can be read; one that has been pruned is gone.
+
+It also takes the address of one post, a thread URL ending in `#p` and the
+post's number, and downloads that post's file alone; and the address of a
+file itself, which it downloads as it is. Neither goes in a collection.
 """
 from __future__ import annotations
 
@@ -38,6 +42,8 @@ HEADERS = {
     "(KHTML, like Gecko) Chrome/126.0 Safari/537.36",
 }
 HOSTS = ("4chan.org", "4channel.org")
+# Where the files themselves are served from.
+FILE_HOSTS = ("4cdn.org", "4chan.org")
 VIDEO = {".webm", ".mp4"}
 RETRY_STATUS = {429, 500, 502, 503, 504}
 # Files fetched at once. 4chan asks its readers to go easy.
@@ -72,17 +78,33 @@ def get(url: str, **kwargs) -> requests.Response:
     raise AssertionError
 
 
-def thread_of(url: str) -> tuple[str, str]:
-    """The board and thread number a URL names."""
+def on(host: str, known: tuple[str, ...]) -> bool:
+    return any(host == name or host.endswith(f".{name}") for name in known)
+
+
+def file_of(url: str) -> str | None:
+    """The address of the file a URL names, if it is a file's own address."""
     parsed = urlparse(url if "://" in url else f"https://{url}")
     host = (parsed.hostname or "").lower()
-    if not any(host == known or host.endswith(f".{known}") for known in HOSTS):
+    # /g/1717171717171717.jpg: the board, and the number the file was given.
+    if on(host, FILE_HOSTS) and re.match(r"^/\w+/\d+\.\w+$", parsed.path):
+        return f"https://{host}{parsed.path}"
+    return None
+
+
+def thread_of(url: str) -> tuple[str, str, int | None]:
+    """The board and thread number a URL names, and the post if it names one."""
+    parsed = urlparse(url if "://" in url else f"https://{url}")
+    host = (parsed.hostname or "").lower()
+    if not on(host, HOSTS):
         raise RuntimeError("that is not a 4chan address")
     # /g/thread/109956993, with or without the thread's name after it.
     match = re.match(r"^/(\w+)/thread/(\d+)", parsed.path)
     if not match:
-        raise RuntimeError("that is not a thread address")
-    return match.group(1), match.group(2)
+        raise RuntimeError("that is not a thread, post or file address")
+    # A post's address ends in #p and its number; a reply to it, in #q.
+    post = re.match(r"^[pq](\d+)$", parsed.fragment)
+    return match.group(1), match.group(2), int(post.group(1)) if post else None
 
 
 def posts_of(board: str, thread: str) -> list[dict]:
@@ -133,6 +155,22 @@ def fetch(board: str, post: dict, out: Path) -> str:
     return str(dest)
 
 
+def fetch_file(url: str, out: Path) -> str:
+    """Downloads a file by its own address, and returns its path."""
+    dest = out / Path(urlparse(url).path).name
+    part = dest.with_name(dest.name + ".part")
+    r = get(url, stream=True)
+    if r.status_code == 404:
+        raise RuntimeError("there is no such file: it may have been pruned")
+    if r.status_code != 200:
+        raise RuntimeError(f"HTTP {r.status_code}")
+    with open(part, "wb") as f:
+        for chunk in r.iter_content(1 << 16):
+            f.write(chunk)
+    part.rename(dest)
+    return str(dest)
+
+
 def download() -> int:
     request = json.load(sys.stdin)
     options = request.get("options") or {}
@@ -140,15 +178,35 @@ def download() -> int:
     out.mkdir(parents=True, exist_ok=True)
     seen = set(request.get("seen") or [])
 
+    # A file's own address says nothing of its post or thread: it is
+    # downloaded as it is, and known by that address.
+    file = file_of(request["url"])
+    if file:
+        emit("found", total=1)
+        if file in seen:
+            emit("skipped", key=file)
+        elif not options.get("video", True) and Path(file).suffix.lower() in VIDEO:
+            raise RuntimeError("that is a video, and videos are turned off")
+        else:
+            emit("log", message="Downloading")
+            emit("item", key=file, source_url=file, files=[fetch_file(file, out)])
+        return 0
+
     emit("log", message="Reading the thread")
-    board, thread = thread_of(request["url"])
+    board, thread, only = thread_of(request["url"])
     posts = posts_of(board, thread)
     subject = html.unescape(posts[0].get("sub") or "").strip() if posts else ""
+    if only is not None:
+        posts = [post for post in posts if post["no"] == only]
+        if not posts:
+            raise RuntimeError(f"there is no post {only} in that thread: it may have been deleted")
     posts = [
         post
         for post in posts
         if post.get("tim") and post.get("ext") and not post.get("filedeleted")
     ]
+    if only is not None and not posts:
+        raise RuntimeError("that post has no file")
     if not options.get("video", True):
         posts = [post for post in posts if post["ext"].lower() not in VIDEO]
     emit("found", total=len(posts))
@@ -158,8 +216,9 @@ def download() -> int:
         return POST.format(board=board, thread=thread, no=post["no"])
 
     # The thread becomes a collection holding its files, in the order posted.
+    # A post asked for by itself is only a file.
     whole = {}
-    if options.get("collection", True):
+    if options.get("collection", True) and only is None:
         address = THREAD.format(board=board, thread=thread)
         # Thread numbers are a board's own, so the board is part of the ID.
         whole = {
