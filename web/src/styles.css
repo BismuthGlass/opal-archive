@@ -1824,6 +1824,23 @@ span.chip-label:hover {
   flex: 0 1 auto;
 }
 
+/* A button does not pass on being cut short: a long title is cut here. */
+.viewer header .viewer-collection button {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  cursor: pointer;
+}
+
+.viewer header .viewer-collection button:hover {
+  text-decoration: underline;
+}
+
 .viewer-inside {
   flex: none;
   margin: 0 6px;

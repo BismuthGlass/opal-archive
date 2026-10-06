@@ -2,6 +2,7 @@ import {
   createEffect,
   createResource,
   createSignal,
+  For,
   Match,
   on,
   onCleanup,
@@ -12,7 +13,7 @@ import {
 import { contentUrl, getMetadata } from "../api";
 import { ensureRange, itemAt, marks, search } from "../search";
 import { saveSetting, settings } from "../settings";
-import { inside } from "../tabs";
+import { enter, shownCollection } from "../tabs";
 import Icon from "./Icon";
 import { modalOpen } from "./Modal";
 
@@ -39,13 +40,15 @@ export default function Viewer(props: { index: number; onMove: (index: number | 
   const collections = () => {
     const found = memberships.error ? undefined : memberships();
     // Those of the result shown before are not this one's.
-    if (!found || found.of !== item()?.id) return "";
-    // The one the tab is inside comes first.
-    const here = inside()?.id;
-    return [...found.list]
-      .sort((a, b) => Number(b.id === here) - Number(a.id === here))
-      .map((collection) => collection.title || collection.collection_id || `#${collection.id}`)
-      .join(", ");
+    if (!found || found.of !== item()?.id) return [];
+    // The one on show comes first.
+    const here = shownCollection()?.id;
+    return [...found.list].sort((a, b) => Number(b.id === here) - Number(a.id === here));
+  };
+  /** Leaves the viewer for the collection: the tab goes into it. */
+  const goInto = (collection: { id: number; title: string | null }) => {
+    props.onMove(null);
+    enter(collection);
   };
 
   const step = (delta: number) => {
@@ -118,9 +121,25 @@ export default function Viewer(props: { index: number; onMove: (index: number | 
     <div class="viewer" role="dialog" aria-modal="true" aria-label="Viewer">
       <header>
         <span class="viewer-title">
-          <Show when={collections()}>
-            <span class="viewer-collection" title="The collection this is in">
-              {collections()}
+          <Show when={collections().length > 0}>
+            <span class="viewer-collection">
+              <For each={collections()}>
+                {(collection, index) => (
+                  <>
+                    {index() > 0 ? ", " : ""}
+                    <button
+                      title={
+                        collection.id === shownCollection()?.id
+                          ? "The collection on show: back to it"
+                          : "Go into this collection"
+                      }
+                      onClick={() => goInto(collection)}
+                    >
+                      {collection.title || collection.collection_id || `#${collection.id}`}
+                    </button>
+                  </>
+                )}
+              </For>
             </span>
             <Show when={item()?.title}>
               <span class="viewer-inside" aria-hidden="true">
