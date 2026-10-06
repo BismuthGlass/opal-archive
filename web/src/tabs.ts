@@ -12,6 +12,7 @@ function forget(id: number) {
   forgetDownload(id);
   setTrails(produce((all) => void delete all[id]));
   saveTrails();
+  setShowsTrashed(id, false);
 }
 
 // Tabs live on the server; which one is active is remembered per browser.
@@ -24,6 +25,36 @@ const [error, setError] = createSignal<string | null>(null);
 export { tabs, activeId, error };
 
 export const activeTab = () => tabs.find((tab) => tab.id === activeId());
+
+// The tabs whose searches list what is in the trash along with the rest.
+// It is part of what a tab searches for, as its query is, but is
+// remembered per browser.
+const TRASHED_KEY = "opalarchive.showTrashed";
+const [trashedTabs, setTrashedTabs] = createSignal<ReadonlySet<number>>(readTrashedTabs());
+
+function readTrashedTabs(): Set<number> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(TRASHED_KEY) ?? "[]") as number[]);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Whether the active tab's searches, and filters, list the trash too. */
+export const showsTrashed = () => trashedTabs().has(activeId() ?? -1);
+
+export function setShowsTrashed(tab: number, show: boolean) {
+  if (trashedTabs().has(tab) === show) return;
+  const next = new Set(trashedTabs());
+  if (show) next.add(tab);
+  else next.delete(tab);
+  setTrashedTabs(next);
+  try {
+    localStorage.setItem(TRASHED_KEY, JSON.stringify([...next]));
+  } catch {
+    // Storage unavailable; the choice just won't survive a reload.
+  }
+}
 
 /** A collection a tab has gone into, and the filter typed while in it. */
 export type Step = { id: number; title: string | null; ordered: boolean; query: string };

@@ -1,8 +1,8 @@
 import { createEffect, createSignal, For, Index, onCleanup, onMount, Show } from "solid-js";
 import { errorMessage } from "../format";
 import { queryLabel, savedQueries, saveQuery } from "../savedQueries";
-import { refresh, search, setShowTrashed, showTrashed } from "../search";
-import { activeTab, filterInside, inside, setQuery } from "../tabs";
+import { refresh, search } from "../search";
+import { activeTab, filterInside, inside, setQuery, setShowsTrashed, showsTrashed } from "../tabs";
 import Icon from "./Icon";
 
 /** Writes a term into the search box on show, if there is one. */
@@ -30,6 +30,8 @@ export default function QueryBar() {
   /** The row being saved, while its name is typed. */
   const [naming, setNaming] = createSignal<number | null>(null);
   const [saveError, setSaveError] = createSignal<string | null>(null);
+  /** Whether the trash is to be listed too: like the rows, searched for when asked. */
+  const [trashed, setTrashed] = createSignal(false);
 
   // Inside a collection the box filters it, and the tab's own query waits.
   const stored = () => inside()?.query ?? activeTab()?.query ?? "";
@@ -41,6 +43,7 @@ export default function QueryBar() {
     setRows(rowsOf(stored()));
     setNaming(null);
   });
+  createEffect(() => setTrashed(showsTrashed()));
 
   // Rows left empty are not part of the query.
   const typed = () =>
@@ -49,14 +52,17 @@ export default function QueryBar() {
       .filter((row) => row !== "")
       .join("\n");
   /** Whether searching would do anything: the query on show is this one. */
-  const unchanged = () => typed() === stored() && !search.idle;
+  const unchanged = () => typed() === stored() && trashed() === showsTrashed() && !search.idle;
 
   const submit = () => {
     const tab = activeTab();
     const query = typed();
+    // Showing the trash, or not, is searched for as a change of query is.
+    const switched = tab !== undefined && trashed() !== showsTrashed();
+    if (switched) setShowsTrashed(tab.id, trashed());
     if (query === stored() && search.idle) {
       // The search a newly opened tab was waiting to be asked for.
-      refresh();
+      if (!switched) refresh();
     } else if (inside()) {
       if (query !== inside()!.query) filterInside(query);
     } else if (tab && query !== tab.query) {
@@ -291,13 +297,13 @@ export default function QueryBar() {
       </div>
       <label
         class="check query-trashed"
-        title="List what is in the trash along with the rest, in every search and filter. Without it, only a query that says @trashed finds it."
+        title="List what is in the trash along with the rest, the next time Search is pressed. Without it, only a query that says @trashed finds it."
       >
         <input
           type="checkbox"
-          checked={showTrashed()}
+          checked={trashed()}
           onChange={(event) => {
-            setShowTrashed(event.currentTarget.checked);
+            setTrashed(event.currentTarget.checked);
             // Left with the focus, it would keep the gallery's hotkeys.
             event.currentTarget.blur();
           }}

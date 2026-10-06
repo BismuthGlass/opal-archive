@@ -47,6 +47,7 @@ import {
   open,
   refresh,
   shownCollection as collectionShown,
+  showsTrashed,
   trail,
 } from "./tabs";
 import Trail, { goBack } from "./components/Trail";
@@ -98,7 +99,11 @@ export default function App() {
         // each way in, kept apart from the tab's own by a character that
         // cannot be typed.
         const way = trail().map((step) => step.id).join("/");
-        return inside() ? `${tab.id}:\u0001${way}:${inside()!.query}` : `${tab.id}:${tab.query}`;
+        // With the trash on show it is another view of the same query.
+        const trashed = showsTrashed() ? "\u0002" : "";
+        return inside()
+          ? `${tab.id}:\u0001${way}:${trashed}${inside()!.query}`
+          : `${tab.id}:${trashed}${tab.query}`;
       },
       (key) => {
         if (key === undefined) return;
@@ -113,11 +118,12 @@ export default function App() {
         shown = { tab: tab.id, inside: !!step, depth: trail().length };
         if (step) {
           // Not saved with the tab: the trail is the page's alone.
-          runSearch(step.query, null, key, null, step.id, false, entered);
+          runSearch(step.query, null, key, null, step.id, false, entered, showsTrashed());
         } else {
           // Listing the whole library is not done just for opening a tab.
           const wait = tab.kind === "gallery" && tab.query === "" && !asked;
-          runSearch(tab.query, tab.kind === "gallery" ? null : tab.id, key, tab.id, null, wait);
+          const scope = tab.kind === "gallery" ? null : tab.id;
+          runSearch(tab.query, scope, key, tab.id, null, wait, false, showsTrashed());
         }
       },
     ),
