@@ -10,6 +10,8 @@
   --danger-bg: #ffe3e3;
   --danger-text: #a61e1e;
   --star: #e8a400;
+  --collection: #b7791f;
+  --on-collection: #ffffff;
   --mark-1: #e03131;
   --mark-2: #e8590c;
   --mark-3: #2f9e44;
@@ -30,6 +32,8 @@
     --danger-bg: #4a1c1c;
     --danger-text: #ffc9c9;
     --star: #f5c542;
+    --collection: #e0b04a;
+    --on-collection: #1c1503;
   }
 }
 
@@ -689,11 +693,40 @@ button.primary {
   border-radius: 4px;
 }
 
-/* A second outline suggests a stack of items. */
+/* A collection: a stack of cards in a colour of its own, and its count on
+   a badge of that colour. */
 .tile.collection .thumb {
+  border-color: var(--collection);
   box-shadow:
-    3px 3px 0 var(--bg),
-    4px 4px 0 var(--border);
+    3px 3px 0 -1px var(--bg),
+    3px 3px 0 0 var(--collection),
+    6px 6px 0 -1px var(--bg),
+    6px 6px 0 0 var(--collection);
+}
+
+/* Over the image, which would cover a line drawn inside the frame. */
+.tile.collection .thumb::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  border: 1px solid var(--collection);
+  border-radius: 5px;
+}
+
+.tile.collection .badge {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  padding: 1px 6px 1px 4px;
+  font-weight: 600;
+  color: var(--on-collection);
+  background: var(--collection);
+}
+
+.tile.collection .badge svg {
+  width: 13px;
+  height: 13px;
 }
 
 .tile.selected .thumb {

@@ -332,7 +332,14 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                           )}
                         </Show>
                         <Show when={badge(current())}>
-                          {(text) => <span class="badge">{text()}</span>}
+                          {(text) => (
+                            <span class="badge">
+                              <Show when={current().kind === "collection"}>
+                                <Icon name="photo-library-outline" />
+                              </Show>
+                              {text()}
+                            </span>
+                          )}
                         </Show>
                         {/* Only titled entries get a label, over the image. */}
                         <Show when={current().title}>
