@@ -138,9 +138,111 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (url) report(tab, await send(url));
 });
 
+// Another OpalArchive: when the page on show is an OpalArchive that is not
+// the one the extension sends to, its button says so, and a press on it
+// has the extension send to that one from then on. One browser is thus
+// turned from a copy being tried out to the one that is kept, and back,
+// by opening the one wanted.
+
+/** The mark on the button while the page on show is another OpalArchive. */
+const OTHER = "⇄";
+
+/** The place a page's address is of, `http://127.0.0.1:7878`, if it has one. */
+function originOf(url) {
+  try {
+    const { protocol, origin } = new URL(url ?? "");
+    return protocol === "http:" || protocol === "https:" ? origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/** What has been found out about each place lately: whether it is an OpalArchive. */
+const found = new Map();
+const FOUND_FOR = 30_000;
+
+/** Whether an OpalArchive answers at a place. */
+async function isOpalArchive(origin) {
+  const known = found.get(origin);
+  if (known && Date.now() - known.at < FOUND_FOR) return known.is;
+  let is = false;
+  try {
+    const response = await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(3000) });
+    const health = response.ok ? await response.json() : null;
+    // Its health check says how far its library's layout has come.
+    is = health?.status === "ok" && Number.isInteger(health?.schema_version);
+  } catch {
+    // Nothing there, or nothing the extension may ask.
+  }
+  found.set(origin, { is, at: Date.now() });
+  return is;
+}
+
+/** The OpalArchive a tab shows, if it is one and not the one sent to. */
+async function otherOpalArchive(tab) {
+  const origin = originOf(tab?.url);
+  if (!origin || origin === (await server())) return null;
+  return (await isOpalArchive(origin)) ? origin : null;
+}
+
+/** Marks the button for a tab that shows another OpalArchive, and unmarks it otherwise. */
+async function look(tab) {
+  if (!tab?.id) return;
+  const other = await otherOpalArchive(tab);
+  const marked = (await chrome.action.getBadgeText({ tabId: tab.id }).catch(() => "")) === OTHER;
+  if (other) {
+    await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#e8590c" });
+    await chrome.action.setBadgeText({ tabId: tab.id, text: OTHER });
+    await chrome.action.setTitle({
+      tabId: tab.id,
+      title: `This is another OpalArchive. Click to send to it from now on (now: ${await server()})`,
+    });
+  } else if (marked) {
+    // Only its own mark is taken off: one left by something sent stays.
+    await chrome.action.setBadgeText({ tabId: tab.id, text: "" });
+    await chrome.action.setTitle({ tabId: tab.id, title: "" });
+  }
+}
+
+// The address of a tab is only told to the extension for the places it is
+// let onto: this computer, and any other OpalArchive it has been pointed at.
+chrome.tabs.onUpdated.addListener((_id, change, tab) => {
+  if (change.status === "complete" || change.url) look(tab).catch(() => {});
+});
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  look(await chrome.tabs.get(tabId).catch(() => null)).catch(() => {});
+});
+// Pointed elsewhere, in the options or by a press: the tabs are looked at again.
+chrome.storage.onChanged.addListener(async (changes) => {
+  if (!changes.server) return;
+  for (const tab of await chrome.tabs.query({})) look(tab).catch(() => {});
+});
+
+/** Has the extension send to another OpalArchive from now on. Says how it went. */
+async function switchTo(origin) {
+  // Anywhere but this computer, the browser has to be asked once.
+  const local = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin);
+  if (!local) {
+    const allowed = await chrome.permissions.request({ origins: [`${origin}/*`] }).catch(() => false);
+    if (!allowed) return { error: `not allowed to reach ${origin}: set it in the options` };
+  }
+  await chrome.storage.sync.set({ server: origin });
+  return { switched: origin };
+}
+
 // The address of the page on show is only told to the extension for the
 // press itself, which the `activeTab` permission is for.
 chrome.action.onClicked.addListener(async (tab) => {
+  // On another OpalArchive, the press is for sending to it from now on.
+  const other = await otherOpalArchive(tab).catch(() => null);
+  if (other) {
+    const result = await switchTo(other);
+    await report(tab, result);
+    if (result.switched) {
+      await chrome.action.setTitle({ tabId: tab.id, title: `Now sending to ${other}` });
+    }
+    return;
+  }
   const result = tab.url
     ? await send(tab.url)
     : { error: "the address of this page could not be read" };

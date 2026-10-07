@@ -31,6 +31,13 @@ what the site shows only to you; "Forget" has it delete them. This is the
 way to log in an OpalArchive that runs on another machine, which has no
 browser of yours to read the login from.
 
+It sends to one OpalArchive, the one set in its options. When the page on
+show is another OpalArchive, a copy being worked on beside the one that is
+kept, say, the extension's button is marked ⇄, and a press on it has the
+extension send to that one from then on. This is noticed by itself for an
+OpalArchive on this computer, which is where a tunnel to one elsewhere
+ends too; for one at another address the press finds it out.
+
 What was sent is listed in OpalArchive's Inbox tab, until it is cleared
 there.
 
