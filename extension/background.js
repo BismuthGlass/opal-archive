@@ -34,6 +34,10 @@ async function ask(method, path, body) {
 const send = (url, tags = []) => ask("POST", "/inbox", { url, tags });
 /** What has become of a request. */
 const status = (id) => ask("GET", `/inbox/queue/${id}`);
+/** The tags of a type that match what has been typed, as OpalArchive suggests them. */
+const suggest = (field, q) => ask("GET", `/tags?${new URLSearchParams({ field, q })}`);
+/** OpalArchive's settings: the colours given to the tag types are among them. */
+const settings = () => ask("GET", "/settings");
 
 chrome.runtime.onMessage.addListener((message, _sender, respond) => {
   const answer =
@@ -41,9 +45,13 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
       ? send(message.url, message.tags)
       : message?.type === "status"
         ? status(message.id)
-        : message?.type === "ping"
-          ? ask("GET", "/inbox/sites")
-          : null;
+        : message?.type === "suggest"
+          ? suggest(message.field, message.q)
+          : message?.type === "settings"
+            ? settings()
+            : message?.type === "ping"
+              ? ask("GET", "/inbox/sites")
+              : null;
   if (!answer) return false;
   answer.then(respond);
   // The answer comes later.

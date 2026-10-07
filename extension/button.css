@@ -61,80 +61,186 @@
 }
 
 .opalarchive-popup {
+  --opal-text: #1b1b1f;
+  --opal-muted: #6b6b76;
+  --opal-surface: #ffffff;
+  --opal-field: #f4f4f6;
+  --opal-border: #d8d8de;
+  --opal-accent: #3b5bdb;
+  --opal-on-accent: #ffffff;
+  --opal-danger: #c92a2a;
   position: absolute;
   z-index: 2147483647;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: 280px;
+  width: 320px;
   margin: 0;
   padding: 10px 12px;
-  color: #1b1b1f;
+  color: var(--opal-text);
   text-align: left;
-  background: #ffffff;
-  border: 1px solid #d8d8de;
+  background: var(--opal-surface);
+  border: 1px solid var(--opal-border);
   border-radius: 8px;
   box-shadow: 0 6px 24px rgb(0 0 0 / 0.22);
+}
+
+/* Whatever else says how it is laid out. */
+.opalarchive-popup [hidden] {
+  display: none !important;
 }
 
 .opalarchive-popup label {
   font-weight: 600;
 }
 
+.opalarchive-popup .opalarchive-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.opalarchive-popup .opalarchive-pill {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 8px;
+  overflow-wrap: anywhere;
+  border-radius: 999px;
+}
+
+.opalarchive-popup .opalarchive-off {
+  margin-right: -4px;
+  padding: 0 3px;
+  font-size: 14px;
+  line-height: 1;
+  color: inherit;
+  background: none;
+  border: none;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.opalarchive-popup .opalarchive-off:hover {
+  opacity: 1;
+}
+
 .opalarchive-popup input {
   width: 100%;
   padding: 5px 8px;
   color: inherit;
-  background: #f4f4f6;
-  border: 1px solid #d8d8de;
+  background: var(--opal-field);
+  border: 1px solid var(--opal-border);
   border-radius: 6px;
   outline: none;
 }
 
 .opalarchive-popup input:focus {
-  border-color: #3b5bdb;
+  border-color: var(--opal-accent);
+}
+
+.opalarchive-popup .opalarchive-suggestions {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.opalarchive-popup .opalarchive-suggestions li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.opalarchive-popup .opalarchive-suggestions li:hover,
+.opalarchive-popup .opalarchive-suggestions li.opalarchive-active {
+  background: var(--opal-field);
+}
+
+.opalarchive-popup .opalarchive-suggestions li.opalarchive-active {
+  outline: 1px solid var(--opal-accent);
+}
+
+.opalarchive-popup .opalarchive-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.opalarchive-popup .opalarchive-note {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--opal-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .opalarchive-popup p {
   margin: 0;
 }
 
+/* On a line of its own, above the buttons. */
 .opalarchive-popup .opalarchive-hint {
+  flex: 1 0 100%;
   font-size: 12px;
-  color: #6b6b76;
+  color: var(--opal-muted);
 }
 
 .opalarchive-popup .opalarchive-error {
-  color: #c92a2a;
+  color: var(--opal-danger);
 }
 
-.opalarchive-popup [hidden] {
-  display: none;
+.opalarchive-popup .opalarchive-last {
+  padding: 0;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--opal-accent);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.opalarchive-popup .opalarchive-last:hover {
+  text-decoration: underline;
 }
 
 .opalarchive-popup .opalarchive-actions {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
   justify-content: flex-end;
   margin-top: 2px;
 }
 
-.opalarchive-popup button {
+.opalarchive-popup .opalarchive-actions button {
+  flex: none;
   padding: 4px 12px;
+  white-space: nowrap;
   color: inherit;
-  background: #ffffff;
-  border: 1px solid #d8d8de;
+  background: var(--opal-surface);
+  border: 1px solid var(--opal-border);
   border-radius: 6px;
   cursor: pointer;
 }
 
-.opalarchive-popup button[type="submit"] {
-  color: #ffffff;
-  background: #3b5bdb;
+.opalarchive-popup .opalarchive-actions button[type="submit"] {
+  color: var(--opal-on-accent);
+  background: var(--opal-accent);
   border-color: transparent;
 }
 
-.opalarchive-popup button:disabled {
+.opalarchive-popup .opalarchive-actions button:disabled {
   opacity: 0.6;
   cursor: default;
 }
@@ -145,27 +251,13 @@
   }
 
   .opalarchive-popup {
-    color: #e8e8ec;
-    background: #1c1c20;
-    border-color: #2f2f36;
-  }
-
-  .opalarchive-popup input,
-  .opalarchive-popup button {
-    background: #131315;
-    border-color: #2f2f36;
-  }
-
-  .opalarchive-popup .opalarchive-hint {
-    color: #9a9aa6;
-  }
-
-  .opalarchive-popup .opalarchive-error {
-    color: #ffa8a8;
-  }
-
-  .opalarchive-popup button[type="submit"] {
-    color: #10101a;
-    background: #8098f9;
+    --opal-text: #e8e8ec;
+    --opal-muted: #9a9aa6;
+    --opal-surface: #1c1c20;
+    --opal-field: #131315;
+    --opal-border: #2f2f36;
+    --opal-accent: #8098f9;
+    --opal-on-accent: #10101a;
+    --opal-danger: #ffa8a8;
   }
 }
