@@ -2632,6 +2632,94 @@ kbd {
   overflow-wrap: anywhere;
 }
 
+/* The inbox's queue: one request a row, and under it what there is to say. */
+.inbox-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inbox-queue li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: center;
+}
+
+.inbox-status {
+  flex: none;
+  min-width: 84px;
+  font-weight: 600;
+}
+
+.inbox-queue li.queued .inbox-status,
+.inbox-queue li.cancelled .inbox-status {
+  color: var(--muted);
+}
+
+.inbox-queue li.failed .inbox-status {
+  color: var(--danger-text);
+}
+
+.inbox-site {
+  flex: none;
+  color: var(--muted);
+}
+
+.inbox-url {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-remove {
+  flex: none;
+  padding: 0;
+  line-height: 0;
+  color: var(--muted);
+  background: none;
+  border: none;
+}
+
+.inbox-remove:hover {
+  color: var(--text);
+}
+
+.inbox-detail {
+  flex: 1 0 100%;
+  margin: 0;
+}
+
+.inbox-message {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.inbox-queue li.failed .inbox-message {
+  color: var(--danger-text);
+}
+
+.inbox-done summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.inbox-done .inbox-queue {
+  max-height: 160px;
+  margin-top: 4px;
+  overflow-y: auto;
+}
+
+/* Each downloader's settings are headed by its name. */
+.inbox-downloader {
+  grid-column: 1 / -1;
+}
+
 .download-settings {
   display: grid;
   grid-template-columns: max-content 1fr;

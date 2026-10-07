@@ -166,7 +166,7 @@ export default function DownloadPanel(props: PanelProps) {
 }
 
 /** How the tab's download is going, or how the last one went. */
-function Progress(props: { job: DownloadJob }) {
+export function Progress(props: { job: DownloadJob }) {
   const handled = () => props.job.downloaded + props.job.skipped + props.job.failed;
   return (
     <div class="download-progress" aria-live="polite">
@@ -218,8 +218,8 @@ function Progress(props: { job: DownloadJob }) {
  * own source tag, which is implied. They are shown as pills and edited in
  * the same editor as a file's tags.
  */
-function BaseTags(props: {
-  data: DownloadState;
+export function BaseTags(props: {
+  data: Pick<DownloadState, "downloader" | "tags">;
   /** What went wrong with the last change, if anything. */
   error: string | null;
   onChange: (tags: Record<string, string[]>) => void;
@@ -315,7 +315,10 @@ function BaseTags(props: {
  * The downloader's login to its site, read from a browser and kept by the
  * server. It is shared by every tab of the downloader.
  */
-function Login(props: { data: DownloadState; attempt: (action: () => Promise<unknown>) => void }) {
+export function Login(props: {
+  data: Pick<DownloadState, "downloader">;
+  attempt: (action: () => Promise<unknown>) => void;
+}) {
   const downloader = () => props.data.downloader;
   const [browser, setBrowser] = createSignal(downloader().cookies?.browsers[0] ?? "");
   const [reading, setReading] = createSignal(false);

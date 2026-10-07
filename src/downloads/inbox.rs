@@ -39,14 +39,17 @@ pub fn router() -> Router<AppState> {
         .route("/inbox/finished", delete(forget_finished))
 }
 
+/// The inbox's tab, if there is one.
+fn made(conn: &Connection) -> rusqlite::Result<Option<i64>> {
+    conn.query_row("SELECT id FROM tab WHERE downloader = ?1", [ANY], |row| {
+        row.get(0)
+    })
+    .optional()
+}
+
 /// The inbox's tab, made if there is none yet.
 pub fn tab(conn: &Connection) -> rusqlite::Result<i64> {
-    let made = conn
-        .query_row("SELECT id FROM tab WHERE downloader = ?1", [ANY], |row| {
-            row.get(0)
-        })
-        .optional()?;
-    if let Some(tab) = made {
+    if let Some(tab) = made(conn)? {
         return Ok(tab);
     }
     conn.execute(
@@ -174,18 +177,19 @@ async fn sites(State(state): State<AppState>) -> Json<Value> {
     Json(json!(found))
 }
 
-/// Everything the inbox's panel shows: its tab, the queue, how the request
-/// being run is going, and every downloader as it is set here.
+/// Everything the inbox's panel shows: its tab, if it has one yet, the
+/// queue, how the request being run is going, and every downloader as it
+/// is set here.
 async fn state_of(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let found = manifests(&state);
     let conn = state.db.lock().unwrap();
-    let tab = tab(&conn)?;
-    let job = state
-        .downloads
-        .lock()
-        .unwrap()
-        .get(&tab)
-        .map(|job| job.status.lock().unwrap().clone())
+    // Asking makes no tab: it comes with the first request, or when opened.
+    let tab = made(&conn)?;
+    let job = tab
+        .and_then(|tab| {
+            let jobs = state.downloads.lock().unwrap();
+            jobs.get(&tab).map(|job| job.status.lock().unwrap().clone())
+        })
         .filter(|status| status.running);
     // Those not yet done, all of them, and the latest of the rest.
     let mut stmt = conn.prepare(&format!(
@@ -245,10 +249,11 @@ async fn configure(
 async fn clear(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
-    let tab = tab(&tx)?;
-    tx.execute("DELETE FROM tab_upload WHERE tab_id = ?1", [tab])?;
-    tx.execute("DELETE FROM tab_view WHERE tab_id = ?1", [tab])?;
-    tx.execute("DELETE FROM tab_download_seen WHERE tab_id = ?1", [tab])?;
+    if let Some(tab) = made(&tx)? {
+        tx.execute("DELETE FROM tab_upload WHERE tab_id = ?1", [tab])?;
+        tx.execute("DELETE FROM tab_view WHERE tab_id = ?1", [tab])?;
+        tx.execute("DELETE FROM tab_download_seen WHERE tab_id = ?1", [tab])?;
+    }
     tx.execute(
         "DELETE FROM inbox_queue WHERE status NOT IN ('queued', 'running')",
         [],

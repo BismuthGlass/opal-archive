@@ -4,6 +4,7 @@ import CollectionDialog from "./components/CollectionDialog";
 import ContextMenu, { contextMenuOpen } from "./components/ContextMenu";
 import { panelFor } from "./downloaders";
 import Grid from "./components/Grid";
+import InboxPanel from "./components/InboxPanel";
 import { modalOpen } from "./components/Modal";
 import Icon from "./components/Icon";
 import { createStoredFlag, Module } from "./components/Panel";
@@ -36,6 +37,7 @@ import {
   unmark,
 } from "./search";
 import { loadSettings } from "./settings";
+import { watchInbox } from "./inbox";
 import { closeTagEditor, openTagEditor, tagEditor } from "./tagEditing";
 import { refreshStats, stats } from "./stats";
 import { hideToast, showToast, toast } from "./toast";
@@ -83,6 +85,7 @@ export default function App() {
     load();
     loadSettings();
     refreshStats();
+    watchInbox();
   });
 
   // Each tab shows a search, over the library or over what the tab holds
@@ -388,6 +391,9 @@ export default function App() {
                 tab={id}
               />
             )}
+          </Show>
+          <Show when={activeTab()?.kind === "inbox" && !inside()}>
+            <InboxPanel />
           </Show>
           <Trail />
           <Toolbar />

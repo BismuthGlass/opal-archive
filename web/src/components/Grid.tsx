@@ -62,6 +62,7 @@ function badge(item: Item): string | null {
 const EMPTY: Record<string, string> = {
   upload: "Nothing uploaded in this tab yet.",
   download: "Nothing downloaded in this tab yet.",
+  inbox: "Nothing in the inbox.",
   collection: "This collection is empty.",
 };
 

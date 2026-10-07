@@ -1,4 +1,4 @@
-export type TabKind = "gallery" | "upload" | "collection" | "download";
+export type TabKind = "gallery" | "upload" | "collection" | "download" | "inbox";
 
 export type Tab = {
   id: number;
@@ -26,6 +26,8 @@ export type Downloader = {
   /** The `source` tag given to everything it downloads. */
   source: string;
   url_hint: string;
+  /** The sites whose addresses the inbox gives it. */
+  sites?: string[];
   /** Present if it can use a login read from one of these browsers. */
   cookies: { browsers: string[] } | null;
   /** Switches set per tab. */
@@ -61,6 +63,39 @@ export type DownloadState = {
   /** How many things the tab has downloaded before, and will skip. */
   seen: number;
   job: DownloadJob | null;
+};
+
+/** Something the inbox was asked to download, and what became of it. */
+export type InboxRequest = {
+  id: number;
+  url: string;
+  /** The downloader it is for, by name. */
+  downloader: string;
+  status: "queued" | "running" | "done" | "failed" | "cancelled";
+  /** Why it failed, or what went wrong on the way though it got there. */
+  message: string;
+  added: number;
+  existing: number;
+  date_queued: string;
+  date_finished: string | null;
+};
+
+/** The inbox: what was asked for from outside the interface. */
+export type InboxState = {
+  /** Its tab, once it has one. */
+  tab: number | null;
+  /** Every request not yet done, and the latest of the rest; oldest first. */
+  queue: InboxRequest[];
+  /** How the request being run is going. */
+  job: DownloadJob | null;
+  /** How many files and collections its tab lists. */
+  listed: number;
+  /** Every downloader, as it is set for the inbox. */
+  downloaders: {
+    downloader: Downloader;
+    options: Record<string, boolean>;
+    tags: Record<string, string[]>;
+  }[];
 };
 
 /** Files and collections not in the trash, and how many entities are in it. */
@@ -240,6 +275,20 @@ export const startDownload = (tab: number, url: string) =>
   request<void>("POST", `/tabs/${tab}/download/start`, { url });
 export const cancelDownload = (tab: number) =>
   request<void>("POST", `/tabs/${tab}/download/cancel`);
+export const getInbox = () => request<InboxState>("GET", "/inbox");
+/** Asks for an address to be downloaded, when its turn comes. */
+export const sendToInbox = (url: string) => request<InboxRequest>("POST", "/inbox", { url });
+/** Empties what the inbox lists, and its finished requests; the library keeps it all. */
+export const clearInbox = () => request<void>("POST", "/inbox/clear", {});
+/** Takes a request off the queue, or stops it if it is the one running. */
+export const removeRequest = (id: number) => request<void>("DELETE", `/inbox/queue/${id}`);
+export const retryRequest = (id: number) =>
+  request<InboxRequest>("POST", `/inbox/queue/${id}/retry`, {});
+export const configureInbox = (
+  downloader: string,
+  changes: { options?: Record<string, boolean>; tags?: Record<string, string[]> },
+) => request<void>("PATCH", `/inbox/settings/${downloader}`, changes);
+
 /** What the tab has downloaded before, newest first. */
 export const seenDownloads = (tab: number) =>
   request<{ key: string; date: string }[]>("GET", `/tabs/${tab}/download/seen`);

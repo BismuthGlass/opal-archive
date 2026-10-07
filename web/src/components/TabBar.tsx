@@ -9,15 +9,21 @@ const ICONS: Record<TabKind, IconName> = {
   upload: "upload",
   collection: "folder-outline",
   download: "download",
+  inbox: "inbox-outline",
 };
 import type { IconName } from "./Icon";
 import Icon from "./Icon";
 
 /** The kinds of tab the + button offers, before one for each downloader.
     A collection tab is opened from its collection instead. */
-const KINDS: { kind: TabKind; label: string }[] = [
+const KINDS: { kind: TabKind; label: string; title?: string }[] = [
   { kind: "gallery", label: "Gallery" },
   { kind: "upload", label: "Upload" },
+  {
+    kind: "inbox",
+    label: "Inbox",
+    title: "What the browser extension sends to be downloaded; there is one",
+  },
 ];
 
 /** What a tab is called when it has not been given a name. */
@@ -28,7 +34,9 @@ function described(tab: Tab) {
   const what =
     tab.kind === "upload"
       ? "Upload"
-      : tab.kind === "download"
+      : tab.kind === "inbox"
+        ? "Inbox"
+        : tab.kind === "download"
         ? fieldLabel(tab.downloader ?? "download")
         : tab.collection?.title ||
           tab.collection?.collection_id ||
@@ -74,6 +82,7 @@ function NewTab() {
               <li role="none">
                 <button
                   role="menuitem"
+                  title={entry.title}
                   onClick={() => {
                     setMenu(false);
                     open(entry.kind);

@@ -211,7 +211,8 @@ export async function open(
   let tab: Tab | undefined;
   await guard(async () => {
     tab = await api.createTab(kind, query, undefined, downloader);
-    setTabs(tabs.length, tab);
+    // There is one inbox: asked for again, the server answers with it.
+    if (!tabs.some((had) => had.id === tab!.id)) setTabs(tabs.length, tab);
     select(tab.id);
   });
   return tab;
