@@ -8,8 +8,9 @@ import Icon from "./Icon";
 import Modal from "./Modal";
 
 /**
- * The box at the top of an upload tab: click to pick files, or drop them.
- * Under it, a field for the web addresses of files to fetch.
+ * The panel at the top of an upload tab, laid out as a downloader's is: a
+ * row to pick files or give the web addresses of files to fetch, and under
+ * it the tags given to everything uploaded into the tab.
  */
 export function UploadBox() {
   let input!: HTMLInputElement;
@@ -38,34 +39,30 @@ export function UploadBox() {
     refetch();
   };
   return (
-    <>
-      <button class="upload-box" onClick={() => input.click()}>
-        <Icon name="upload" />
-        <span>
-          <strong>Choose files</strong> or drop them anywhere
-          <small>A zip is unpacked: its files are added, and its folders become collections</small>
-        </span>
-      </button>
-      <input
-        ref={input}
-        type="file"
-        multiple
-        hidden
-        onChange={() => {
-          upload([...(input.files ?? [])]);
-          // Lets the same file be picked again later.
-          input.value = "";
-        }}
-      />
-      <form
-        class="upload-url"
-        onSubmit={(event) => {
-          event.preventDefault();
-          fetchAll();
-        }}
-      >
+    <section class="download-panel upload-top" aria-label="Upload">
+      <div class="download-row">
+        <button
+          class="upload-choose"
+          title="Pick files from this computer. They can also be dropped anywhere on the window."
+          onClick={() => input.click()}
+        >
+          <Icon name="upload" />
+          Choose files
+        </button>
+        <input
+          ref={input}
+          type="file"
+          multiple
+          hidden
+          onChange={() => {
+            upload([...(input.files ?? [])]);
+            // Lets the same file be picked again later.
+            input.value = "";
+          }}
+        />
         <input
           type="text"
+          class="download-url"
           aria-label="Address of a file to fetch"
           placeholder="Or paste the address of a file: https://example.com/picture.jpg"
           spellcheck={false}
@@ -73,15 +70,21 @@ export function UploadBox() {
           autocapitalize="off"
           value={addresses()}
           onInput={(event) => setAddresses(event.currentTarget.value)}
+          onKeyDown={(event) => event.key === "Enter" && addresses().trim() && fetchAll()}
         />
-        <button type="submit" class="primary" disabled={addresses().trim() === ""}>
+        <button class="primary" disabled={addresses().trim() === ""} onClick={fetchAll}>
           Fetch
         </button>
-      </form>
-      <div class="upload-tags">
+      </div>
+      <p class="hint">
+        Files can also be dropped anywhere on the window. A zip is unpacked: its files are added,
+        and its folders become collections.
+      </p>
+      {/* A label beside each setting, as in a downloader's panel. */}
+      <div class="download-settings">
         <BaseTags data={{ tags: tags.latest ?? {} }} error={tagError()} onChange={setTags} />
       </div>
-    </>
+    </section>
   );
 }
 

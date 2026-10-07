@@ -500,71 +500,12 @@ button.primary {
 }
 
 /* The box at the top of an upload tab. */
-.upload-box {
-  display: flex;
+/* The button that picks files, in the row at the top of an upload tab. */
+.upload-choose {
+  display: inline-flex;
   flex: none;
-  gap: 8px;
+  gap: 4px;
   align-items: center;
-  justify-content: center;
-  margin: 12px 12px 0;
-  padding: 22px 12px;
-  color: var(--muted);
-  background: var(--surface);
-  border: 1.5px dashed var(--border);
-  border-radius: 8px;
-}
-
-.upload-box:hover {
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-.upload-box strong {
-  font-weight: 600;
-  color: var(--text);
-}
-
-/* Under the address, the tags given to what is uploaded: a label, then pills. */
-.upload-tags {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  align-items: center;
-  margin: 8px 12px 0;
-  font-size: 13px;
-}
-
-.upload-tags .label {
-  margin: 0;
-}
-
-.upload-box small {
-  display: block;
-  margin-top: 2px;
-  font-size: 12px;
-}
-
-/* Under it, the address of a file to fetch instead. */
-.upload-url {
-  display: flex;
-  flex: none;
-  gap: 6px;
-  margin: 8px 12px 0;
-}
-
-.upload-url input {
-  flex: 1;
-  min-width: 0;
-  padding: 5px 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
-.upload-url button:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .empty {
