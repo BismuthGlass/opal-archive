@@ -1424,3 +1424,88 @@ async fn a_headless_server_is_sent_its_logins() {
     api.ok("DELETE", "/downloaders/site/cookies", None).await;
     assert!(!saved.exists());
 }
+
+#[tokio::test]
+async fn a_zip_is_unpacked_into_files_and_collections() {
+    use std::io::Write;
+    use zip::{ZipWriter, write::SimpleFileOptions};
+
+    let api = Api::new();
+    let tab = api.post("/tabs", json!({ "kind": "upload" })).await["id"]
+        .as_i64()
+        .unwrap();
+
+    // Books are told by their names, so nothing here needs another program.
+    let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for name in [
+        "Album/page 10.pdf",
+        "notes.txt",
+        "Album/Extras/bonus.pdf",
+        "cover.pdf",
+        "Album/page 2.pdf",
+        "Album/inner.zip",
+        "Album/.DS_Store",
+        "__MACOSX/Album/._page 2.pdf",
+        "Unshown/readme.txt",
+    ] {
+        zip.start_file(name, SimpleFileOptions::default()).unwrap();
+        zip.write_all(format!("what is in {name}").as_bytes()).unwrap();
+    }
+    let bytes = zip.finish().unwrap().into_inner();
+    let send = async || {
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!("/files/archive?name=things.zip&tab={tab}"))
+            .body(Body::from(bytes.clone()))
+            .unwrap();
+        let response = api.app.clone().oneshot(request).await.unwrap();
+        assert!(response.status().is_success());
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice::<Value>(&body).unwrap()
+    };
+
+    // The files the library can show go in; the folders they are in become
+    // collections, one inside the other; the rest is said to have failed,
+    // and what a Mac leaves behind is not spoken of.
+    let unpacked = send().await;
+    assert_eq!(
+        (&unpacked["added"], &unpacked["duplicates"], &unpacked["collections"]),
+        (&json!(4), &json!(0), &json!(2))
+    );
+    let failed: Vec<&str> = unpacked["failures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|failure| failure["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(failed, ["notes.txt", "Album/inner.zip", "Unshown/readme.txt"]);
+    // The archive itself is not kept.
+    assert_eq!(api.found("kind=file").await.len(), 4);
+
+    // The tab lists what was at the top: the loose file, and the folder.
+    let titled = |id: i64| {
+        let conn = api.state.db.lock().unwrap();
+        conn.query_row(
+            "SELECT coalesce(e.title, f.original_name) FROM entity e
+             LEFT JOIN file f ON f.entity_id = e.id WHERE e.id = ?1",
+            [id],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap()
+    };
+    let names = |ids: Vec<i64>| ids.into_iter().map(&titled).collect::<Vec<_>>();
+    assert_eq!(names(api.in_tab(tab, "file").await), ["cover.pdf"]);
+    let top = api.in_tab(tab, "collection").await;
+    assert_eq!(names(top.clone()), ["Album"]);
+    // A folder holds its files by name, 2 before 10, and then its folders.
+    let inside = |collection: i64| {
+        names(api.members(collection).into_iter().map(|(id, _)| id).collect())
+    };
+    assert_eq!(inside(top[0]), ["page 2.pdf", "page 10.pdf", "Extras"]);
+    let extras = api.members(top[0])[2].0;
+    assert_eq!(inside(extras), ["bonus.pdf"]);
+
+    // Sent again, the library has the files already.
+    let again = send().await;
+    assert_eq!((&again["added"], &again["duplicates"]), (&json!(0), &json!(4)));
+}

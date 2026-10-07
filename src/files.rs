@@ -43,11 +43,11 @@ pub struct FileEntity {
 }
 
 #[derive(Deserialize)]
-struct UploadParams {
+pub struct UploadParams {
     /// Filename on the uploader's side; gives the extension.
-    name: Option<String>,
+    pub name: Option<String>,
     /// Upload tab to list the file under.
-    tab: Option<i64>,
+    pub tab: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -141,7 +141,7 @@ fn base_name(name: &str) -> Option<&str> {
 
 /// Lowercased extension without the dot, or empty if the name has none worth
 /// keeping (dotfiles, or something too odd to be an extension).
-fn extension_of(base: &str) -> String {
+pub fn extension_of(base: &str) -> String {
     match base.rsplit_once('.') {
         Some((stem, ext))
             if !stem.is_empty()
@@ -155,10 +155,10 @@ fn extension_of(base: &str) -> String {
 }
 
 /// A partially received upload, deleted on drop unless it was moved away.
-struct TempFile(PathBuf);
+pub struct TempFile(pub PathBuf);
 
 impl TempFile {
-    fn new(dir: &Path) -> Self {
+    pub fn new(dir: &Path) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         TempFile(dir.join(format!("{}-{n}", std::process::id())))
@@ -172,7 +172,7 @@ impl Drop for TempFile {
 }
 
 /// Streams the request body to `path`, returning its SHA-256 and size.
-async fn receive(mut body: Body, path: &Path) -> Result<(String, u64), ApiError> {
+pub async fn receive(mut body: Body, path: &Path) -> Result<(String, u64), ApiError> {
     let mut file = fs::File::create(path).await?;
     let mut hasher = Sha256::new();
     let mut size = 0u64;

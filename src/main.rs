@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod api_tests;
+mod archive;
 mod book;
 mod collections;
 mod db;
@@ -66,6 +67,7 @@ fn api() -> Router<AppState> {
         .merge(downloads::router())
         .merge(tags::router())
         .merge(files::router())
+        .merge(archive::router())
         .merge(search::router())
         .merge(entities::router())
         .merge(collections::router())
