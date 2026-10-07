@@ -98,11 +98,22 @@ def post_id(url: str) -> str:
     return match.group(1)
 
 
-def read_post(id: str) -> dict:
+def ask_for_post(id: str) -> requests.Response:
     # Asked this way, Reddit hands a visitor the cookies its API wants of one.
     if not logged_in():
         get(f"{SITE}/svc/shreddit/comments/{id}", params={"seeker-session": "false", "render-mode": "partial"})
-    r = get(POST.format(id=id) + ".json", params={"raw_json": 1, "limit": 1})
+    return get(POST.format(id=id) + ".json", params={"raw_json": 1, "limit": 1})
+
+
+def read_post(id: str) -> dict:
+    r = ask_for_post(id)
+    # Now and then Reddit turns a visitor away for no reason it gives, and
+    # lets the same one in a moment later.
+    for wait in (2, 5):
+        if r.status_code != 403 or logged_in() or "json" in r.headers.get("Content-Type", ""):
+            break
+        time.sleep(wait)
+        r = ask_for_post(id)
     try:
         data = r.json()
     except ValueError:
