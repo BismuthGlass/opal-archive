@@ -86,6 +86,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (url) report(tab, await send(url));
 });
 
+// The address of the page on show is only told to the extension for the
+// press itself, which the `activeTab` permission is for.
 chrome.action.onClicked.addListener(async (tab) => {
-  if (tab.url) report(tab, await send(tab.url));
+  const result = tab.url
+    ? await send(tab.url)
+    : { error: "the address of this page could not be read" };
+  report(tab, result);
 });
