@@ -118,6 +118,7 @@ is on, for a query of several lines).
 | -------------------------------- | -------------------------------------------------------------- |
 | `POST /files?name=<filename>`    | Upload; the file is the raw body. 201 if new, 200 if a duplicate, which is only taken out of the trash if it was there. `tab=<id>` lists it under that upload tab either way |
 | `POST /files/archive?name=<filename>` | Upload a zip, as the raw body, to be unpacked: its images, video, audio and books are taken in as uploads of their own, each folder becomes a set holding its files by name, a folder inside it a set inside that one, and the archive is not kept. `tab=<id>` lists what was at the top of it under that upload tab. Answers `{added, duplicates, collections, failures}`, the last saying of each file passed over what it was and why |
+| `GET /tabs/{id}/upload`, `PATCH …` | The tags an upload tab gives to everything uploaded into it; `{tags}`, tag field to values → set them, for what is uploaded from then on |
 | `POST /files/fetch`              | `{url, tab}` → have the server fetch the file at that web address, as an upload of it, with the address as its source URL. Answers as an upload does. A page is refused: the address has to be of the file itself |
 | `GET /files/{id}/content`        | The file. `?download=1` to save rather than display            |
 | `GET /files/{id}/thumbnail`      | JPEG thumbnail, 404 if the file has none. With `?v=` as a search result gives it (`thumbnail_version`), the answer may be kept for good; without, the browser asks again each time |

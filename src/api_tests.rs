@@ -100,6 +100,13 @@ impl Api {
         self.ok("POST", path, Some(body)).await
     }
 
+    /// The status of a request, by any method, that has to be refused.
+    async fn refused_with(&self, method: &str, path: &str, body: Value) -> StatusCode {
+        let (status, _) = self.call(method, path, Some(body)).await;
+        assert!(!status.is_success(), "{method} {path} was not refused");
+        status
+    }
+
     /// The status of a request that has to be refused.
     async fn refused(&self, path: &str, body: Value) -> StatusCode {
         let (status, _) = self.call("POST", path, Some(body)).await;
@@ -1505,7 +1512,24 @@ async fn a_zip_is_unpacked_into_files_and_collections() {
     let extras = api.members(top[0])[2].0;
     assert_eq!(inside(extras), ["bonus.pdf"]);
 
+    // The tab can be set to give tags: to what is uploaded from then on,
+    // files and folders alike, and to a file the library already had.
+    assert!(api.found("holiday").await.is_empty());
+    api.ok("PATCH", &format!("/tabs/{tab}/upload"), Some(json!({ "tags": { "tags": ["holiday", " holiday "], "creator": ["Me"] } })))
+        .await;
+    assert_eq!(
+        api.get(&format!("/tabs/{tab}/upload")).await["tags"],
+        json!({ "creator": ["Me"], "tags": ["holiday"] })
+    );
     // Sent again, the library has the files already.
     let again = send().await;
     assert_eq!((&again["added"], &again["duplicates"]), (&json!(0), &json!(4)));
+    assert_eq!(api.found("holiday @cr:Me kind=file").await.len(), 4);
+    assert_eq!(api.found("holiday kind=collection").await.len(), 2);
+    // Only an upload tab gives tags, and only tags that are tags.
+    let bad = json!({ "tags": { "nonsense": ["x"] } });
+    assert_eq!(api.refused_with("PATCH", &format!("/tabs/{tab}/upload"), bad).await, StatusCode::BAD_REQUEST);
+    let gallery = api.post("/tabs", json!({ "kind": "gallery" })).await["id"].as_i64().unwrap();
+    let tags = json!({ "tags": { "tags": ["x"] } });
+    assert_eq!(api.refused_with("PATCH", &format!("/tabs/{gallery}/upload"), tags).await, StatusCode::BAD_REQUEST);
 }

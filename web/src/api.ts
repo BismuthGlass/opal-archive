@@ -521,6 +521,12 @@ export const uploadFile = (file: File, tab: number, onProgress: (fraction: numbe
     duplicate: status === 200,
   }));
 
+/** The tags an upload tab gives to everything uploaded into it: tag field to values. */
+export const getUploadTags = (tab: number) =>
+  request<{ tags: Record<string, string[]> }>("GET", `/tabs/${tab}/upload`).then((r) => r.tags);
+export const setUploadTags = (tab: number, tags: Record<string, string[]>) =>
+  request<void>("PATCH", `/tabs/${tab}/upload`, { tags });
+
 /** What came of unpacking an archive into the library. */
 export type Unpacked = {
   /** Files that were new to the library, and ones it already had. */

@@ -23,8 +23,16 @@ use crate::{
     AppState,
     entities::{self, SOURCE_URLS},
     error::ApiError,
-    media,
+    media, tags,
 };
+
+/// The tags a tab gives to what is uploaded into it: tag field to values.
+type TabTags = std::collections::BTreeMap<String, Vec<String>>;
+
+#[derive(Deserialize)]
+struct TabTagsInput {
+    tags: TabTags,
+}
 
 #[derive(Serialize)]
 pub struct FileEntity {
@@ -75,6 +83,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/files", post(upload))
         .route("/files/fetch", post(fetch))
+        .route("/tabs/{id}/upload", get(upload_settings).patch(set_upload_settings))
         .route("/files/{id}/content", get(content))
         .route("/files/{id}/thumbnail", get(thumbnail))
 }
@@ -231,8 +240,9 @@ fn insert(conn: &mut Connection, new: &NewFile) -> rusqlite::Result<FileEntity> 
     Ok(file)
 }
 
-/// Lists a file under an upload or download tab. Does nothing if the tab is
-/// gone (it may have been closed meanwhile) or is of another kind.
+/// Lists a file under an upload or download tab, and gives it the tags an
+/// upload tab is set to give. Does nothing if the tab is gone (it may have
+/// been closed meanwhile) or is of another kind.
 fn record(conn: &Connection, tab: Option<i64>, file: &FileEntity) -> rusqlite::Result<()> {
     if let Some(tab) = tab {
         conn.execute(
@@ -241,8 +251,67 @@ fn record(conn: &Connection, tab: Option<i64>, file: &FileEntity) -> rusqlite::R
                AND picked = 0",
             (tab, file.id),
         )?;
+        give_tab_tags(conn, Some(tab), &[file.id])?;
     }
     Ok(())
+}
+
+/// The tags an upload tab gives to everything uploaded into it.
+fn tab_tags(conn: &Connection, tab: i64) -> rusqlite::Result<TabTags> {
+    let saved: Option<String> = conn
+        .query_row("SELECT tags FROM tab_tags WHERE tab_id = ?1", [tab], |row| {
+            row.get(0)
+        })
+        .optional()?;
+    // The table only accepts valid JSON.
+    Ok(saved
+        .and_then(|tags| serde_json::from_str(&tags).ok())
+        .unwrap_or_default())
+}
+
+/// Gives entities the tags their upload tab is set to give. One that has a
+/// tag already is left as it is.
+pub fn give_tab_tags(conn: &Connection, tab: Option<i64>, ids: &[i64]) -> rusqlite::Result<()> {
+    let Some(tab) = tab else { return Ok(()) };
+    let ids = entities::ids_json(ids);
+    for (field, values) in tab_tags(conn, tab)? {
+        for value in values {
+            // An alias stands for the tag it defers to.
+            let value = tags::resolve(conn, &field, value)?;
+            entities::attach_tag(conn, &ids, &field, &value)?;
+        }
+    }
+    Ok(())
+}
+
+/// What an upload tab is set to: the tags it gives.
+async fn upload_settings(
+    State(state): State<AppState>,
+    UrlPath(tab): UrlPath<i64>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let conn = state.db.lock().unwrap();
+    Ok(Json(serde_json::json!({ "tags": tab_tags(&conn, tab)? })))
+}
+
+/// Sets the tags an upload tab gives to everything uploaded into it from
+/// now on. What it already holds is not touched.
+async fn set_upload_settings(
+    State(state): State<AppState>,
+    UrlPath(tab): UrlPath<i64>,
+    Json(input): Json<TabTagsInput>,
+) -> Result<StatusCode, ApiError> {
+    let tags = tags::checked(input.tags)?;
+    let conn = state.db.lock().unwrap();
+    let set = conn.execute(
+        "INSERT INTO tab_tags (tab_id, tags)
+         SELECT id, ?2 FROM tab WHERE id = ?1 AND kind = 'upload' AND picked = 0
+         ON CONFLICT (tab_id) DO UPDATE SET tags = excluded.tags",
+        params![tab, serde_json::json!(tags).to_string()],
+    )?;
+    match set {
+        0 => Err(ApiError::bad_request("not an upload tab")),
+        _ => Ok(StatusCode::NO_CONTENT),
+    }
 }
 
 /// The SHA-256 and size of a file on disk.

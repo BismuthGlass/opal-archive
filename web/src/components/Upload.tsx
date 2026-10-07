@@ -1,5 +1,9 @@
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import * as api from "../api";
+import { errorMessage } from "../format";
+import { activeTab } from "../tabs";
 import { dismiss, upload, uploads } from "../uploads";
+import { BaseTags } from "./DownloadPanel";
 import Icon from "./Icon";
 import Modal from "./Modal";
 
@@ -14,6 +18,24 @@ export function UploadBox() {
   const fetchAll = () => {
     upload(addresses().split(/\s+/).filter(Boolean));
     setAddresses("");
+  };
+  // The tags this tab gives to everything uploaded into it. The box is the
+  // same one for every upload tab, so they are read again for each.
+  const tab = () => activeTab()?.id;
+  const [tags, { mutate, refetch }] = createResource(tab, api.getUploadTags);
+  const [tagError, setTagError] = createSignal<string | null>(null);
+  const setTags = async (next: Record<string, string[]>) => {
+    const id = tab();
+    if (id === undefined) return;
+    try {
+      await api.setUploadTags(id, next);
+      setTagError(null);
+      // Shown at once; then as the server kept them.
+      mutate(next);
+    } catch (err) {
+      setTagError(errorMessage(err));
+    }
+    refetch();
   };
   return (
     <>
@@ -56,6 +78,9 @@ export function UploadBox() {
           Fetch
         </button>
       </form>
+      <div class="upload-tags">
+        <BaseTags data={{ tags: tags.latest ?? {} }} error={tagError()} onChange={setTags} />
+      </div>
     </>
   );
 }

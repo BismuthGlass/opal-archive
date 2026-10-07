@@ -524,6 +524,21 @@ button.primary {
   color: var(--text);
 }
 
+/* Under the address, the tags given to what is uploaded: a label, then pills. */
+.upload-tags {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  margin: 8px 12px 0;
+  font-size: 13px;
+}
+
+.upload-tags .label {
+  margin: 0;
+}
+
 .upload-box small {
   display: block;
   margin-top: 2px;

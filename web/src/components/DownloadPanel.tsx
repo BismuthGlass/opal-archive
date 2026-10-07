@@ -219,11 +219,14 @@ export function Progress(props: { job: DownloadJob }) {
  * the same editor as a file's tags.
  */
 export function BaseTags(props: {
-  data: Pick<DownloadState, "downloader" | "tags">;
+  /** The tags, and the downloader if they are a downloader's. */
+  data: Pick<DownloadState, "tags"> & { downloader?: DownloadState["downloader"] };
   /** What went wrong with the last change, if anything. */
   error: string | null;
   onChange: (tags: Record<string, string[]>) => void;
 }) {
+  /** What the tags are given to: what a downloader fetches, or what is uploaded. */
+  const given = () => (props.data.downloader ? "downloaded" : "uploaded");
   const [editing, setEditing] = createSignal(false);
   const entries = () =>
     Object.entries(props.data.tags).flatMap(([field, values]) =>
@@ -269,7 +272,11 @@ export function BaseTags(props: {
     <>
       <span
         class="label"
-        title={`Given to everything downloaded, besides the source tag ${props.data.downloader.source}`}
+        title={
+          props.data.downloader
+            ? `Given to everything downloaded, besides the source tag ${props.data.downloader.source}`
+            : "Given to everything uploaded into this tab from now on"
+        }
       >
         Tags to add
       </span>
@@ -288,7 +295,7 @@ export function BaseTags(props: {
         <button
           class="chip chip-edit"
           aria-label="Edit the tags to add"
-          title="Add or remove tags given to everything downloaded"
+          title={`Add or remove tags given to everything ${given()}`}
           onClick={() => setEditing(true)}
         >
           <Icon name="add" />
@@ -296,7 +303,11 @@ export function BaseTags(props: {
         </button>
       </div>
       <Show when={editing()}>
-        <Modal title="Tags to add to everything downloaded" medium onClose={() => setEditing(false)}>
+        <Modal
+          title={`Tags to add to everything ${given()}`}
+          medium
+          onClose={() => setEditing(false)}
+        >
           <div class="field-editor">
             <TagsEditor data={asSelection()} apply={apply} />
           </div>

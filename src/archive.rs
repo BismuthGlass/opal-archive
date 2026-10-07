@@ -237,6 +237,8 @@ fn folder(
                     }
                     (None, None) => {}
                 }
+                // The tab's tags are for the folder as for its files.
+                files::give_tab_tags(&conn, tab, &[collection])?;
                 made.insert(key, collection);
                 collection
             }
@@ -338,6 +340,8 @@ async fn upload(
             }
         };
         if !folders.is_empty() {
+            // Not listed under the tab, it has not been given its tags.
+            files::give_tab_tags(&state.db.lock().unwrap(), params.tab, &[file.id])?;
             let before = made.len();
             let collection = folder(&state, &mut made, folders, params.tab)?;
             unpacked.collections += (made.len() - before) as u64;

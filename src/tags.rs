@@ -114,6 +114,28 @@ pub fn normalize(field: &str, value: &str) -> Result<String, ApiError> {
     Ok(parts.join(":"))
 }
 
+/// Tags by field as they are kept: every field a tag field, every value
+/// as `normalize` has it, none twice, and no field left with none.
+pub fn checked(
+    given: BTreeMap<String, Vec<String>>,
+) -> Result<BTreeMap<String, Vec<String>>, ApiError> {
+    let mut kept = BTreeMap::new();
+    for (field, values) in given {
+        check_field(&field)?;
+        let mut normal = Vec::new();
+        for value in values {
+            let value = normalize(&field, &value)?;
+            if !normal.contains(&value) {
+                normal.push(value);
+            }
+        }
+        if !normal.is_empty() {
+            kept.insert(field, normal);
+        }
+    }
+    Ok(kept)
+}
+
 impl Suggestion {
     fn tag(value: String, count: i64, description: Option<String>) -> Self {
         Suggestion {

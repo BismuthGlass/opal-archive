@@ -497,20 +497,7 @@ fn change(
         }
     }
     if let Some(given) = input.tags {
-        base.clear();
-        for (field, values) in given {
-            tags::check_field(&field)?;
-            let mut normal = Vec::new();
-            for value in values {
-                let value = tags::normalize(&field, &value)?;
-                if !normal.contains(&value) {
-                    normal.push(value);
-                }
-            }
-            if !normal.is_empty() {
-                base.insert(field, normal);
-            }
-        }
+        *base = tags::checked(given)?;
     }
     Ok(())
 }
