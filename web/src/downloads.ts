@@ -1,7 +1,6 @@
 import { createStore, produce, reconcile } from "solid-js/store";
 import * as api from "./api";
-import type { DownloadJob, DownloadState } from "./api";
-import { notify } from "./notifications";
+import type { DownloadState } from "./api";
 import { addedTo } from "./search";
 
 // What each download tab is set to and how its download is going. Kept
@@ -47,7 +46,6 @@ async function follow(tab: number) {
   if (!state.job?.running) {
     following.delete(tab);
     if (now > watch.files) addedTo(tab);
-    if (state.job) noteProblems(state.downloader.title, state.job);
     return;
   }
   if (now > watch.files && Date.now() - watch.shown > SHOW) {
@@ -56,23 +54,6 @@ async function follow(tab: number) {
     addedTo(tab);
   }
   setTimeout(() => follow(tab), POLL);
-}
-
-/** Gives notice of a tab's download that failed, or did not get everything. */
-function noteProblems(downloader: string, job: DownloadJob) {
-  const failed = job.outcome !== "done" && job.outcome !== "cancelled";
-  if (!failed && job.failed === 0) return;
-  notify({
-    kind: failed ? "failed" : "problems",
-    title: failed ? `${downloader} download failed` : `${downloader} download had problems`,
-    url: job.url,
-    from: `A ${downloader} tab`,
-    messages: [
-      ...(failed && job.outcome ? [job.outcome] : []),
-      ...job.errors,
-      ...(job.failed > job.errors.length ? [`and ${job.failed - job.errors.length} more`] : []),
-    ],
-  });
 }
 
 /** Drops what is kept for a tab that has been closed; its number is used again. */

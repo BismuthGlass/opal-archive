@@ -5,7 +5,6 @@ import ContextMenu, { contextMenuOpen } from "./components/ContextMenu";
 import { panelFor } from "./downloaders";
 import Grid from "./components/Grid";
 import InboxPanel from "./components/InboxPanel";
-import Notifications from "./components/Notifications";
 import { modalOpen } from "./components/Modal";
 import Icon from "./components/Icon";
 import { createStoredFlag, Module } from "./components/Panel";
@@ -443,7 +442,6 @@ export default function App() {
         )}
       </Show>
       <ContextMenu />
-      <Notifications />
       <Show when={toast()}>
         <div class="toast" role="status">
           {toast()}
