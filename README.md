@@ -65,11 +65,10 @@ The `Dockerfile` builds one image holding the server, the frontend it
 serves and the downloaders with everything they call on:
 
 ```sh
-docker build -t opalarchive .
-docker run -d --name opalarchive -p 127.0.0.1:7878:7878 -v opalarchive-data:/data opalarchive
+docker compose up -d --build
 ```
 
-The library lives in the volume at `/data`. The image sets
+`compose.yaml` keeps the library in `./data`, beside it. The image sets
 `OPALARCHIVE_HEADLESS`, there being no browser in it to read a login from:
 logins are sent by the browser extension, or uploaded in a downloader's
 settings. OpalArchive has no login of its own, so the port is published

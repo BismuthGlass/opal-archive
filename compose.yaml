@@ -1,0 +1,35 @@
+# OpalArchive: the server, the frontend it serves and the downloaders, in
+# one container built from this folder.
+#
+#   docker compose up -d --build     build and start
+#   docker compose logs -f           watch it
+#   docker compose down              stop
+#   git pull && docker compose up -d --build
+#                                    update: the downloaders' packages
+#                                    (yt-dlp and the rest) are as new as the build
+#
+# The library lives in ./data: the database, the files, the thumbnails and
+# the logins saved for the downloaders. Back that folder up and you have
+# backed up everything.
+#
+# OpalArchive has no login of its own: whatever can reach its port can use
+# it. So the port is published to this machine alone, and is reached from
+# another computer through an SSH tunnel, which only the holder of a key
+# can open:
+#
+#   ssh -N -L 7878:localhost:7878 <this server>
+#
+# after which it is at http://127.0.0.1:7878 on that computer, the address
+# the browser extension expects.
+
+services:
+  opalarchive:
+    build: .
+    image: opalarchive:local
+    container_name: opalarchive
+    restart: unless-stopped
+    user: "1000:1000"                # the owner of ./data on the host
+    ports:
+      - "127.0.0.1:${OPALARCHIVE_PORT:-7878}:7878"   # this machine only: see above
+    volumes:
+      - ./data:/data:Z               # the library (Z: SELinux label, needed on Fedora)
