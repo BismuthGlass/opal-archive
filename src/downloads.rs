@@ -139,6 +139,12 @@ struct CookieInput {
 }
 
 #[derive(Deserialize)]
+struct CookieFile {
+    /// The text of a cookie file, in the Netscape format.
+    cookies: String,
+}
+
+#[derive(Deserialize)]
 struct ForgetInput {
     /// The keys to forget; all of them if left out.
     keys: Option<Vec<String>>,
@@ -211,6 +217,7 @@ pub fn router() -> Router<AppState> {
             "/downloaders/{name}/cookies",
             post(take_cookies).delete(forget_cookies),
         )
+        .route("/downloaders/{name}/cookies/file", post(upload_cookies))
         .route("/tabs/{id}/download", get(state_of).patch(configure))
         .route("/tabs/{id}/download/start", post(start))
         .route("/tabs/{id}/download/cancel", post(stop))
@@ -266,6 +273,8 @@ fn described(state: &AppState, manifest: &Manifest) -> Value {
         .map(|age| age.as_secs());
     let mut described = json!(manifest);
     described["login_saved"] = json!(saved);
+    // Where there is no browser, a login is sent as a file.
+    described["headless"] = json!(state.headless);
     described
 }
 
@@ -294,6 +303,11 @@ async fn take_cookies(
     Json(input): Json<CookieInput>,
 ) -> Result<Json<Value>, ApiError> {
     let manifest = manifest(&state, &name)?;
+    if state.headless {
+        return Err(ApiError::bad_request(
+            "this server has no browser to read a login from: send it a cookie file",
+        ));
+    }
     let allowed = manifest
         .cookies
         .as_ref()
@@ -304,13 +318,69 @@ async fn take_cookies(
             manifest.title, input.browser
         )));
     }
+    let missing = format!("No {} login was found in {}", manifest.title, input.browser);
+    keep_login(&state, &manifest, &["--browser", &input.browser], &missing).await
+}
+
+/// Keeps a login sent as a cookie file, in the Netscape format browsers
+/// export: for a server with no browser of its own to read one from. The
+/// downloader takes its site's cookies out of the file, and nothing else
+/// of it is kept.
+async fn upload_cookies(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    Json(input): Json<CookieFile>,
+) -> Result<Json<Value>, ApiError> {
+    let manifest = manifest(&state, &name)?;
+    if manifest.cookies.is_none() {
+        return Err(ApiError::BadRequest(format!(
+            "{} does not use a login",
+            manifest.title
+        )));
+    }
+    // Python reads such a file only if it begins as one.
+    let mut text = input.cookies;
+    if !(text.starts_with("# Netscape HTTP Cookie File") || text.starts_with("# HTTP Cookie File")) {
+        text.insert_str(0, "# Netscape HTTP Cookie File\n");
+    }
+    // It holds logins: readable by the user alone, and gone once read.
+    let sent = fresh_out(&state).with_extension("cookies");
+    {
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        use std::io::Write;
+        options.open(&sent)?.write_all(text.as_bytes())?;
+    }
+    let missing = format!("That file holds no {} login", manifest.title);
+    let file = sent.to_string_lossy().into_owned();
+    let kept = keep_login(&state, &manifest, &["--file", &file], &missing).await;
+    let _ = std::fs::remove_file(&sent);
+    kept
+}
+
+/// Has the downloader's script save its site's login, from the source the
+/// arguments name, and keeps it in place of the one there was. `missing`
+/// is what to say if the source holds no login.
+async fn keep_login(
+    state: &AppState,
+    manifest: &Manifest,
+    from: &[&str],
+    missing: &str,
+) -> Result<Json<Value>, ApiError> {
     std::fs::create_dir_all(&state.cookies)?;
-    let file = cookie_file(&state, &manifest);
+    let file = cookie_file(state, manifest);
     // Written beside the real file, so a failed attempt leaves the login
     // that was there.
     let fresh = file.with_extension("new");
-    let output = command(&state, &manifest)
-        .args(["cookies", "--browser", &input.browser, "--out"])
+    let output = command(state, manifest)
+        .arg("cookies")
+        .args(from)
+        .arg("--out")
         .arg(&fresh)
         .stdin(Stdio::null())
         .output()
@@ -324,7 +394,7 @@ async fn take_cookies(
     if !output.status.success() || !logged_in || !fresh.exists() {
         let _ = std::fs::remove_file(&fresh);
         let reason = if output.status.success() {
-            format!("No {} login was found in {}", manifest.title, input.browser)
+            missing.to_string()
         } else {
             last_line(&String::from_utf8_lossy(&output.stderr))
         };
@@ -336,7 +406,7 @@ async fn take_cookies(
         std::fs::set_permissions(&fresh, std::fs::Permissions::from_mode(0o600))?;
     }
     std::fs::rename(&fresh, &file)?;
-    Ok(Json(described(&state, &manifest)))
+    Ok(Json(described(state, manifest)))
 }
 
 async fn forget_cookies(

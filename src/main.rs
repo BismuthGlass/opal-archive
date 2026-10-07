@@ -47,6 +47,9 @@ struct AppState {
     downloads: downloads::Jobs,
     /// Whether the inbox's queue is being worked through.
     inbox_busy: Arc<std::sync::atomic::AtomicBool>,
+    /// Whether the server runs where there is no browser to read a login
+    /// from: logins are then sent to it, as cookie files.
+    headless: bool,
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -109,6 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cookies: data_dir.join("cookies"),
         downloads: Default::default(),
         inbox_busy: Default::default(),
+        headless: !matches!(env_or("OPALARCHIVE_HEADLESS", "").as_str(), "" | "0" | "false"),
     };
     // What was waiting in the inbox when the server last stopped.
     downloads::inbox::resume(&state)?;

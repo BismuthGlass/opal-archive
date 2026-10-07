@@ -6,6 +6,7 @@
 """The Reddit downloader for OpalArchive. See ../README.md for the protocol.
 
     reddit.py cookies --browser chrome --out FILE
+    reddit.py cookies --file cookies.txt --out FILE
     reddit.py download < request.json
 
 It takes a post URL and downloads the post's image, video or gallery. A post
@@ -329,14 +330,21 @@ def download() -> int:
     return 0
 
 
-def cookies(browser: str, out: str) -> int:
-    from yt_dlp.cookies import extract_cookies_from_browser
+def cookies(browser: str | None, file: str | None, out: str) -> int:
+    """Saves the site's login: read from a browser, or out of a cookie file."""
+    if file:
+        found = http.cookiejar.MozillaCookieJar(file)
+        found.load(ignore_discard=True, ignore_expires=True)
+    else:
+        from yt_dlp.cookies import extract_cookies_from_browser
+
+        found = extract_cookies_from_browser(browser)
 
     # Only Reddit's cookies are kept.
     jar = http.cookiejar.MozillaCookieJar(out)
     count = 0
     logged_in = False
-    for cookie in extract_cookies_from_browser(browser):
+    for cookie in found:
         if cookie.domain.lstrip(".").endswith("reddit.com"):
             jar.set_cookie(cookie)
             count += 1
@@ -353,13 +361,15 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="command", required=True)
     sub.add_parser("download", help="download what the request on standard input asks for")
-    get_cookies = sub.add_parser("cookies", help="save the Reddit login of a browser")
-    get_cookies.add_argument("--browser", required=True)
+    get_cookies = sub.add_parser("cookies", help="save the Reddit login of a browser, or of a cookie file")
+    source = get_cookies.add_mutually_exclusive_group(required=True)
+    source.add_argument("--browser")
+    source.add_argument("--file")
     get_cookies.add_argument("--out", required=True)
     args = ap.parse_args()
     try:
         if args.command == "cookies":
-            return cookies(args.browser, args.out)
+            return cookies(args.browser, args.file, args.out)
         return download()
     except Exception as e:
         # The last line of standard error is what the user is shown.

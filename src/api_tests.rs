@@ -37,6 +37,11 @@ impl Drop for Api {
 
 impl Api {
     fn new() -> Self {
+        Self::with(false)
+    }
+
+    /// A server that is, or is not, where there is no browser.
+    fn with(headless: bool) -> Self {
         let dir = std::env::temp_dir().join(format!(
             "opalarchive-test-{}-{}",
             std::process::id(),
@@ -51,6 +56,7 @@ impl Api {
             cookies: dir.join("cookies"),
             downloads: Default::default(),
             inbox_busy: Default::default(),
+            headless,
         };
         for path in [&state.storage, &state.thumbnails, &state.tmp] {
             std::fs::create_dir_all(path).unwrap();
@@ -1358,4 +1364,63 @@ async fn a_selection_tab_holds_what_it_is_given() {
     // Closing it takes nothing out of the library.
     api.ok("DELETE", &format!("/tabs/{id}"), None).await;
     assert_eq!(api.found("kind=file").await, [a, b, c]);
+}
+
+/// A downloader with a login: its script takes its own site's cookies out
+/// of a file, and finds a login among them if there is one called `session`.
+const LOGIN_DOWNLOADER: &str = r#"
+[ "$1" = cookies ] || exit 2
+[ "$2" = --file ] || { echo 'no browser here' >&2; exit 1; }
+if grep -q "mysite.test.*session" "$3"; then
+  grep "mysite.test" "$3" > "$5"
+  echo '{"logged_in":true}'
+else
+  echo '{"logged_in":false}'
+fi
+"#;
+
+#[tokio::test]
+async fn a_headless_server_is_sent_its_logins() {
+    let api = Api::with(true);
+    api.downloader("site", LOGIN_DOWNLOADER);
+    let folder = api.state.downloaders.join("site");
+    let manifest = json!({
+        "title": "Site",
+        "source": "mysite",
+        "command": ["sh", "fake.sh"],
+        "cookies": { "browsers": ["chrome"] },
+    });
+    std::fs::write(folder.join("manifest.json"), manifest.to_string()).unwrap();
+    let saved = api.state.cookies.join("site.txt");
+
+    // It says what it is, and has no browser to read a login from.
+    let listed = api.get("/downloaders").await;
+    assert_eq!((&listed[0]["headless"], &listed[0]["login_saved"]), (&json!(true), &Value::Null));
+    let from_browser = json!({ "browser": "chrome" });
+    assert_eq!(
+        api.refused("/downloaders/site/cookies", from_browser).await,
+        StatusCode::BAD_REQUEST
+    );
+
+    // A file with no login for the site is refused, and nothing is kept.
+    let other = "other.test\tTRUE\t/\tTRUE\t0\tsession\tabc\n";
+    assert_eq!(
+        api.refused("/downloaders/site/cookies/file", json!({ "cookies": other })).await,
+        StatusCode::BAD_REQUEST
+    );
+    assert!(!saved.exists());
+
+    // One with a login is kept: the site's own cookies, and no one else's.
+    let both = format!("{other}.mysite.test\tTRUE\t/\tTRUE\t0\tsession\txyz\n");
+    let kept = api
+        .post("/downloaders/site/cookies/file", json!({ "cookies": both }))
+        .await;
+    assert!(kept["login_saved"].is_number());
+    let text = std::fs::read_to_string(&saved).unwrap();
+    assert!(text.contains("mysite.test") && !text.contains("other.test"));
+    // What was sent is not left lying about.
+    assert_eq!(std::fs::read_dir(&api.state.tmp).unwrap().count(), 0);
+
+    api.ok("DELETE", "/downloaders/site/cookies", None).await;
+    assert!(!saved.exists());
 }
