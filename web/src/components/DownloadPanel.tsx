@@ -330,6 +330,22 @@ export function Login(props: {
       api.takeLogin(downloader().name, browser()).finally(() => setReading(false)),
     );
   };
+  /** Sends a cookie file: what a server with no browser is given instead. */
+  let picker!: HTMLInputElement;
+  const upload = () => {
+    const file = picker.files?.[0];
+    if (!file) return;
+    setReading(true);
+    props.attempt(async () => {
+      try {
+        await api.uploadLogin(downloader().name, await file.text());
+      } finally {
+        setReading(false);
+        // The same file can be chosen again.
+        picker.value = "";
+      }
+    });
+  };
 
   return (
     <>
@@ -345,22 +361,46 @@ export function Login(props: {
         >
           {(time) => <span>Saved {dateTime(new Date(time() * 1000).toISOString())}</span>}
         </Show>
-        <select
-          aria-label="Browser to read the login from"
-          value={browser()}
-          onChange={(event) => setBrowser(event.currentTarget.value)}
+        <Show
+          when={downloader().headless}
+          fallback={
+            <>
+              <select
+                aria-label="Browser to read the login from"
+                value={browser()}
+                onChange={(event) => setBrowser(event.currentTarget.value)}
+              >
+                <For each={downloader().cookies?.browsers ?? []}>
+                  {(name) => <option value={name}>{fieldLabel(name)}</option>}
+                </For>
+              </select>
+              <button
+                disabled={reading()}
+                title={`Reads your ${downloader().title} login from the browser and keeps it for later downloads`}
+                onClick={take}
+              >
+                {reading() ? "Reading…" : saved() ? "Read it again" : "Get it from the browser"}
+              </button>
+            </>
+          }
         >
-          <For each={downloader().cookies?.browsers ?? []}>
-            {(name) => <option value={name}>{fieldLabel(name)}</option>}
-          </For>
-        </select>
-        <button
-          disabled={reading()}
-          title={`Reads your ${downloader().title} login from the browser and keeps it for later downloads`}
-          onClick={take}
-        >
-          {reading() ? "Reading…" : saved() ? "Read it again" : "Get it from the browser"}
-        </button>
+          {/* The server has no browser: it is sent the login. */}
+          <input
+            ref={picker}
+            type="file"
+            accept=".txt,text/plain"
+            hidden
+            aria-label="Cookie file to upload"
+            onChange={upload}
+          />
+          <button
+            disabled={reading()}
+            title={`Upload a cookie file exported from a browser logged in to ${downloader().title} (a cookies.txt). Only ${downloader().title}'s cookies are kept. The browser extension can send the login for you instead.`}
+            onClick={() => picker.click()}
+          >
+            {reading() ? "Sending…" : saved() ? "Upload another" : "Upload a cookie file"}
+          </button>
+        </Show>
         <Show when={saved()}>
           <button
             class="link"

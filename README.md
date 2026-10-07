@@ -77,6 +77,7 @@ query language, and `src/api_tests.rs` the API, through its router.
 | `OPALARCHIVE_DATA` | `data`           | Database and internal storage    |
 | `OPALARCHIVE_WEB`  | `web/dist`       | Built frontend to serve          |
 | `OPALARCHIVE_DOWNLOADERS` | `downloaders` | The folder of downloaders     |
+| `OPALARCHIVE_HEADLESS` | unset | Set to `1` where the server has no browser to read a login from, as on a home server or in a container: logins are then sent to it as cookie files, by the browser extension or by uploading one |
 
 There is no authentication, so the server listens on localhost only by
 default.
@@ -125,6 +126,7 @@ is on, for a query of several lines).
 | `GET /tabs/{id}/view`, `PUT …`   | The snapshot a tab shows: `{query, ids, custom}`, or `null` if none is saved |
 | `GET /downloaders`               | The downloaders, as their manifests describe them, with when each one's login was saved |
 | `POST /downloaders/{name}/cookies`, `DELETE …` | `{browser}` → read the site's login from that browser and keep it; forget it |
+| `POST /downloaders/{name}/cookies/file` | `{cookies}`, the text of a cookie file in the Netscape format → keep the site's login out of it |
 | `GET /inbox`, `POST /inbox`      | The inbox: its tab, queue and each downloader's settings; `{url, downloader?, tags?}` → queue the address to be downloaded, by the downloader whose `sites` it is of |
 | `GET /inbox/queue/{id}`, `DELETE …` | What became of a request; take it off the queue, or stop it if it is running |
 | `POST /inbox/queue/{id}/retry`   | Queue again a request that failed or was stopped |

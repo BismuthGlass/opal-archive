@@ -39,6 +39,52 @@ const suggest = (field, q) => ask("GET", `/tags?${new URLSearchParams({ field, q
 /** OpalArchive's settings: the colours given to the tag types are among them. */
 const settings = () => ask("GET", "/settings");
 
+// Logins: the cookies this browser has for a downloader's site, sent to
+// OpalArchive so that it can download what the site shows to you alone.
+// The server may be where there is no browser to read them from itself.
+
+/** Whether a host is of a site as a downloader names it: see its manifest. */
+function ofSite(host, site) {
+  const name = site.toLowerCase();
+  if (name.endsWith(".*")) return host.split(".").includes(name.slice(0, -2));
+  return host === name || host.endsWith(`.${name}`);
+}
+
+/** The downloaders that use a login, each with when its login was saved. */
+async function logins() {
+  const all = await ask("GET", "/downloaders");
+  if (all.error) return all;
+  return (Array.isArray(all) ? all : []).filter((downloader) => downloader.cookies);
+}
+
+/** This browser's cookies for those sites, as a cookie file in the Netscape format. */
+async function cookieFile(sites) {
+  // Only the cookies of sites the extension is let onto are handed over.
+  const cookies = (await chrome.cookies.getAll({})).filter((cookie) =>
+    sites.some((site) => ofSite(cookie.domain.replace(/^\./, "").toLowerCase(), site)),
+  );
+  const lines = cookies.map((cookie) =>
+    [
+      (cookie.httpOnly ? "#HttpOnly_" : "") + cookie.domain,
+      cookie.domain.startsWith(".") ? "TRUE" : "FALSE",
+      cookie.path,
+      cookie.secure ? "TRUE" : "FALSE",
+      // A cookie that lasts only as long as the browser is open has no date.
+      Math.round(cookie.expirationDate ?? 0),
+      cookie.name,
+      cookie.value,
+    ].join("\t"),
+  );
+  return { count: cookies.length, text: ["# Netscape HTTP Cookie File", ...lines, ""].join("\n") };
+}
+
+/** Sends this browser's login for a downloader's sites to OpalArchive. */
+async function sendLogin(name, sites) {
+  const { count, text } = await cookieFile(sites ?? []);
+  if (count === 0) return { error: "This browser has no cookies for that site: log in to it first." };
+  return ask("POST", `/downloaders/${name}/cookies/file`, { cookies: text });
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, respond) => {
   const answer =
     message?.type === "send"
@@ -49,9 +95,15 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
           ? suggest(message.field, message.q)
           : message?.type === "settings"
             ? settings()
-            : message?.type === "ping"
-              ? ask("GET", "/inbox/sites")
-              : null;
+            : message?.type === "logins"
+              ? logins()
+              : message?.type === "sendLogin"
+                ? sendLogin(message.name, message.sites)
+                : message?.type === "forgetLogin"
+                  ? ask("DELETE", `/downloaders/${message.name}/cookies`)
+                  : message?.type === "ping"
+                    ? ask("GET", "/inbox/sites")
+                    : null;
   if (!answer) return false;
   answer.then(respond);
   // The answer comes later.

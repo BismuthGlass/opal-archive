@@ -1,16 +1,38 @@
 {
   "manifest_version": 3,
   "name": "OpalArchive",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Sends posts to OpalArchive to be downloaded, from a button on Reddit, Pinterest and 4chan or from the right-click menu.",
   "permissions": [
     "storage",
     "contextMenus",
-    "activeTab"
+    "activeTab",
+    "cookies"
   ],
   "host_permissions": [
     "http://127.0.0.1/*",
-    "http://localhost/*"
+    "http://localhost/*",
+    "https://*.reddit.com/*",
+    "https://*.pinterest.com/*",
+    "https://*.pinterest.co.uk/*",
+    "https://*.pinterest.ca/*",
+    "https://*.pinterest.com.au/*",
+    "https://*.pinterest.de/*",
+    "https://*.pinterest.fr/*",
+    "https://*.pinterest.es/*",
+    "https://*.pinterest.it/*",
+    "https://*.pinterest.pt/*",
+    "https://*.pinterest.ie/*",
+    "https://*.pinterest.nz/*",
+    "https://*.pinterest.at/*",
+    "https://*.pinterest.ch/*",
+    "https://*.pinterest.se/*",
+    "https://*.pinterest.dk/*",
+    "https://*.pinterest.jp/*",
+    "https://*.pinterest.co.kr/*",
+    "https://*.pinterest.com.mx/*",
+    "https://*.pinterest.cl/*",
+    "https://*.pinterest.ph/*"
   ],
   "optional_host_permissions": [
     "http://*/*",

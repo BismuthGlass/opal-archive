@@ -24,6 +24,13 @@ an address, which goes into the inbox's queue (see `downloaders/README.md`).
   the page itself, and the extension's own button for the page on show.
   These work for any site OpalArchive has a downloader for.
 
+Its options also list the downloaders that use a login, with whether
+OpalArchive has one saved. "Send my login" gives OpalArchive this
+browser's cookies for that site, and no other's, so that it can download
+what the site shows only to you; "Forget" has it delete them. This is the
+way to log in an OpalArchive that runs on another machine, which has no
+browser of yours to read the login from.
+
 What was sent is listed in OpalArchive's Inbox tab, until it is cleared
 there.
 

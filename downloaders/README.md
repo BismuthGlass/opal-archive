@@ -158,6 +158,15 @@ the site it writes nothing and prints `{"logged_in": false}`.
 The server keeps the file under the data directory, readable only by the
 user, and passes its path with every later download.
 
+### `cookies --file COOKIES --out FILE`
+
+The same, with the login taken out of a Netscape cookie file instead of a
+browser: for a server that runs where there is no browser (see
+`OPALARCHIVE_HEADLESS` in the main README), and is sent the login by the
+browser extension or as an uploaded file. `COOKIES` may hold the cookies of
+any number of sites; the script writes only its own site's to `FILE`, and
+again prints whether there was a login among them.
+
 ## The inbox
 
 A download can also be asked for from outside the interface, with nothing

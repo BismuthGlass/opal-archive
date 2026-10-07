@@ -42,6 +42,39 @@
       p.hint {
         color: #666;
       }
+      h2 {
+        margin: 20px 0 4px;
+        font-size: 14px;
+      }
+      #logins {
+        margin: 8px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      #logins li {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 8px;
+        align-items: center;
+        padding: 6px 0;
+        border-top: 1px solid #ddd;
+      }
+      #logins .name {
+        min-width: 80px;
+        font-weight: 600;
+      }
+      #logins .status {
+        flex: 1;
+        color: #666;
+      }
+      #logins .status.saved {
+        color: #2f9e44;
+      }
+      #logins .problem {
+        flex: 1 0 100%;
+        margin: 0;
+        color: #c92a2a;
+      }
     </style>
   </head>
   <body>
@@ -52,6 +85,12 @@
       <button id="save">Save and test</button>
       <p id="said" role="status"></p>
     </div>
+    <h2>Logins</h2>
+    <p class="hint">
+      What a site shows only to you can be downloaded once OpalArchive has your login to it.
+      "Send my login" gives it this browser's cookies for that site, and no other's.
+    </p>
+    <ul id="logins"></ul>
     <script src="options.js"></script>
   </body>
 </html>

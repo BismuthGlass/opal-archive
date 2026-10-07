@@ -34,6 +34,11 @@ export type Downloader = {
   options: { key: string; label: string; default: boolean }[];
   /** When its login was saved, in seconds since 1970; `null` if none is. */
   login_saved: number | null;
+  /**
+   * Whether the server is where there is no browser to read a login from:
+   * it is then sent one, as a cookie file.
+   */
+  headless: boolean;
 };
 
 /** How a download is going, or went. */
@@ -267,6 +272,9 @@ export const listDownloaders = () => request<Downloader[]>("GET", "/downloaders"
 /** Reads the downloader's login from a browser and keeps it. */
 export const takeLogin = (name: string, browser: string) =>
   request<Downloader>("POST", `/downloaders/${name}/cookies`, { browser });
+/** Keeps a login sent as the text of a cookie file, in the Netscape format. */
+export const uploadLogin = (name: string, cookies: string) =>
+  request<Downloader>("POST", `/downloaders/${name}/cookies/file`, { cookies });
 export const forgetLogin = (name: string) =>
   request<Downloader>("DELETE", `/downloaders/${name}/cookies`);
 export const getDownload = (tab: number) =>
