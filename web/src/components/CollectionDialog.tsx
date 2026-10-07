@@ -1,7 +1,7 @@
 import { createResource, createSignal, For, Show } from "solid-js";
 import * as api from "../api";
 import { COLLECTION_TYPES } from "../api";
-import { errorMessage, plural, quoteValue } from "../format";
+import { collectionName, errorMessage, plural, quoteValue } from "../format";
 import { addedTo, changed } from "../search";
 import { tabs } from "../tabs";
 import Modal from "./Modal";
@@ -13,7 +13,7 @@ import Modal from "./Modal";
 export default function CollectionDialog(props: {
   ids: number[];
   /** The collection whose tab this was opened from. */
-  parent?: { id: number; title: string | null };
+  parent?: { id: number; title: string | null; collection_id?: string | null };
   onClose: () => void;
 }) {
   const [mode, setMode] = createSignal<"new" | "existing">("new");
@@ -108,7 +108,7 @@ export default function CollectionDialog(props: {
                           onClick={() => setTarget(collection.id)}
                         >
                           <span class="pick-name">
-                            {collection.title || `#${collection.id}`}
+                            {collectionName(collection)}
                           </span>
                           <span class="pick-note">
                             {collection.collection_type},{" "}
@@ -144,7 +144,7 @@ export default function CollectionDialog(props: {
                         aria-selected={target() === item.id}
                         onClick={() => setTarget(item.id)}
                       >
-                        <span class="pick-name">{item.title || `#${item.id}`}</span>
+                        <span class="pick-name">{collectionName(item)}</span>
                         <span class="pick-note">
                           {item.collection_type}, {plural(item.member_count ?? 0, "item")}
                         </span>
@@ -199,7 +199,7 @@ export default function CollectionDialog(props: {
                   checked={nested()}
                   onChange={(e) => setNested(e.currentTarget.checked)}
                 />
-                Add it inside “{parent().title || `Collection #${parent().id}`}”
+                Add it inside “{collectionName(parent())}”
               </label>
             )}
           </Show>

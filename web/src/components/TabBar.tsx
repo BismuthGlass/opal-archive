@@ -30,7 +30,9 @@ function described(tab: Tab) {
       ? "Upload"
       : tab.kind === "download"
         ? fieldLabel(tab.downloader ?? "download")
-        : tab.collection?.title || `Collection #${tab.collection?.id}`;
+        : tab.collection?.title ||
+          tab.collection?.collection_id ||
+          `Collection #${tab.collection?.id}`;
   return query ? `${what}: ${query}` : what;
 }
 

@@ -42,6 +42,8 @@ struct Item {
     extension: Option<String>,
     length: Option<f64>,
     collection_type: Option<String>,
+    /// A collection's identifier, which it is called by when it has no title.
+    collection_id: Option<String>,
     /// ID of the file whose thumbnail represents this entity: the file
     /// itself, or a collection's first member that has one.
     thumbnail: Option<i64>,
@@ -190,7 +192,7 @@ async fn search(
                      JOIN entity me ON me.id = m.member_id
                      WHERE m.collection_id = e0.id AND me.trashed = 0)
                 END,
-                e0.trashed
+                e0.trashed, c0.collection_id
          FROM {} WHERE {} ORDER BY {} LIMIT ? OFFSET ?",
         query::FROM,
         compiled.filter,
@@ -213,6 +215,7 @@ async fn search(
                 extension: row.get(4)?,
                 length: row.get(5)?,
                 collection_type: row.get(6)?,
+                collection_id: row.get(10)?,
                 thumbnail: row.get(7)?,
                 thumbnail_version: None,
                 member_count: row.get(8)?,

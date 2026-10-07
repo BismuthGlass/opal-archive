@@ -55,4 +55,14 @@ export function dateTime(timestamp: string): string {
 }
 
 /** What went wrong, in words, whatever was thrown. */
+/**
+ * What a collection is called: its title or, without one, its collection
+ * ID, and failing both its number.
+ */
+export const collectionName = (collection: {
+  id: number;
+  title: string | null;
+  collection_id?: string | null;
+}) => collection.title || collection.collection_id || `#${collection.id}`;
+
 export const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));

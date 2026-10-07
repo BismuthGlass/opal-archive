@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js";
 import { activeTab, inside, leave, openCollection, trail } from "../tabs";
-import type { Step } from "../tabs";
+import { collectionName } from "../format";
 import Icon from "./Icon";
 
 /**
@@ -11,14 +11,12 @@ export function goBack(depth?: number) {
   leave(depth);
 }
 
-const named = (step: Step) => step.title || `#${step.id}`;
-
 /** What the tab shows when it is inside nothing. */
 function outermost(): string {
   const tab = activeTab();
   if (!tab) return "Results";
   if (tab.name) return tab.name;
-  if (tab.kind === "collection") return tab.collection?.title || `#${tab.collection?.id}`;
+  if (tab.kind === "collection" && tab.collection) return collectionName(tab.collection);
   return tab.kind === "upload" ? "Uploads" : tab.kind === "download" ? "Downloads" : "Results";
 }
 
@@ -46,12 +44,12 @@ export default function Trail() {
               {(step, index) => (
                 <li>
                   <button class="link" title="Back to this collection" onClick={() => goBack(index() + 1)}>
-                    {named(step)}
+                    {collectionName(step)}
                   </button>
                 </li>
               )}
             </For>
-            <li aria-current="location">{named(current())}</li>
+            <li aria-current="location">{collectionName(current())}</li>
           </ol>
           <button
             class="trail-open"

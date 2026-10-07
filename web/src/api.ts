@@ -8,7 +8,13 @@ export type Tab = {
   /** Chosen by the user; empty if the tab goes by its query. */
   name: string;
   /** The collection a collection tab shows. */
-  collection: { id: number; title: string | null; ordered: boolean } | null;
+  collection: {
+    id: number;
+    title: string | null;
+    ordered: boolean;
+    /** Its identifier, if it has one. */
+    collection_id: string | null;
+  } | null;
   /** The downloader a download tab uses, by name. */
   downloader: string | null;
 };
@@ -86,6 +92,8 @@ export type Item = {
   extension: string | null;
   length: number | null;
   collection_type: string | null;
+  /** A collection's identifier, if it has one. */
+  collection_id: string | null;
   /** File whose thumbnail stands for this entry, if any. */
   thumbnail: number | null;
   /** Which file that thumbnail is of, for its address. */

@@ -2,7 +2,7 @@ import { createEffect, createMemo, createResource, createSignal, For, on, Show }
 import * as api from "../api";
 import { COLLECTION_TYPES, CONTENT_RATINGS } from "../api";
 import type { Changes, Metadata, Scalar } from "../api";
-import { dateTime, duration, errorMessage, fileSize, plural } from "../format";
+import { collectionName, dateTime, duration, errorMessage, fileSize, plural } from "../format";
 import { changed, dataVersion, selected } from "../search";
 import { aggregatedTypes, orderedTypes, prefixOf, tagType } from "../tagTypes";
 import { enter } from "../tabs";
@@ -403,7 +403,7 @@ function Collections(props: {
                   title="Go into this collection"
                   onClick={() => enter(membership)}
                 >
-                  {membership.title || `#${membership.id}`}
+                  {collectionName(membership)}
                 </button>
                 <Show when={membership.count < props.data.count}>
                   <span

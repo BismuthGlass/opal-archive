@@ -11,6 +11,7 @@ import {
   Switch,
 } from "solid-js";
 import { contentUrl, getMetadata } from "../api";
+import { collectionName } from "../format";
 import { ensureRange, itemAt, marks, search } from "../search";
 import { saveSetting, settings } from "../settings";
 import { enter, shownCollection } from "../tabs";
@@ -135,7 +136,7 @@ export default function Viewer(props: { index: number; onMove: (index: number | 
                       }
                       onClick={() => goInto(collection)}
                     >
-                      {collection.title || collection.collection_id || `#${collection.id}`}
+                      {collectionName(collection)}
                     </button>
                   </>
                 )}

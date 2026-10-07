@@ -33,6 +33,8 @@ struct TabCollection {
     id: i64,
     title: Option<String>,
     ordered: bool,
+    /// Its identifier, which it is called by when it has no title.
+    collection_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -85,7 +87,7 @@ pub fn router() -> Router<AppState> {
 
 const SELECT_TAB: &str = "
     SELECT t.id, t.position, t.kind, t.query, t.name, t.collection_id, e.title, c.ordered,
-           t.downloader
+           t.downloader, c.collection_id
     FROM tab t
     LEFT JOIN entity e ON e.id = t.collection_id
     LEFT JOIN collection c ON c.entity_id = t.collection_id";
@@ -96,6 +98,7 @@ fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
             id,
             title: row.get(6)?,
             ordered: row.get(7)?,
+            collection_id: row.get(9)?,
         }),
         None => None,
     };

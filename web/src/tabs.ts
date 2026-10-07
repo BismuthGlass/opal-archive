@@ -57,7 +57,14 @@ export function setShowsTrashed(tab: number, show: boolean) {
 }
 
 /** A collection a tab has gone into, and the filter typed while in it. */
-export type Step = { id: number; title: string | null; ordered: boolean; query: string };
+export type Step = {
+  id: number;
+  title: string | null;
+  /** Its identifier, which it is called by when it has no title. */
+  collection_id: string | null;
+  ordered: boolean;
+  query: string;
+};
 
 // A tab can go into a collection among its results, and into one inside
 // that, and back out: the way in is its trail. It is kept while the page
@@ -94,6 +101,7 @@ async function loadTrails(list: Tab[]) {
       kept.push({
         id: step.id,
         title: entity.title,
+        collection_id: entity.collection.collection_id,
         ordered: entity.collection.ordered,
         query: String(step.query ?? ""),
       });
@@ -126,6 +134,7 @@ export async function enter(collection: { id: number; title: string | null }) {
     const step = {
       id: entity.id,
       title: entity.title,
+      collection_id: entity.collection?.collection_id ?? null,
       ordered: entity.collection?.ordered ?? false,
       query: "",
     };
