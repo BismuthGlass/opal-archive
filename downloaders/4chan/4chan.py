@@ -13,8 +13,9 @@ read-only JSON API (https://github.com/4chan/4chan-API). A thread still on
 the board or in its archive can be read; one that has been pruned is gone.
 
 It also takes the address of one post, a thread URL ending in `#p` and the
-post's number, and downloads that post's file alone; and the address of a
-file itself, which it downloads as it is. Neither goes in a collection.
+post's number, and downloads that post's file alone, into the thread's
+collection all the same; and the address of a file itself, which it
+downloads as it is, into no collection: it does not say what thread it is of.
 """
 from __future__ import annotations
 
@@ -215,10 +216,10 @@ def download() -> int:
     def post_url(post: dict) -> str:
         return POST.format(board=board, thread=thread, no=post["no"])
 
-    # The thread becomes a collection holding its files, in the order posted.
-    # A post asked for by itself is only a file.
+    # The thread becomes a collection holding its files, in the order posted:
+    # one post's file goes in it as the files of the whole thread would.
     whole = {}
-    if options.get("collection", True) and only is None:
+    if options.get("collection", True):
         address = THREAD.format(board=board, thread=thread)
         # Thread numbers are a board's own, so the board is part of the ID.
         whole = {

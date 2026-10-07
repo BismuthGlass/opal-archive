@@ -6,7 +6,7 @@
   "options": [
     {
       "key": "collection",
-      "label": "Put the files of a thread in a collection for it",
+      "label": "Put the files in a collection for their thread",
       "default": true
     },
     {
