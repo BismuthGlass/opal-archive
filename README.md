@@ -59,6 +59,27 @@ cd web && npm install && npm run dev   # frontend with live reload, proxies /api
 For a single-process setup, build the frontend once with `npm run build` and
 the server will serve it from `web/dist`.
 
+## Docker
+
+The `Dockerfile` builds one image holding the server, the frontend it
+serves and the downloaders with everything they call on:
+
+```sh
+docker build -t opalarchive .
+docker run -d --name opalarchive -p 127.0.0.1:7878:7878 -v opalarchive-data:/data opalarchive
+```
+
+The library lives in the volume at `/data`. The image sets
+`OPALARCHIVE_HEADLESS`, there being no browser in it to read a login from:
+logins are sent by the browser extension, or uploaded in a downloader's
+settings. OpalArchive has no login of its own, so the port is published
+above to the machine itself only; reach it from another computer through
+something that says who may, an SSH tunnel for one
+(`ssh -L 7878:localhost:7878 server`).
+
+The downloaders' Python packages are fetched when the image is built. To
+update them, yt-dlp say, build it again.
+
 ## Testing
 
 ```sh

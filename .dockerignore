@@ -1,0 +1,15 @@
+# Nothing built on this machine, and none of its library, goes into the image.
+/target
+/data
+/web/node_modules
+/web/dist
+/web/vite.scratch.config.ts
+/.git
+/.claude
+# The extension is installed in a browser, not run by the server.
+/extension
+**/__pycache__
+**/.DS_Store
+*.log
+.env
+.env.*
