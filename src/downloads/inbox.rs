@@ -10,8 +10,6 @@
 
 use std::sync::atomic::Ordering;
 
-use axum::routing::delete;
-
 use super::*;
 
 /// The `downloader` of the inbox's tab: no folder can be called this.
@@ -35,8 +33,6 @@ pub fn router() -> Router<AppState> {
         .route("/inbox/queue/{id}/retry", post(retry))
         .route("/inbox/settings/{downloader}", axum::routing::patch(configure))
         .route("/inbox/sites", get(sites))
-        // Nothing else is deleted here.
-        .route("/inbox/finished", delete(forget_finished))
 }
 
 /// The inbox's tab, if there is one.
@@ -259,15 +255,6 @@ async fn clear(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
         [],
     )?;
     tx.commit()?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// Forgets the requests that are finished, leaving what the inbox lists.
-async fn forget_finished(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
-    state.db.lock().unwrap().execute(
-        "DELETE FROM inbox_queue WHERE status NOT IN ('queued', 'running')",
-        [],
-    )?;
     Ok(StatusCode::NO_CONTENT)
 }
 

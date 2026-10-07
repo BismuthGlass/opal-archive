@@ -39,6 +39,8 @@ SQLite is compiled into the server, so no system install is needed.
 - `web/` – the SolidJS frontend
 - `downloaders/` – one folder per downloader: a manifest and a script that
   fetches files from a website. See `downloaders/README.md` for how to add one
+- `extension/` – a browser extension that sends posts to be downloaded, from
+  a button beside each one. See `extension/README.md` for how to install it.
 - `data/` – created at runtime:
   - `opalarchive.db` – the database
   - `storage/` – uploaded files, named `<sha256>.<extension>`
@@ -117,12 +119,18 @@ is on, for a query of several lines).
 | `POST /collections/{id}/members` | `{add, remove}` → change membership                            |
 | `PUT /collections/{id}/order`    | `{ids}` → set member positions; members left out follow        |
 | `POST /export`                   | Form field `ids=1,2,3` → zip of those files                    |
-| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, collection, downloader}` → new tab, `kind` being `gallery`, `upload`, `collection` or `download` |
+| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, collection, downloader}` → new tab, `kind` being `gallery`, `upload`, `collection`, `download` or `inbox` (of which there is one: asked for again, it is the one there is) |
 | `PATCH /tabs/{id}`, `DELETE …`   | `{query, name}`, either or both → change a tab; close a tab     |
 | `PUT /tabs/order`                | `{ids}` → put the tabs in that order                           |
 | `GET /tabs/{id}/view`, `PUT …`   | The snapshot a tab shows: `{query, ids, custom}`, or `null` if none is saved |
 | `GET /downloaders`               | The downloaders, as their manifests describe them, with when each one's login was saved |
 | `POST /downloaders/{name}/cookies`, `DELETE …` | `{browser}` → read the site's login from that browser and keep it; forget it |
+| `GET /inbox`, `POST /inbox`      | The inbox: its tab, queue and each downloader's settings; `{url, downloader?}` → queue the address to be downloaded, by the downloader whose `sites` it is of |
+| `GET /inbox/queue/{id}`, `DELETE …` | What became of a request; take it off the queue, or stop it if it is running |
+| `POST /inbox/queue/{id}/retry`   | Queue again a request that failed or was stopped |
+| `POST /inbox/clear`              | Empty what the inbox lists and its finished requests; nothing leaves the library |
+| `PATCH /inbox/settings/{name}`   | `{options?, tags?}` → how that downloader is set when it downloads for the inbox |
+| `GET /inbox/sites`               | The sites there is a downloader for |
 | `GET /tabs/{id}/download`, `PATCH …` | A download tab's downloader, options, base tags, count of things seen and its download's progress; `{options, tags}`, either or both → set them |
 | `POST /tabs/{id}/download/start`, `…/cancel` | `{url}` → start downloading it into the tab; stop the download running |
 | `GET /tabs/{id}/download/seen`, `POST …/seen/forget` | What the tab has downloaded before; `{keys}` → forget those, or all with no `keys` |

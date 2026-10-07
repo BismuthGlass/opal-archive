@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>OpalArchive</title>
+    <style>
+      body {
+        min-width: 360px;
+        margin: 16px;
+        font: 14px/1.4 system-ui, sans-serif;
+      }
+      label {
+        display: block;
+        margin-bottom: 4px;
+        font-weight: 600;
+      }
+      input {
+        box-sizing: border-box;
+        width: 100%;
+        padding: 6px 8px;
+        font: inherit;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-top: 10px;
+      }
+      button {
+        padding: 6px 12px;
+        font: inherit;
+      }
+      #said {
+        margin: 0;
+      }
+      #said.bad {
+        color: #c92a2a;
+      }
+      #said.good {
+        color: #2f9e44;
+      }
+      p.hint {
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <label for="server">Where OpalArchive is</label>
+    <input id="server" type="url" spellcheck="false" placeholder="http://127.0.0.1:7878" />
+    <p class="hint">The address you open OpalArchive at. Leave it empty for the usual one.</p>
+    <div class="row">
+      <button id="save">Save and test</button>
+      <p id="said" role="status"></p>
+    </div>
+    <script src="options.js"></script>
+  </body>
+</html>
