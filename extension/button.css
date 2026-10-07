@@ -85,7 +85,8 @@
 .opalarchive-popup,
 .opalarchive-popup *,
 .opalarchive-notices,
-.opalarchive-notices *,
+/* But for the drawings: reset, a path loses its shape as well as its colour. */
+.opalarchive-notices :where(:not(svg, path)),
 .opalarchive-dialog,
 .opalarchive-dialog * {
   all: revert;
