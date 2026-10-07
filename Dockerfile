@@ -34,12 +34,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # What runs. Debian 13 has ImageMagick 7, which is the one called `magick`.
 FROM debian:trixie-slim
 
-# What the server calls on: ImageMagick, ffmpeg and poppler for dimensions,
-# lengths and thumbnails; curl to fetch a file from an address; `kill`, from
-# procps, to stop a download; and Python for the downloaders' scripts.
+# What the server calls on: `file` to tell what kind of thing a file is;
+# ImageMagick, ffmpeg and poppler for dimensions, lengths and thumbnails;
+# curl to fetch a file from an address; `kill`, from procps, to stop a
+# download; and Python for the downloaders' scripts.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl ffmpeg imagemagick poppler-utils procps python3 \
+        ca-certificates curl ffmpeg file imagemagick poppler-utils procps python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # uv runs the downloaders' scripts, fetching the packages each one names.
