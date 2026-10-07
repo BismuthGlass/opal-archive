@@ -236,6 +236,17 @@ export const setQuery = (id: number, query: string) =>
     setTabs((t) => t.id === id, "query", tab.query);
   });
 
+/**
+ * Opens a tab on these entities alone: it holds them, and its query
+ * filters them.
+ */
+export const openSelection = (ids: number[]) =>
+  guard(async () => {
+    const tab = await api.createTab("selection", "", undefined, undefined, ids);
+    setTabs(tabs.length, tab);
+    select(tab.id);
+  });
+
 /** Shows a collection in its own tab, going to the one it has if any. */
 export async function openCollection(id: number) {
   const existing = tabs.find((tab) => tab.collection?.id === id);

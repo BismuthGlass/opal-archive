@@ -133,7 +133,9 @@ export default function QueryBar() {
       ? "Filter this collection"
       : activeTab()?.kind === "upload"
         ? "Filter these uploads"
-        : "cat creator=someone score>=5";
+        : activeTab()?.kind === "selection"
+          ? "Filter this selection"
+          : "cat creator=someone score>=5";
 
   return (
     <form

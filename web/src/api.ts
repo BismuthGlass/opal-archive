@@ -1,4 +1,4 @@
-export type TabKind = "gallery" | "upload" | "collection" | "download" | "inbox";
+export type TabKind = "gallery" | "upload" | "collection" | "download" | "inbox" | "selection";
 
 export type Tab = {
   id: number;
@@ -259,7 +259,9 @@ export const createTab = (
   query: string,
   collection?: number,
   downloader?: string,
-) => request<Tab>("POST", "/tabs", { kind, query, collection, downloader });
+  /** For a selection tab, the entities it is to hold. */
+  ids?: number[],
+) => request<Tab>("POST", "/tabs", { kind, query, collection, downloader, ids });
 
 export const listDownloaders = () => request<Downloader[]>("GET", "/downloaders");
 /** Reads the downloader's login from a browser and keeps it. */

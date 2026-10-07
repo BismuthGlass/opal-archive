@@ -47,6 +47,9 @@ struct NewTab {
     collection: Option<i64>,
     /// For a download tab, the downloader.
     downloader: Option<String>,
+    /// For a selection tab, the entities it is to hold.
+    #[serde(default)]
+    ids: Vec<i64>,
 }
 
 fn default_kind() -> String {
@@ -87,7 +90,7 @@ pub fn router() -> Router<AppState> {
 
 const SELECT_TAB: &str = "
     SELECT t.id, t.position, t.kind, t.query, t.name, t.collection_id, e.title, c.ordered,
-           t.downloader, c.collection_id
+           t.downloader, c.collection_id, t.picked
     FROM tab t
     LEFT JOIN entity e ON e.id = t.collection_id
     LEFT JOIN collection c ON c.entity_id = t.collection_id";
@@ -108,7 +111,14 @@ fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
     Ok(Tab {
         id: row.get(0)?,
         position: row.get(1)?,
-        kind: if inbox { "inbox".to_string() } else { row.get(2)? },
+        kind: if inbox {
+            "inbox".to_string()
+        } else if row.get(10)? {
+            // Kept as an upload tab that was given what it holds.
+            "selection".to_string()
+        } else {
+            row.get(2)?
+        },
         query: row.get(3)?,
         name: row.get(4)?,
         collection,
@@ -169,6 +179,23 @@ async fn create(
         // There is one inbox: asked for again, it is the one there is.
         let tab = one(&conn, downloads::inbox::open(&conn)?)?;
         return Ok((StatusCode::OK, Json(tab)));
+    }
+    if input.kind == "selection" {
+        // It holds the entities given, those of them there are, as an upload
+        // tab holds its uploads.
+        conn.execute(
+            "INSERT INTO tab (position, kind, query, picked)
+             VALUES ((SELECT coalesce(max(position), -1) + 1 FROM tab), 'upload', ?1, 1)",
+            [&input.query],
+        )?;
+        let id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
+             SELECT ?1, e.id FROM entity e
+             WHERE e.id IN (SELECT value FROM json_each(?2))",
+            params![id, serde_json::to_string(&input.ids).expect("integers serialize")],
+        )?;
+        return Ok((StatusCode::CREATED, Json(one(&conn, id)?)));
     }
     if let Some(collection) = input.collection {
         let exists: bool = conn.query_row(

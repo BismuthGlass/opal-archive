@@ -1329,3 +1329,33 @@ async fn the_inbox_downloads_what_it_is_sent() {
     assert_eq!((&inbox["listed"], &inbox["queue"]), (&json!(0), &json!([])));
     assert_eq!(api.found("kind=file").await.len(), 3);
 }
+
+#[tokio::test]
+async fn a_selection_tab_holds_what_it_is_given() {
+    let api = Api::new();
+    let (a, b, c) = (api.file("a.png"), api.file("b.png"), api.file("c.png"));
+    api.post("/entities/edit", json!({ "ids": [a], "add": { "tags": ["cat"] } }))
+        .await;
+
+    // It is given the entities it holds; one that does not exist is passed over.
+    let tab = api
+        .post("/tabs", json!({ "kind": "selection", "ids": [c, a, 999] }))
+        .await;
+    assert_eq!(tab["kind"], "selection");
+    let id = tab["id"].as_i64().unwrap();
+    assert_eq!(api.in_tab(id, "file").await, [a, c]);
+    assert_eq!(api.get("/tabs").await[0]["kind"], "selection");
+
+    // Its query filters what it holds, and never reaches beyond it.
+    let within = async |q: &str| {
+        let answer = api.get(&format!("/search/ids?q={q}&tab={id}")).await;
+        serde_json::from_value::<Vec<i64>>(answer["ids"].clone()).unwrap()
+    };
+    assert_eq!(within("cat").await, [a]);
+    assert_eq!(within("-cat").await, [c]);
+    assert!(!within("").await.contains(&b));
+
+    // Closing it takes nothing out of the library.
+    api.ok("DELETE", &format!("/tabs/{id}"), None).await;
+    assert_eq!(api.found("kind=file").await, [a, b, c]);
+}

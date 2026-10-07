@@ -237,7 +237,8 @@ fn record(conn: &Connection, tab: Option<i64>, file: &FileEntity) -> rusqlite::R
     if let Some(tab) = tab {
         conn.execute(
             "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
-             SELECT id, ?2 FROM tab WHERE id = ?1 AND kind IN ('upload', 'download')",
+             SELECT id, ?2 FROM tab WHERE id = ?1 AND kind IN ('upload', 'download')
+               AND picked = 0",
             (tab, file.id),
         )?;
     }

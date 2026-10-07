@@ -63,6 +63,7 @@ const EMPTY: Record<string, string> = {
   upload: "Nothing uploaded in this tab yet.",
   download: "Nothing downloaded in this tab yet.",
   inbox: "Nothing in the inbox.",
+  selection: "Nothing of what this tab was opened on is left.",
   collection: "This collection is empty.",
 };
 

@@ -10,6 +10,7 @@ const ICONS: Record<TabKind, IconName> = {
   collection: "folder-outline",
   download: "download",
   inbox: "inbox-outline",
+  selection: "select-all",
 };
 import type { IconName } from "./Icon";
 import Icon from "./Icon";
@@ -36,6 +37,8 @@ function described(tab: Tab) {
       ? "Upload"
       : tab.kind === "inbox"
         ? "Inbox"
+        : tab.kind === "selection"
+          ? "Selection"
         : tab.kind === "download"
         ? fieldLabel(tab.downloader ?? "download")
         : tab.collection?.title ||

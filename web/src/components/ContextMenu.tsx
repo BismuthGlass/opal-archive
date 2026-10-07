@@ -14,7 +14,7 @@ import {
   selectMarked,
   selected,
 } from "../search";
-import { inside, leave, open as openTab } from "../tabs";
+import { inside, leave, open as openTab, openSelection } from "../tabs";
 import { editTag } from "../tagEditing";
 import { fieldLabel, tagQuery } from "../format";
 import { showToast } from "../toast";
@@ -436,6 +436,19 @@ function Menu(props: { at: Opened; item: Item }) {
         <button role="menuitem" onClick={download}>
           <Icon name="download" />
           Download
+        </button>
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          title="Open a tab that shows only these, to look through or filter further"
+          onClick={() => {
+            close();
+            openSelection(ids);
+          }}
+        >
+          <Icon name="open-in-new" />
+          Open in a new tab
         </button>
       </li>
       <li class="menu-divider" role="separator" />
