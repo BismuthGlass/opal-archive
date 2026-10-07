@@ -374,6 +374,135 @@ function opalAskTags(anchor, submit) {
   input.focus();
 }
 
+// Notices: what went wrong with something sent from this page, said in
+// the bottom right corner of the page until dismissed. Pressing one opens
+// it, to say what went wrong in full.
+
+const OPAL_NOTICE_ICONS = {
+  failed:
+    "M12.4 16.3q.2-.2.2-.5t-.2-.4-.4-.2-.4.2-.2.4.2.5.4.1.4-.1m-.9-3.1h1v-6h-1zM12 21q-1.9 0-3.5-.7t-2.9-1.9-1.9-2.9T3 12t.7-3.5 1.9-2.9 2.9-1.9T12 3t3.5.7 2.9 1.9 1.9 2.9.7 3.5-.7 3.5-1.9 2.9-2.9 1.9-3.5.7m0-1q3.4 0 5.7-2.3T20 12t-2.3-5.7T12 4 6.3 6.3 4 12t2.3 5.7T12 20",
+  problems:
+    "M2.7 20 12 4l9.3 16zm1.7-1h15.2L12 6zm8-1.6q.2-.2.2-.4t-.2-.4-.4-.2-.4.2-.2.4.2.4.4.2.4-.2m-.9-2h1v-5h-1z",
+};
+
+/** How many notices are on show at once: the oldest give way. */
+const OPAL_NOTICES = 4;
+
+/**
+ * Says in the corner that something sent from this page went wrong.
+ * `kind` is `failed`, or `problems` for a download that got there without
+ * everything. `retry`, if given, sends it again.
+ */
+function opalNotify({ kind, title, url, messages, retry }) {
+  let stack = document.querySelector(".opalarchive-notices");
+  if (!stack) {
+    stack = opalElement("div", "opalarchive-notices");
+    stack.setAttribute("aria-label", "OpalArchive notifications");
+    document.body.append(stack);
+  }
+  const notice = { kind, title, url, messages, retry, when: new Date() };
+  const card = opalElement("div", `opalarchive-notice opalarchive-${kind}`);
+  card.setAttribute("role", "alert");
+  const dismiss = () => {
+    card.remove();
+    if (!stack.children.length) stack.remove();
+  };
+
+  const open = opalElement("button", "opalarchive-notice-open");
+  open.type = "button";
+  open.title = "Show what went wrong";
+  open.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${OPAL_NOTICE_ICONS[kind]}"/></svg>`;
+  const text = opalElement("span", "opalarchive-notice-text");
+  text.append(
+    opalElement("strong", "", title),
+    opalElement("span", "opalarchive-notice-summary", messages[0] ?? ""),
+  );
+  open.append(text);
+  open.addEventListener("click", () => opalReadNotice(notice, dismiss));
+
+  const close = opalElement("button", "opalarchive-notice-dismiss", "×");
+  close.type = "button";
+  close.title = "Dismiss";
+  close.setAttribute("aria-label", "Dismiss");
+  close.addEventListener("click", dismiss);
+
+  card.append(open, close);
+  stack.append(card);
+  while (stack.children.length > OPAL_NOTICES) stack.firstElementChild.remove();
+}
+
+/** Opens a notice over the page: what was sent, and everything that went wrong. */
+function opalReadNotice(notice, dismiss) {
+  document.querySelector(".opalarchive-dialog")?.remove();
+  const back = opalElement("div", "opalarchive-dialog");
+  const box = opalElement("div", "opalarchive-dialog-box");
+  box.setAttribute("role", "dialog");
+  box.setAttribute("aria-modal", "true");
+  box.setAttribute("aria-label", notice.title);
+  const close = () => {
+    document.removeEventListener("keydown", onKey, true);
+    back.remove();
+  };
+  const onKey = (event) => {
+    if (event.key !== "Escape") return;
+    event.stopPropagation();
+    close();
+  };
+
+  const link = opalElement("a", "", notice.url);
+  link.href = notice.url;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  const facts = opalElement("dl", "opalarchive-facts");
+  const address = opalElement("dd", "");
+  address.append(link);
+  facts.append(
+    opalElement("dt", "", "Address"),
+    address,
+    opalElement("dt", "", "When"),
+    opalElement("dd", "", notice.when.toLocaleString()),
+  );
+  const list = opalElement("ul", "opalarchive-messages");
+  list.append(...notice.messages.map((message) => opalElement("li", "", message)));
+
+  const actions = opalElement("div", "opalarchive-actions");
+  const done = opalElement("button", "", "Dismiss");
+  done.type = "button";
+  done.addEventListener("click", () => {
+    dismiss();
+    close();
+  });
+  actions.append(done);
+  if (notice.retry) {
+    const again = opalElement("button", "opalarchive-primary", "Try again");
+    again.type = "button";
+    again.title = "Send it to OpalArchive again";
+    again.addEventListener("click", () => {
+      dismiss();
+      close();
+      notice.retry();
+    });
+    actions.append(again);
+  }
+
+  box.append(
+    opalElement("h2", "", notice.title),
+    facts,
+    opalElement("p", "opalarchive-hint", notice.kind === "failed" ? "Why it failed" : "What went wrong"),
+    list,
+    actions,
+  );
+  back.append(box);
+  // A press on what is behind it puts it away; one inside it is its own.
+  back.addEventListener("click", (event) => event.target === back && close());
+  for (const type of ["keydown", "keyup", "keypress", "mousedown", "mouseup", "pointerdown", "pointerup"]) {
+    box.addEventListener(type, (event) => event.stopPropagation());
+  }
+  document.addEventListener("keydown", onKey, true);
+  document.body.append(back);
+  (actions.querySelector(".opalarchive-primary") ?? done).focus();
+}
+
 /**
  * A button that sends `url()` to OpalArchive when pressed, after asking for
  * tags to add; with Shift held it sends at once, with none. The address is
@@ -395,7 +524,20 @@ function opalButton(url) {
       ? '<span class="opalarchive-spinner"></span>'
       : `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${path}"/></svg>`;
   };
-  const fail = (why) => show("failed", `OpalArchive: ${why}. Click to try again.`);
+  /** The address and tags last sent, to be sent again if asked. */
+  let sent = { url: "", tags: [] };
+  /** Shows that it failed, on the button and, unless `quiet`, in the corner. */
+  const fail = (why, quiet = false) => {
+    show("failed", `OpalArchive: ${why}. Click to try again.`);
+    if (quiet) return;
+    opalNotify({
+      kind: "failed",
+      title: "Download failed",
+      url: sent.url,
+      messages: why.split("; ").filter(Boolean),
+      retry: () => busy || send(sent.tags).then((wrong) => wrong && fail(wrong)),
+    });
+  };
 
   /** Follows a request until it has ended. */
   const follow = async (id) => {
@@ -403,9 +545,21 @@ function opalButton(url) {
       await new Promise((resolve) => setTimeout(resolve, OPAL_POLL));
       const request = await opalAsk({ type: "status", id });
       if (request.error) return fail(request.error);
-      if (request.status === "done") return show("done");
+      if (request.status === "done") {
+        // It got there, though perhaps not with everything.
+        if (request.message) {
+          opalNotify({
+            kind: "problems",
+            title: "Download had problems",
+            url: sent.url,
+            messages: request.message.split("; ").filter(Boolean),
+          });
+        }
+        return show("done");
+      }
       if (request.status === "failed") return fail(request.message || "the download failed");
-      if (request.status === "cancelled") return fail("the download was stopped");
+      // Stopped on purpose, in OpalArchive: there is nothing to tell.
+      if (request.status === "cancelled") return fail("the download was stopped", true);
       show(request.status);
     }
     show("idle");
@@ -416,7 +570,8 @@ function opalButton(url) {
     const before = button.dataset.state;
     busy = true;
     show("sending");
-    const request = await opalAsk({ type: "send", url: url(), tags });
+    sent = { url: url(), tags };
+    const request = await opalAsk({ type: "send", url: sent.url, tags });
     if (request.error) {
       busy = false;
       // The box that asked says why; the button is as it was.

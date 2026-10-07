@@ -8,9 +8,11 @@ an address, which goes into the inbox's queue (see `downloaders/README.md`).
   asks for tags to give what is downloaded, entered as in OpalArchive's own
   tag editor: typing suggests the tags there are, `@cr:name` is a tag of
   another type, Enter adds one, and Shift+Enter (or Download) sends the
-  post. Shift-click on the button sends it at once, with no tags. The button turns into a spinner while the post
-  waits and downloads, then a tick, or a cross that says why when pointed
-  at. Pressing it again sends the post again.
+  post. Shift-click on the button sends it at once, with no tags. The
+  button turns into a spinner while the post waits and downloads, then a
+  tick, or a cross. A download that goes wrong is also said in the bottom
+  right corner of the page: pressing the notice opens it, with why and a
+  way to try again. Pressing the button again sends the post again.
 - On Pinterest, the same button on the corner of each pin, in grids and
   on the pin's own page, and on each board of a profile, where it sends
   the whole board.

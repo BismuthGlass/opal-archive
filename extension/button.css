@@ -83,13 +83,19 @@
 /* The box that asks for tags. Everything is set here: nothing is to be
    taken from the page's own styles. */
 .opalarchive-popup,
-.opalarchive-popup * {
+.opalarchive-popup *,
+.opalarchive-notices,
+.opalarchive-notices *,
+.opalarchive-dialog,
+.opalarchive-dialog * {
   all: revert;
   box-sizing: border-box;
   font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-.opalarchive-popup {
+.opalarchive-popup,
+.opalarchive-notices,
+.opalarchive-dialog {
   --opal-text: #1b1b1f;
   --opal-muted: #6b6b76;
   --opal-surface: #ffffff;
@@ -98,6 +104,10 @@
   --opal-accent: #3b5bdb;
   --opal-on-accent: #ffffff;
   --opal-danger: #c92a2a;
+  --opal-warning: #e8a400;
+}
+
+.opalarchive-popup {
   position: absolute;
   z-index: 2147483647;
   display: flex;
@@ -274,12 +284,195 @@
   cursor: default;
 }
 
+/* Notices: what went wrong, in the corner of the page until dismissed. */
+.opalarchive-notices {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483646;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(340px, calc(100vw - 32px));
+  margin: 0;
+  padding: 0;
+}
+
+.opalarchive-notices .opalarchive-notice {
+  display: flex;
+  align-items: flex-start;
+  color: var(--opal-text);
+  background: var(--opal-surface);
+  border: 1px solid var(--opal-border);
+  border-left: 4px solid var(--opal-danger);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
+}
+
+.opalarchive-notices .opalarchive-problems {
+  border-left-color: var(--opal-warning);
+}
+
+.opalarchive-notices button {
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.opalarchive-notices .opalarchive-notice-open {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 8px 4px 8px 8px;
+  text-align: left;
+}
+
+.opalarchive-notices svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--opal-danger);
+}
+
+.opalarchive-notices .opalarchive-problems svg {
+  color: var(--opal-warning);
+}
+
+.opalarchive-notices .opalarchive-notice-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.opalarchive-notices strong {
+  font-weight: 600;
+}
+
+.opalarchive-notices .opalarchive-notice-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--opal-muted);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.opalarchive-notices .opalarchive-notice-dismiss {
+  flex: none;
+  padding: 4px 8px;
+  font-size: 16px;
+  line-height: 1.2;
+  color: var(--opal-muted);
+}
+
+.opalarchive-notices .opalarchive-notice-dismiss:hover {
+  color: var(--opal-text);
+}
+
+/* A notice opened: a box in the middle of the page, over a veil. */
+.opalarchive-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.45);
+}
+
+.opalarchive-dialog .opalarchive-dialog-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(520px, 100%);
+  max-height: 80vh;
+  padding: 16px 18px;
+  overflow-y: auto;
+  color: var(--opal-text);
+  text-align: left;
+  background: var(--opal-surface);
+  border: 1px solid var(--opal-border);
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgb(0 0 0 / 0.35);
+}
+
+.opalarchive-dialog h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.opalarchive-dialog .opalarchive-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 10px;
+  margin: 0;
+}
+
+.opalarchive-dialog dt {
+  color: var(--opal-muted);
+}
+
+.opalarchive-dialog dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.opalarchive-dialog a {
+  color: var(--opal-accent);
+}
+
+.opalarchive-dialog p {
+  margin: 4px 0 0;
+}
+
+.opalarchive-dialog .opalarchive-hint {
+  font-size: 12px;
+  color: var(--opal-muted);
+}
+
+.opalarchive-dialog .opalarchive-messages {
+  margin: 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+
+.opalarchive-dialog .opalarchive-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.opalarchive-dialog .opalarchive-actions button {
+  padding: 4px 12px;
+  color: inherit;
+  background: var(--opal-surface);
+  border: 1px solid var(--opal-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.opalarchive-dialog .opalarchive-actions button.opalarchive-primary {
+  color: var(--opal-on-accent);
+  background: var(--opal-accent);
+  border-color: transparent;
+}
+
 @media (prefers-color-scheme: dark) {
   .opalarchive-button {
     color: #a6a7ab;
   }
 
-  .opalarchive-popup {
+  .opalarchive-popup,
+  .opalarchive-notices,
+  .opalarchive-dialog {
+    --opal-warning: #f5c542;
     --opal-text: #e8e8ec;
     --opal-muted: #9a9aa6;
     --opal-surface: #1c1c20;
