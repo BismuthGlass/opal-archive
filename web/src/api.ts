@@ -78,6 +78,8 @@ export type InboxRequest = {
   existing: number;
   date_queued: string;
   date_finished: string | null;
+  /** Tags it brought for what it downloads: tag field to values. */
+  tags: Record<string, string[]>;
 };
 
 /** The inbox: what was asked for from outside the interface. */

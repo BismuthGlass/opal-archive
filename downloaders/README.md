@@ -166,8 +166,12 @@ else that can make a request.
 
 ```
 POST /api/inbox
-{ "url": "https://www.reddit.com/r/…/comments/…" }
+{ "url": "https://www.reddit.com/r/…/comments/…", "tags": ["cat", "@cr:someone"] }
 ```
+
+`tags` is optional: tags for what this one request downloads, written as
+they are typed in the interface, given besides the ones the downloader is
+set to give.
 
 The server finds the downloader from the address, by the `sites` of each
 manifest (or takes the one named in `"downloader"`), and puts the request

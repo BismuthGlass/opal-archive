@@ -1,11 +1,37 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 import * as api from "../api";
 import type { InboxRequest } from "../api";
-import { errorMessage, plural } from "../format";
+import { errorMessage, fieldLabel, plural } from "../format";
+import { pillStyle } from "../tagTypes";
 import { inbox, loadInbox } from "../inbox";
 import { BaseTags, Login, Progress } from "./DownloadPanel";
 import Icon from "./Icon";
 import { createStoredFlag } from "./Panel";
+
+/** The tags a request brought with it, as pills. */
+function RequestTags(props: { request: InboxRequest }) {
+  const entries = () =>
+    Object.entries(props.request.tags).flatMap(([field, values]) =>
+      values.map((value) => ({ field, value })),
+    );
+  return (
+    <Show when={entries().length > 0}>
+      <span class="chips inbox-tags" title="Tags sent with it">
+        <For each={entries()}>
+          {(entry) => (
+            <span
+              class="chip tinted"
+              style={pillStyle(entry.field)}
+              title={`${fieldLabel(entry.field)}: ${entry.value}`}
+            >
+              <span class="chip-label">{entry.value}</span>
+            </span>
+          )}
+        </For>
+      </span>
+    </Show>
+  );
+}
 
 const WAITING: Record<InboxRequest["status"], string> = {
   queued: "Waiting",
@@ -114,6 +140,7 @@ export default function InboxPanel() {
                     <a class="inbox-url" href={request.url} target="_blank" rel="noreferrer">
                       {request.url}
                     </a>
+                    <RequestTags request={request} />
                     <Show when={request.status === "failed" || request.status === "cancelled"}>
                       <button class="link" onClick={() => attempt(() => api.retryRequest(request.id))}>
                         Retry
@@ -154,6 +181,7 @@ export default function InboxPanel() {
                       <a class="inbox-url" href={request.url} target="_blank" rel="noreferrer">
                         {request.url}
                       </a>
+                      <RequestTags request={request} />
                       <span class="hint">
                         {request.existing > 0
                           ? `${plural(request.added, "new file")}, ${request.existing} already in the library`

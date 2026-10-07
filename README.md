@@ -125,7 +125,7 @@ is on, for a query of several lines).
 | `GET /tabs/{id}/view`, `PUT …`   | The snapshot a tab shows: `{query, ids, custom}`, or `null` if none is saved |
 | `GET /downloaders`               | The downloaders, as their manifests describe them, with when each one's login was saved |
 | `POST /downloaders/{name}/cookies`, `DELETE …` | `{browser}` → read the site's login from that browser and keep it; forget it |
-| `GET /inbox`, `POST /inbox`      | The inbox: its tab, queue and each downloader's settings; `{url, downloader?}` → queue the address to be downloaded, by the downloader whose `sites` it is of |
+| `GET /inbox`, `POST /inbox`      | The inbox: its tab, queue and each downloader's settings; `{url, downloader?, tags?}` → queue the address to be downloaded, by the downloader whose `sites` it is of |
 | `GET /inbox/queue/{id}`, `DELETE …` | What became of a request; take it off the queue, or stop it if it is running |
 | `POST /inbox/queue/{id}/retry`   | Queue again a request that failed or was stopped |
 | `POST /inbox/clear`              | Empty what the inbox lists and its finished requests; nothing leaves the library |

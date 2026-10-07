@@ -51,8 +51,121 @@
   }
 }
 
+/* The box that asks for tags. Everything is set here: nothing is to be
+   taken from the page's own styles. */
+.opalarchive-popup,
+.opalarchive-popup * {
+  all: revert;
+  box-sizing: border-box;
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.opalarchive-popup {
+  position: absolute;
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 280px;
+  margin: 0;
+  padding: 10px 12px;
+  color: #1b1b1f;
+  text-align: left;
+  background: #ffffff;
+  border: 1px solid #d8d8de;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.22);
+}
+
+.opalarchive-popup label {
+  font-weight: 600;
+}
+
+.opalarchive-popup input {
+  width: 100%;
+  padding: 5px 8px;
+  color: inherit;
+  background: #f4f4f6;
+  border: 1px solid #d8d8de;
+  border-radius: 6px;
+  outline: none;
+}
+
+.opalarchive-popup input:focus {
+  border-color: #3b5bdb;
+}
+
+.opalarchive-popup p {
+  margin: 0;
+}
+
+.opalarchive-popup .opalarchive-hint {
+  font-size: 12px;
+  color: #6b6b76;
+}
+
+.opalarchive-popup .opalarchive-error {
+  color: #c92a2a;
+}
+
+.opalarchive-popup [hidden] {
+  display: none;
+}
+
+.opalarchive-popup .opalarchive-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.opalarchive-popup button {
+  padding: 4px 12px;
+  color: inherit;
+  background: #ffffff;
+  border: 1px solid #d8d8de;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.opalarchive-popup button[type="submit"] {
+  color: #ffffff;
+  background: #3b5bdb;
+  border-color: transparent;
+}
+
+.opalarchive-popup button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 @media (prefers-color-scheme: dark) {
   .opalarchive-button {
     color: #a6a7ab;
+  }
+
+  .opalarchive-popup {
+    color: #e8e8ec;
+    background: #1c1c20;
+    border-color: #2f2f36;
+  }
+
+  .opalarchive-popup input,
+  .opalarchive-popup button {
+    background: #131315;
+    border-color: #2f2f36;
+  }
+
+  .opalarchive-popup .opalarchive-hint {
+    color: #9a9aa6;
+  }
+
+  .opalarchive-popup .opalarchive-error {
+    color: #ffa8a8;
+  }
+
+  .opalarchive-popup button[type="submit"] {
+    color: #10101a;
+    background: #8098f9;
   }
 }

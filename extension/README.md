@@ -4,9 +4,12 @@ It sends posts to OpalArchive to be downloaded, without leaving the page
 they are on. OpalArchive does the downloading: the extension only passes on
 an address, which goes into the inbox's queue (see `downloaders/README.md`).
 
-- On Reddit, a small button at the end of each post's title. It turns into
-  a spinner while the post waits and downloads, then a tick, or a cross
-  that says why when pointed at. Pressing it again sends the post again.
+- On Reddit, a small button at the end of each post's title. Pressing it
+  asks for tags to give what is downloaded, written as in OpalArchive
+  (`cat, @cr:someone`), and then Download sends the post; Shift-click sends
+  it at once, with none. The button turns into a spinner while the post
+  waits and downloads, then a tick, or a cross that says why when pointed
+  at. Pressing it again sends the post again.
 - Everywhere, "Send to OpalArchive" in the right-click menu, for a link or
   the page itself, and the extension's own button for the page on show.
   These work for any site OpalArchive has a downloader for.

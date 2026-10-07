@@ -40,7 +40,7 @@ use crate::{
     entities::{self, SOURCE_URLS},
     error::ApiError,
     files,
-    query::COLLECTION_TYPES,
+    query::{COLLECTION_TYPES, tag_type},
     tags,
 };
 

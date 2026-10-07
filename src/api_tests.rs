@@ -1261,10 +1261,21 @@ async fn the_inbox_downloads_what_it_is_sent() {
     api.ok("PATCH", "/inbox/settings/fake", Some(json!({ "tags": { "tags": ["sent"] } })))
         .await;
 
-    // It is found by the site, a subdomain of it included, and queued.
-    let (status, first) = send("https://www.example.test/board").await;
+    // It is found by the site, a subdomain of it included, and queued. It
+    // can bring tags of its own, typed as in the interface.
+    let with_tags = json!({
+        "url": "https://www.example.test/board",
+        "tags": ["once", " @cr:A Sender ", "@genre: quick", ""],
+    });
+    let (status, first) = api.call("POST", "/inbox", Some(with_tags)).await;
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(first["downloader"], "fake");
+    assert_eq!(
+        first["tags"],
+        json!({ "tags": ["once"], "creator": ["A Sender"], "genre": ["quick"] })
+    );
+    let bad = json!({ "url": "https://example.test/board", "tags": ["@nothing:x"] });
+    assert_eq!(api.call("POST", "/inbox", Some(bad)).await.0, StatusCode::BAD_REQUEST);
     let (_, second) = send("https://example.test/board").await;
 
     // One at a time, in the order asked: two things, of three files.
@@ -1288,6 +1299,8 @@ async fn the_inbox_downloads_what_it_is_sent() {
     assert_eq!(api.in_tab(tab, "file").await.len(), 3);
     assert_eq!(api.in_tab(tab, "collection").await.len(), 2);
     assert_eq!(api.found("sent kind=file").await.len(), 3);
+    // The request's own tags are given too, beside the downloader's.
+    assert_eq!(api.found("sent once \"@cr:A Sender\" @ge:quick kind=file").await.len(), 3);
     let tabs = api.get("/tabs").await;
     assert_eq!(tabs[0]["kind"], "inbox");
     assert_eq!(tabs[0]["downloader"], Value::Null);

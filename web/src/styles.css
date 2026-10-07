@@ -2677,6 +2677,10 @@ kbd {
   white-space: nowrap;
 }
 
+.inbox-tags {
+  flex: none;
+}
+
 .inbox-remove {
   flex: none;
   padding: 0;

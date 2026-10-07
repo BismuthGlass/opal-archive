@@ -14,7 +14,7 @@ const OPAL_ICONS = {
 };
 
 const OPAL_TITLES = {
-  idle: "Send to OpalArchive",
+  idle: "Send to OpalArchive (Shift-click to skip the tags)",
   sending: "Sending to OpalArchive…",
   queued: "Waiting in OpalArchive's queue",
   running: "OpalArchive is downloading it",
@@ -29,8 +29,103 @@ function opalAsk(message) {
   }));
 }
 
+/** The box asking for tags, while one is open: there is one at a time. */
+let opalAsking = null;
+
 /**
- * A button that sends `url()` to OpalArchive when pressed. The address is
+ * Opens a small box under `anchor` asking for tags to give the download.
+ * `submit` is handed them when Download is pressed, and answers with what
+ * went wrong, if anything: the box stays open to say so. It closes once
+ * the download is on its way, or when put away.
+ */
+function opalAskTags(anchor, submit) {
+  opalAsking?.();
+  const box = document.createElement("form");
+  box.className = "opalarchive-popup";
+  box.innerHTML = `
+    <label for="opalarchive-tags">Tags to add</label>
+    <input id="opalarchive-tags" type="text" autocomplete="off" spellcheck="false"
+           placeholder="cat, @cr:someone" />
+    <p class="opalarchive-hint">Separated by commas. Leave it empty for none.</p>
+    <p class="opalarchive-error" role="alert" hidden></p>
+    <div class="opalarchive-actions">
+      <button type="button" data-do="cancel">Cancel</button>
+      <button type="submit">Download</button>
+    </div>`;
+  const input = box.querySelector("input");
+  const error = box.querySelector(".opalarchive-error");
+
+  const close = () => {
+    opalAsking = null;
+    document.removeEventListener("pointerdown", outside, true);
+    box.remove();
+  };
+  // A press anywhere else puts it away.
+  const outside = (event) => {
+    if (!box.contains(event.target)) close();
+  };
+  opalAsking = close;
+
+  box.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const tags = input.value
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+    box.querySelector('[type="submit"]').disabled = true;
+    const wrong = await submit(tags);
+    if (!box.isConnected) return;
+    if (wrong) {
+      error.textContent = wrong;
+      error.hidden = false;
+      box.querySelector('[type="submit"]').disabled = false;
+      input.focus();
+      return;
+    }
+    // Offered again the next time: posts are often tagged in runs.
+    chrome.storage.local.set({ lastTags: tags.join(", ") }).catch(() => {});
+    close();
+  });
+  // What it said was wrong is being put right.
+  input.addEventListener("input", () => (error.hidden = true));
+  box.querySelector('[data-do="cancel"]').addEventListener("click", close);
+  // What is typed here is not for the page's own shortcuts.
+  for (const type of ["keydown", "keyup", "keypress"]) {
+    box.addEventListener(type, (event) => {
+      event.stopPropagation();
+      if (type === "keydown" && event.key === "Escape") close();
+    });
+  }
+  for (const type of ["click", "mousedown", "mouseup", "pointerup"]) {
+    box.addEventListener(type, (event) => event.stopPropagation());
+  }
+
+  // Under the button, kept inside the window; it moves with the page.
+  document.body.append(box);
+  const at = anchor.getBoundingClientRect();
+  const size = box.getBoundingClientRect();
+  const left = Math.max(8, Math.min(at.left, window.innerWidth - size.width - 8));
+  const below = at.bottom + 6 + size.height <= window.innerHeight;
+  const top = below ? at.bottom + 6 : Math.max(8, at.top - size.height - 6);
+  box.style.left = `${left + window.scrollX}px`;
+  box.style.top = `${top + window.scrollY}px`;
+  document.addEventListener("pointerdown", outside, true);
+
+  // The tags used last are there to be used again, or typed over.
+  chrome.storage.local
+    .get({ lastTags: "" })
+    .catch(() => ({ lastTags: "" }))
+    .then(({ lastTags }) => {
+      if (!box.isConnected || input.value) return;
+      input.value = lastTags;
+      input.select();
+    });
+  input.focus();
+}
+
+/**
+ * A button that sends `url()` to OpalArchive when pressed, after asking for
+ * tags to add; with Shift held it sends at once, with none. The address is
  * asked for at the press, in case the post's has changed since.
  */
 function opalButton(url) {
@@ -65,20 +160,34 @@ function opalButton(url) {
     show("idle");
   };
 
+  /** Sends the post with these tags. Answers with what went wrong, if anything. */
+  const send = async (tags) => {
+    const before = button.dataset.state;
+    busy = true;
+    show("sending");
+    const request = await opalAsk({ type: "send", url: url(), tags });
+    if (request.error) {
+      busy = false;
+      // The box that asked says why; the button is as it was.
+      show(before === "done" || before === "failed" ? "idle" : before);
+      return request.error;
+    }
+    show(request.status);
+    follow(request.id).finally(() => (busy = false));
+    return null;
+  };
+
   button.addEventListener("click", async (event) => {
     // The button may sit inside the post's own link.
     event.preventDefault();
     event.stopPropagation();
     if (busy) return;
-    busy = true;
-    show("sending");
-    const request = await opalAsk({ type: "send", url: url() });
-    if (request.error) fail(request.error);
-    else {
-      show(request.status);
-      await follow(request.id);
+    if (event.shiftKey) {
+      const wrong = await send([]);
+      if (wrong) fail(wrong);
+    } else {
+      opalAskTags(button, send);
     }
-    busy = false;
   });
   // Nothing under the button is to take the press for its own.
   for (const type of ["mousedown", "mouseup", "pointerdown", "pointerup"]) {

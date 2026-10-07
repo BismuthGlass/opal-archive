@@ -23,6 +23,34 @@ struct Request {
     url: String,
     /// The downloader to use, by name; found from the address if left out.
     downloader: Option<String>,
+    /// Tags for what this one request downloads, written as they are typed
+    /// in the interface: `cat`, or with its type `@cr:someone`.
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+/// Tags as they are typed, by field: a plain one is of type `tags`, and one
+/// that begins with an @ names its type, by its short name or its full one.
+fn typed(tags: &[String]) -> Result<BaseTags, ApiError> {
+    let mut by_field = BaseTags::new();
+    for tag in tags.iter().map(|tag| tag.trim()).filter(|tag| !tag.is_empty()) {
+        let (field, value) = match tag.strip_prefix('@') {
+            Some(rest) => {
+                let (name, value) = rest.split_once(':').unwrap_or((rest, ""));
+                let name = name.trim();
+                let field = tag_type(name)
+                    .ok_or_else(|| ApiError::BadRequest(format!("`@{name}` is not a tag type")))?;
+                (field, value)
+            }
+            None => ("tags", tag),
+        };
+        let value = tags::normalize(field, value)?;
+        let values = by_field.entry(field.to_string()).or_default();
+        if !values.contains(&value) {
+            values.push(value);
+        }
+    }
+    Ok(by_field)
 }
 
 pub fn router() -> Router<AppState> {
@@ -108,7 +136,7 @@ fn settings(conn: &Connection, manifest: &Manifest) -> rusqlite::Result<(Options
 }
 
 const SELECT: &str = "SELECT id, url, downloader, status, message, added, existing,
-                             date_queued, date_finished FROM inbox_queue";
+                             date_queued, date_finished, tags FROM inbox_queue";
 
 fn request_from_row(row: &rusqlite::Row) -> rusqlite::Result<Value> {
     Ok(json!({
@@ -121,6 +149,8 @@ fn request_from_row(row: &rusqlite::Row) -> rusqlite::Result<Value> {
         "existing": row.get::<_, i64>(6)?,
         "date_queued": row.get::<_, String>(7)?,
         "date_finished": row.get::<_, Option<String>>(8)?,
+        // The table only accepts valid JSON.
+        "tags": serde_json::from_str::<Value>(&row.get::<_, String>(9)?).unwrap_or_default(),
     }))
 }
 
@@ -143,13 +173,14 @@ async fn enqueue(
         Some(name) => manifest(&state, name)?,
         None => for_url(&state, &url)?,
     };
+    let tags = typed(&input.tags)?;
     let queued = {
         let conn = state.db.lock().unwrap();
         // There from the first request on, to list what comes of it.
         tab(&conn)?;
         conn.execute(
-            "INSERT INTO inbox_queue (url, downloader) VALUES (?1, ?2)",
-            params![url, manifest.name],
+            "INSERT INTO inbox_queue (url, downloader, tags) VALUES (?1, ?2, ?3)",
+            params![url, manifest.name, json!(tags).to_string()],
         )?;
         request(&conn, conn.last_insert_rowid())?
     };
@@ -319,9 +350,9 @@ fn work(state: &AppState) {
                     .query_row(
                         "UPDATE inbox_queue SET status = 'running'
                          WHERE id = (SELECT min(id) FROM inbox_queue WHERE status = 'queued')
-                         RETURNING id, url, downloader",
+                         RETURNING id, url, downloader, tags",
                         [],
-                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
                     )
                     .optional()
                     .unwrap_or(None);
@@ -332,10 +363,12 @@ fn work(state: &AppState) {
                 }
                 next
             };
-            let Some((id, url, downloader)): Option<(i64, String, String)> = next else {
+            let Some((id, url, downloader, tags)): Option<(i64, String, String, String)> = next
+            else {
                 return;
             };
-            let (status, message, added, existing) = run(&state, &url, &downloader).await;
+            let own: BaseTags = serde_json::from_str(&tags).unwrap_or_default();
+            let (status, message, added, existing) = run(&state, &url, &downloader, own).await;
             let _ = state.db.lock().unwrap().execute(
                 "UPDATE inbox_queue
                  SET status = ?2, message = ?3, added = ?4, existing = ?5,
@@ -349,7 +382,13 @@ fn work(state: &AppState) {
 
 /// Runs one request to its end. Returns how it ended, as the queue has it:
 /// the status, what there is to say, and the files that were new and old.
-async fn run(state: &AppState, url: &str, downloader: &str) -> (&'static str, String, i64, i64) {
+async fn run(
+    state: &AppState,
+    url: &str,
+    downloader: &str,
+    // The tags the request brought, given besides the downloader's.
+    own: BaseTags,
+) -> (&'static str, String, i64, i64) {
     let failed = |message: String| ("failed", message, 0, 0);
     let manifest = match manifest(state, downloader) {
         Ok(manifest) => manifest,
@@ -359,10 +398,18 @@ async fn run(state: &AppState, url: &str, downloader: &str) -> (&'static str, St
         let conn = state.db.lock().unwrap();
         tab(&conn).and_then(|tab| Ok((tab, settings(&conn, &manifest)?)))
     };
-    let (tab, (options, base)) = match ready {
+    let (tab, (options, mut base)) = match ready {
         Ok(ready) => ready,
         Err(err) => return failed(err.to_string()),
     };
+    for (field, values) in own {
+        let had = base.entry(field).or_default();
+        for value in values {
+            if !had.contains(&value) {
+                had.push(value);
+            }
+        }
+    }
     let out = fresh_out(state);
     let cookies = Some(cookie_file(state, &manifest)).filter(|file| file.exists());
     // Nothing is passed over as seen before: what is asked for one thing at

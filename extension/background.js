@@ -27,15 +27,18 @@ async function ask(method, path, body) {
   return answer ?? {};
 }
 
-/** Puts an address in OpalArchive's queue. Answers with the request made. */
-const send = (url) => ask("POST", "/inbox", { url });
+/**
+ * Puts an address in OpalArchive's queue, with any tags to give what it
+ * downloads. Answers with the request made.
+ */
+const send = (url, tags = []) => ask("POST", "/inbox", { url, tags });
 /** What has become of a request. */
 const status = (id) => ask("GET", `/inbox/queue/${id}`);
 
 chrome.runtime.onMessage.addListener((message, _sender, respond) => {
   const answer =
     message?.type === "send"
-      ? send(message.url)
+      ? send(message.url, message.tags)
       : message?.type === "status"
         ? status(message.id)
         : message?.type === "ping"
