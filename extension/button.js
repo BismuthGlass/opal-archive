@@ -7,6 +7,10 @@ const OPAL_POLL = 1500;
 /** Asked this many times at most: after that the button stops waiting. */
 const OPAL_POLLS = 400;
 
+/** The mark of a button that sends many things at once: a thread, a board. */
+const OPAL_MANY =
+  "M9.2 13.7h8.6l-2.7-3.7-2.5 3.1-1.6-1.9zM8.1 17q-.7 0-1.1-.5t-.5-1.1V4.6q0-.7.5-1.1T8.1 3h10.8q.7 0 1.1.5t.5 1.1v10.8q0 .7-.5 1.1t-1.1.5zm0-1h10.8q.2 0 .4-.2t.2-.4V4.6q0-.2-.2-.4t-.4-.2H8.1q-.2 0-.4.2t-.2.4v10.8q0 .2.2.4t.4.2m-3 4q-.7 0-1.1-.5t-.5-1.1V6.6h1v11.8q0 .2.2.4t.4.2h11.8v1z";
+
 const OPAL_ICONS = {
   idle: "M12 15.6 8.5 12l.7-.7 2.3 2.3V5h1v8.6l2.3-2.3.7.7zM6.6 19q-.7 0-1.1-.5T5 17.4V15h1v2.4q0 .2.2.4t.4.2h10.8q.2 0 .4-.2t.2-.4V15h1v2.4q0 .7-.5 1.1t-1.1.5z",
   done: "m9.5 17.3-4.6-4.6.7-.7 3.9 3.9 8.9-8.9.7.7z",
@@ -507,19 +511,25 @@ function opalReadNotice(notice, dismiss) {
  * A button that sends `url()` to OpalArchive when pressed, after asking for
  * tags to add; with Shift held it sends at once, with none. The address is
  * asked for at the press, in case the post's has changed since.
+ *
+ * `many` names what it sends when that is more than one thing, "thread"
+ * say: the button then looks the part, and says so when pointed at.
  */
-function opalButton(url) {
+function opalButton(url, many) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "opalarchive-button";
   let busy = false;
+  const idle = many
+    ? `Send the whole ${many} to OpalArchive (Shift-click to skip the tags)`
+    : OPAL_TITLES.idle;
 
   const show = (state, title) => {
     button.dataset.state = state;
-    button.title = title ?? OPAL_TITLES[state] ?? "";
+    button.title = title ?? (state === "idle" ? idle : OPAL_TITLES[state]) ?? "";
     button.setAttribute("aria-label", button.title);
     const waiting = state === "sending" || state === "queued" || state === "running";
-    const path = OPAL_ICONS[state] ?? OPAL_ICONS.idle;
+    const path = state === "idle" && many ? OPAL_MANY : (OPAL_ICONS[state] ?? OPAL_ICONS.idle);
     button.innerHTML = waiting
       ? '<span class="opalarchive-spinner"></span>'
       : `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${path}"/></svg>`;
@@ -601,6 +611,19 @@ function opalButton(url) {
   }
   show("idle");
   return button;
+}
+
+/**
+ * Puts a button on the corner of `over`, unless it has one: for where
+ * there is a picture and no line of text to sit in.
+ */
+function opalOverButton(over, url, many) {
+  if (over.querySelector(":scope > .opalarchive-button")) return;
+  // The button is placed against it.
+  if (getComputedStyle(over).position === "static") over.style.position = "relative";
+  const button = opalButton(url, many);
+  button.classList.add("opalarchive-over");
+  over.append(button);
 }
 
 /**

@@ -16,6 +16,10 @@ an address, which goes into the inbox's queue (see `downloaders/README.md`).
 - On Pinterest, the same button on the corner of each pin, in grids and
   on the pin's own page, and on each board of a profile, where it sends
   the whole board.
+- On 4chan, the button at the end of the line that names each post's
+  file, which sends that post, and one by the number of each thread's
+  first post, which sends the whole thread. In a board's catalog each
+  thread has the thread's button on its corner.
 - Everywhere, "Send to OpalArchive" in the right-click menu, for a link or
   the page itself, and the extension's own button for the page on show.
   These work for any site OpalArchive has a downloader for.
