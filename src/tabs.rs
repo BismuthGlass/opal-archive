@@ -117,7 +117,10 @@ fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
 }
 
 fn all(conn: &Connection) -> rusqlite::Result<Vec<Tab>> {
-    let mut stmt = conn.prepare(&format!("{SELECT_TAB} ORDER BY t.position, t.id"))?;
+    // A closed inbox is kept, out of sight.
+    let mut stmt = conn.prepare(&format!(
+        "{SELECT_TAB} WHERE t.hidden = 0 ORDER BY t.position, t.id"
+    ))?;
     stmt.query_map([], tab_from_row)?.collect()
 }
 
@@ -164,7 +167,7 @@ async fn create(
     let conn = state.db.lock().unwrap();
     if input.kind == "inbox" {
         // There is one inbox: asked for again, it is the one there is.
-        let tab = one(&conn, downloads::inbox::tab(&conn)?)?;
+        let tab = one(&conn, downloads::inbox::open(&conn)?)?;
         return Ok((StatusCode::OK, Json(tab)));
     }
     if let Some(collection) = input.collection {
@@ -208,10 +211,10 @@ async fn remove(
 ) -> Result<StatusCode, ApiError> {
     // A download still running for the tab has nowhere to put its files.
     let conn = state.db.lock().unwrap();
-    if downloads::inbox::holds(&conn, id)? {
-        return Err(ApiError::bad_request(
-            "the inbox still lists what was downloaded: clear it before closing it",
-        ));
+    // The inbox is only put out of sight: it keeps what it lists, and its
+    // queue goes on being worked through.
+    if downloads::inbox::close(&conn, id)? {
+        return Ok(StatusCode::NO_CONTENT);
     }
     downloads::cancel(&state, id);
     match conn.execute("DELETE FROM tab WHERE id = ?1", [id])? {

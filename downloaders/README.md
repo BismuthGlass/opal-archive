@@ -187,7 +187,9 @@ not a tab's. And `seen` is always empty: what is asked for one thing at a
 time is wanted, and a file the library already has is only listed again.
 
 What is downloaded is listed under one tab, the inbox, which every
-downloader shares. It lists it until the user clears it.
+downloader shares. It lists it until the user clears it: closing the tab
+only puts it out of sight, and opening the inbox again brings it back as
+it was, with whatever arrived meanwhile.
 
 ## A custom panel
 

@@ -119,7 +119,7 @@ is on, for a query of several lines).
 | `POST /collections/{id}/members` | `{add, remove}` → change membership                            |
 | `PUT /collections/{id}/order`    | `{ids}` → set member positions; members left out follow        |
 | `POST /export`                   | Form field `ids=1,2,3` → zip of those files                    |
-| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, collection, downloader}` → new tab, `kind` being `gallery`, `upload`, `collection`, `download` or `inbox` (of which there is one: asked for again, it is the one there is) |
+| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, collection, downloader}` → new tab, `kind` being `gallery`, `upload`, `collection`, `download` or `inbox` (of which there is one: asked for again, it is the one there is, and closed it keeps what it lists) |
 | `PATCH /tabs/{id}`, `DELETE …`   | `{query, name}`, either or both → change a tab; close a tab     |
 | `PUT /tabs/order`                | `{ids}` → put the tabs in that order                           |
 | `GET /tabs/{id}/view`, `PUT …`   | The snapshot a tab shows: `{query, ids, custom}`, or `null` if none is saved |

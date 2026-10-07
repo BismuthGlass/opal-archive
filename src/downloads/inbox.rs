@@ -84,15 +84,37 @@ pub fn tab(conn: &Connection) -> rusqlite::Result<i64> {
     Ok(conn.last_insert_rowid())
 }
 
-/// Whether a tab is the inbox and still lists something. It is not closed
-/// while it does: what it lists is only ever cleared on purpose.
-pub fn holds(conn: &Connection, tab: i64) -> rusqlite::Result<bool> {
+/// The inbox's tab, if it has one and it is not closed.
+fn on_show(conn: &Connection) -> rusqlite::Result<Option<i64>> {
     conn.query_row(
-        "SELECT EXISTS (SELECT 1 FROM tab t JOIN tab_upload u ON u.tab_id = t.id
-                        WHERE t.id = ?1 AND t.downloader = ?2)",
-        params![tab, ANY],
+        "SELECT id FROM tab WHERE downloader = ?1 AND hidden = 0",
+        [ANY],
         |row| row.get(0),
     )
+    .optional()
+}
+
+/// Opens the inbox: its tab, made if there is none, and brought back, after
+/// the other tabs, if it was closed.
+pub fn open(conn: &Connection) -> rusqlite::Result<i64> {
+    let tab = tab(conn)?;
+    conn.execute(
+        "UPDATE tab SET hidden = 0, position = (SELECT coalesce(max(position), -1) + 1 FROM tab)
+         WHERE id = ?1 AND hidden = 1",
+        [tab],
+    )?;
+    Ok(tab)
+}
+
+/// Closes a tab if it is the inbox, and says whether it was. Closed, it is
+/// put out of sight and keeps what it lists: that is only ever cleared on
+/// purpose.
+pub fn close(conn: &Connection, tab: i64) -> rusqlite::Result<bool> {
+    let closed = conn.execute(
+        "UPDATE tab SET hidden = 1 WHERE id = ?1 AND downloader = ?2",
+        params![tab, ANY],
+    )?;
+    Ok(closed > 0)
 }
 
 /// The host an address names, in lower case.
@@ -176,7 +198,8 @@ async fn enqueue(
     let tags = typed(&input.tags)?;
     let queued = {
         let conn = state.db.lock().unwrap();
-        // There from the first request on, to list what comes of it.
+        // There from the first request on, to list what comes of it. If it
+        // was closed it stays closed, and lists it all the same.
         tab(&conn)?;
         conn.execute(
             "INSERT INTO inbox_queue (url, downloader, tags) VALUES (?1, ?2, ?3)",
@@ -204,9 +227,9 @@ async fn sites(State(state): State<AppState>) -> Json<Value> {
     Json(json!(found))
 }
 
-/// Everything the inbox's panel shows: its tab, if it has one yet, the
-/// queue, how the request being run is going, and every downloader as it
-/// is set here.
+/// Everything the inbox's panel shows: its tab, if it has one and it is
+/// open, the queue, how the request being run is going, and every
+/// downloader as it is set here.
 async fn state_of(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let found = manifests(&state);
     let conn = state.db.lock().unwrap();
@@ -234,6 +257,8 @@ async fn state_of(State(state): State<AppState>) -> Result<Json<Value>, ApiError
         [tab],
         |row| row.get(0),
     )?;
+    // Closed, it is no tab to the interface, whatever it lists.
+    let tab = on_show(&conn)?;
     let mut downloaders = Vec::new();
     for manifest in &found {
         let (options, tags) = settings(&conn, manifest)?;

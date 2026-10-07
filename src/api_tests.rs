@@ -1308,14 +1308,24 @@ async fn the_inbox_downloads_what_it_is_sent() {
     let again = api.post("/tabs", json!({ "kind": "inbox" })).await;
     assert_eq!(again["id"], tab);
 
-    // It is not closed while it lists anything: it is cleared first, which
-    // takes nothing out of the library.
-    let (status, _) = api.call("DELETE", &format!("/tabs/{tab}"), None).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    // Closed, it is out of sight and keeps what it lists, and what is sent
+    // meanwhile is listed too.
+    api.ok("DELETE", &format!("/tabs/{tab}"), None).await;
+    assert_eq!(api.get("/tabs").await, json!([]));
+    let inbox = api.get("/inbox").await;
+    assert_eq!((&inbox["tab"], &inbox["listed"]), (&Value::Null, &json!(5)));
+    let (_, third) = send("https://example.test/board").await;
+    assert_eq!(ended(&api, &third["id"]).await["status"], "done");
+    assert_eq!(api.get("/tabs").await, json!([]));
+    // Opened again, it is the same tab, as it was.
+    let again = api.post("/tabs", json!({ "kind": "inbox" })).await;
+    assert_eq!(again["id"], tab);
+    assert_eq!(api.get("/tabs").await[0]["id"], tab);
+    assert_eq!(api.in_tab(tab, "file").await.len(), 3);
+
+    // Only clearing empties it, and that takes nothing out of the library.
     api.post("/inbox/clear", json!({})).await;
     let inbox = api.get("/inbox").await;
     assert_eq!((&inbox["listed"], &inbox["queue"]), (&json!(0), &json!([])));
     assert_eq!(api.found("kind=file").await.len(), 3);
-    let (status, _) = api.call("DELETE", &format!("/tabs/{tab}"), None).await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
 }
