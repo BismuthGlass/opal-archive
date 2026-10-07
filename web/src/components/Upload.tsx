@@ -2,7 +2,7 @@ import { createResource, createSignal, For, onCleanup, onMount, Show } from "sol
 import * as api from "../api";
 import { errorMessage } from "../format";
 import { activeTab } from "../tabs";
-import { dismiss, upload, uploads } from "../uploads";
+import { upload, uploads } from "../uploads";
 import { BaseTags } from "./DownloadPanel";
 import Icon from "./Icon";
 import Modal from "./Modal";
@@ -80,6 +80,9 @@ export function UploadBox() {
         Files can also be dropped anywhere on the window. A zip is unpacked: its files are added,
         and its folders become collections.
       </p>
+      <Show when={uploads.total > 0 && uploads.tabs.includes(tab() ?? -1)}>
+        <UploadStatus />
+      </Show>
       {/* A label beside each setting, as in a downloader's panel. */}
       <div class="download-settings">
         <BaseTags data={{ tags: tags.latest ?? {} }} error={tagError()} onChange={setTags} />
@@ -143,58 +146,48 @@ export function DropTarget() {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-export function UploadPanel() {
+/**
+ * How the uploads into a tab are going, or how the last ones went, in the
+ * panel at its top. What failed is counted on a button that opens the list
+ * of it; nothing has to be put away.
+ */
+function UploadStatus() {
   const overall = () => (uploads.done + uploads.progress) / uploads.total;
   /** Whether the list of what failed is open. */
   const [showFailed, setShowFailed] = createSignal(false);
 
   return (
-    <Show when={uploads.total > 0}>
-      <section class="upload-panel" aria-live="polite">
-        <Show
-          when={uploads.active}
-          fallback={
-            <header>
-              <strong>Upload finished</strong>
-              <button class="link" onClick={dismiss}>
-                Dismiss
-              </button>
-            </header>
-          }
-        >
-          <header>
-            <strong>
-              <Show
-                when={uploads.unpacking}
-                fallback={`Uploading ${Math.min(uploads.done + 1, uploads.total)} of ${uploads.total}`}
-              >
-                Unpacking {uploads.unpacking}
-              </Show>
-            </strong>
-          </header>
-          {/* With no value the bar shows that work is going on, how much
-              of it being unknown. */}
-          <Show when={uploads.unpacking} fallback={<progress value={overall()} />}>
-            <progress />
+    <div class="download-progress" aria-live="polite">
+      <Show when={uploads.active}>
+        {/* With no value the bar shows that work is going on, how much of
+            it being unknown. */}
+        <Show when={uploads.unpacking} fallback={<progress value={overall()} />}>
+          <progress />
+        </Show>
+      </Show>
+      <p>
+        <Show when={uploads.active} fallback={<strong>Done: </strong>}>
+          <Show
+            when={uploads.unpacking}
+            fallback={`Uploading ${Math.min(uploads.done + 1, uploads.total)} of ${uploads.total}: `}
+          >
+            Unpacking {uploads.unpacking}:{" "}
           </Show>
         </Show>
-        <p>
-          {uploads.added} added
-          <Show when={uploads.collections > 0}>
-            , in {plural(uploads.collections, "collection")}
-          </Show>
-          <Show when={uploads.duplicates > 0}>, {uploads.duplicates} already in the library</Show>
-        </p>
+        {uploads.added} added
+        <Show when={uploads.collections > 0}>, in {plural(uploads.collections, "collection")}</Show>
+        <Show when={uploads.duplicates > 0}>, {uploads.duplicates} already in the library</Show>
         <Show when={uploads.failures.length > 0}>
+          {", "}
           <button
             class="link upload-failed"
             title="Show what was not taken in, and why"
             onClick={() => setShowFailed(true)}
           >
-            {uploads.failures.length} failed: show {uploads.failures.length === 1 ? "it" : "them"}
+            {uploads.failures.length} failed
           </button>
         </Show>
-      </section>
+      </p>
       <Show when={showFailed()}>
         <Modal
           title={`${plural(uploads.failures.length, "upload")} failed`}
@@ -217,6 +210,6 @@ export function UploadPanel() {
           </ul>
         </Modal>
       </Show>
-    </Show>
+    </div>
   );
 }

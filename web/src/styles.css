@@ -2454,38 +2454,9 @@ kbd {
   pointer-events: none;
 }
 
-.upload-panel {
-  position: fixed;
-  right: 12px;
-  bottom: 36px;
-  z-index: 5;
-  width: min(340px, calc(100vw - 24px));
-  padding: 10px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
-}
-
-.upload-panel header {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.upload-panel progress {
-  width: 100%;
-  margin-top: 6px;
-  accent-color: var(--accent);
-}
-
-.upload-panel p {
-  margin: 6px 0 0;
-  color: var(--muted);
-}
-
+/* The count of what failed, in the line that says how the uploads went:
+   pressed, it opens the list. */
 .upload-failed {
-  margin-top: 6px;
   color: var(--danger-text);
 }
 

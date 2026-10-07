@@ -16,7 +16,7 @@ import TabBar from "./components/TabBar";
 import { TagsModal } from "./components/Tags";
 import TagEditor from "./components/TagEditor";
 import Toolbar from "./components/Toolbar";
-import { DropTarget, UploadBox, UploadPanel } from "./components/Upload";
+import { DropTarget, UploadBox } from "./components/Upload";
 import Viewer from "./components/Viewer";
 import * as api from "./api";
 import { errorMessage, plural } from "./format";
@@ -424,7 +424,6 @@ export default function App() {
           )}
         </Show>
       </footer>
-      <UploadPanel />
       <DropTarget />
       <Show when={viewing() !== null}>
         <Viewer

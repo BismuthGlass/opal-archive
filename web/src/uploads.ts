@@ -19,6 +19,8 @@ const idle = {
   progress: 0,
   /** The archive the server is unpacking, once it has all of it. */
   unpacking: null as string | null,
+  /** The upload tabs it went into: it is spoken of in those. */
+  tabs: [] as number[],
 };
 
 const [uploads, setUploads] = createStore({ ...idle });
@@ -50,7 +52,9 @@ export async function upload(files: Source[]) {
 
 /** Adds files to the batch in progress, or starts a new one. */
 function enqueue(files: Source[], tab: number) {
-  if (!uploads.active) setUploads({ ...idle, failures: [] });
+  // A new batch starts afresh: what the last one came to is forgotten.
+  if (!uploads.active) setUploads({ ...idle, failures: [], tabs: [] });
+  if (!uploads.tabs.includes(tab)) setUploads("tabs", (tabs) => [...tabs, tab]);
   queue.push(...files.map((file) => ({ file, tab })));
   setUploads("total", (n) => n + files.length);
   if (!uploads.active) run();
@@ -104,8 +108,4 @@ async function run() {
   }
   setUploads({ active: false, progress: 0 });
   waiting.forEach(addedTo);
-}
-
-export function dismiss() {
-  if (!uploads.active) setUploads({ ...idle, failures: [] });
 }
