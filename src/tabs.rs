@@ -102,14 +102,17 @@ fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
         }),
         None => None,
     };
+    // The inbox is kept as a download tab of no one downloader.
+    let downloader: Option<String> = row.get(8)?;
+    let inbox = downloader.as_deref() == Some(downloads::inbox::ANY);
     Ok(Tab {
         id: row.get(0)?,
         position: row.get(1)?,
-        kind: row.get(2)?,
+        kind: if inbox { "inbox".to_string() } else { row.get(2)? },
         query: row.get(3)?,
         name: row.get(4)?,
         collection,
-        downloader: row.get(8)?,
+        downloader: downloader.filter(|_| !inbox),
     })
 }
 
@@ -159,6 +162,11 @@ async fn create(
     Json(input): Json<NewTab>,
 ) -> Result<(StatusCode, Json<Tab>), ApiError> {
     let conn = state.db.lock().unwrap();
+    if input.kind == "inbox" {
+        // There is one inbox: asked for again, it is the one there is.
+        let tab = one(&conn, downloads::inbox::tab(&conn)?)?;
+        return Ok((StatusCode::OK, Json(tab)));
+    }
     if let Some(collection) = input.collection {
         let exists: bool = conn.query_row(
             "SELECT EXISTS (SELECT 1 FROM collection WHERE entity_id = ?1)",
@@ -199,8 +207,13 @@ async fn remove(
     Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
     // A download still running for the tab has nowhere to put its files.
-    downloads::cancel(&state, id);
     let conn = state.db.lock().unwrap();
+    if downloads::inbox::holds(&conn, id)? {
+        return Err(ApiError::bad_request(
+            "the inbox still lists what was downloaded: clear it before closing it",
+        ));
+    }
+    downloads::cancel(&state, id);
     match conn.execute("DELETE FROM tab WHERE id = ?1", [id])? {
         0 => Err(ApiError::NotFound),
         _ => Ok(StatusCode::NO_CONTENT),

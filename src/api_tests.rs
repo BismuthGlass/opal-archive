@@ -50,6 +50,7 @@ impl Api {
             downloaders: dir.join("downloaders"),
             cookies: dir.join("cookies"),
             downloads: Default::default(),
+            inbox_busy: Default::default(),
         };
         for path in [&state.storage, &state.thumbnails, &state.tmp] {
             std::fs::create_dir_all(path).unwrap();
@@ -859,6 +860,7 @@ impl Api {
             "title": "Fake",
             "source": "fakesite",
             "command": ["sh", "fake.sh"],
+            "sites": ["example.test"],
             "options": [{ "key": "deep", "label": "Go deep", "default": true }],
         });
         std::fs::write(folder.join("manifest.json"), manifest.to_string()).unwrap();
@@ -1232,4 +1234,75 @@ async fn a_file_is_fetched_from_its_address() {
     }
     assert_eq!(api.found("kind=file").await, [id]);
     assert_eq!(std::fs::read_dir(&api.state.tmp).unwrap().count(), 0);
+}
+
+#[tokio::test]
+async fn the_inbox_downloads_what_it_is_sent() {
+    let api = Api::new();
+    api.fake_downloader();
+    let send = async |url: &str| api.call("POST", "/inbox", Some(json!({ "url": url }))).await;
+    /// How a request ended, once it has.
+    async fn ended(api: &Api, id: &Value) -> Value {
+        for _ in 0..500 {
+            let request = api.get(&format!("/inbox/queue/{id}")).await;
+            if request["status"] != "queued" && request["status"] != "running" {
+                return request;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        panic!("request {id} never ended");
+    }
+
+    // An address no downloader names as its site is refused.
+    assert_eq!(send("https://elsewhere.test/item").await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(send("not an address").await.0, StatusCode::BAD_REQUEST);
+
+    // The downloader is set for the inbox as a tab would set it.
+    api.ok("PATCH", "/inbox/settings/fake", Some(json!({ "tags": { "tags": ["sent"] } })))
+        .await;
+
+    // It is found by the site, a subdomain of it included, and queued.
+    let (status, first) = send("https://www.example.test/board").await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(first["downloader"], "fake");
+    let (_, second) = send("https://example.test/board").await;
+
+    // One at a time, in the order asked: two things, of three files.
+    let first = ended(&api, &first["id"]).await;
+    assert_eq!((&first["status"], &first["added"]), (&json!("done"), &json!(3)));
+    assert_eq!(first["message"], "one thing could not be had");
+    // Nothing is skipped as seen: asked for again, it is fetched again, and
+    // the library has it already.
+    let second = ended(&api, &second["id"]).await;
+    assert_eq!(
+        (&second["status"], &second["added"], &second["existing"]),
+        (&json!("done"), &json!(0), &json!(3))
+    );
+
+    // It is all listed under the inbox's tab: the files and their collections.
+    let inbox = api.get("/inbox").await;
+    let tab = inbox["tab"].as_i64().unwrap();
+    assert_eq!(inbox["listed"], 5);
+    assert_eq!(inbox["queue"].as_array().unwrap().len(), 2);
+    assert_eq!(inbox["downloaders"][0]["tags"], json!({ "tags": ["sent"] }));
+    assert_eq!(api.in_tab(tab, "file").await.len(), 3);
+    assert_eq!(api.in_tab(tab, "collection").await.len(), 2);
+    assert_eq!(api.found("sent kind=file").await.len(), 3);
+    let tabs = api.get("/tabs").await;
+    assert_eq!(tabs[0]["kind"], "inbox");
+    assert_eq!(tabs[0]["downloader"], Value::Null);
+    // Asked for again, it is the same tab.
+    let again = api.post("/tabs", json!({ "kind": "inbox" })).await;
+    assert_eq!(again["id"], tab);
+
+    // It is not closed while it lists anything: it is cleared first, which
+    // takes nothing out of the library.
+    let (status, _) = api.call("DELETE", &format!("/tabs/{tab}"), None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    api.post("/inbox/clear", json!({})).await;
+    let inbox = api.get("/inbox").await;
+    assert_eq!((&inbox["listed"], &inbox["queue"]), (&json!(0), &json!([])));
+    assert_eq!(api.found("kind=file").await.len(), 3);
+    let (status, _) = api.call("DELETE", &format!("/tabs/{tab}"), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
 }

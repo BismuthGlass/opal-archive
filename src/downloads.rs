@@ -7,6 +7,8 @@
 //! goes to the script's standard input, and the script answers with one
 //! event per line on its standard output. See `downloaders/README.md`.
 
+pub mod inbox;
+
 use std::{
     collections::{BTreeMap, HashMap},
     path::{Component, PathBuf},
@@ -65,6 +67,11 @@ pub struct Manifest {
     /// What can be pasted into its box.
     #[serde(default)]
     url_hint: String,
+    /// The sites it downloads from, by which an address sent to the inbox
+    /// finds it: a domain, standing for its subdomains too, or a name and
+    /// `.*` for that name under any ending.
+    #[serde(default)]
+    sites: Vec<String>,
     /// Present if it can use a login taken from a browser.
     cookies: Option<CookieSpec>,
     /// Switches the user can set, per tab.
@@ -209,6 +216,7 @@ pub fn router() -> Router<AppState> {
         .route("/tabs/{id}/download/cancel", post(stop))
         .route("/tabs/{id}/download/seen", get(seen))
         .route("/tabs/{id}/download/seen/forget", post(forget))
+        .merge(inbox::router())
 }
 
 /// The manifest of the downloader in the folder `name`.
@@ -262,14 +270,19 @@ fn described(state: &AppState, manifest: &Manifest) -> Value {
 }
 
 /// Every downloader there is, by title.
-async fn list(State(state): State<AppState>) -> Json<Vec<Value>> {
+fn manifests(state: &AppState) -> Vec<Manifest> {
     let mut found: Vec<Manifest> = std::fs::read_dir(&state.downloaders)
         .into_iter()
         .flatten()
         .flatten()
-        .filter_map(|entry| manifest(&state, entry.file_name().to_str()?).ok())
+        .filter_map(|entry| manifest(state, entry.file_name().to_str()?).ok())
         .collect();
     found.sort_by(|a, b| a.title.cmp(&b.title));
+    found
+}
+
+async fn list(State(state): State<AppState>) -> Json<Vec<Value>> {
+    let found = manifests(&state);
     Json(found.iter().map(|m| described(&state, m)).collect())
 }
 
@@ -374,8 +387,14 @@ fn settings(
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
+    Ok(filled(manifest, saved))
+}
+
+/// Settings as they were saved, as JSON, with the manifest's defaults for
+/// the options that were not.
+fn filled(manifest: &Manifest, saved: Option<(String, String)>) -> (Options, BaseTags) {
     let (options, tags) = saved.unwrap_or_default();
-    // The table only accepts valid JSON.
+    // The tables only accept valid JSON.
     let chosen: Options = serde_json::from_str(&options).unwrap_or_default();
     let options = manifest
         .options
@@ -385,7 +404,56 @@ fn settings(
             (spec.key.clone(), value)
         })
         .collect();
-    Ok((options, serde_json::from_str(&tags).unwrap_or_default()))
+    (options, serde_json::from_str(&tags).unwrap_or_default())
+}
+
+/// Makes the changes asked for to settings: to the options, the base tags,
+/// or both.
+fn change(
+    manifest: &Manifest,
+    options: &mut Options,
+    base: &mut BaseTags,
+    input: SettingsInput,
+) -> Result<(), ApiError> {
+    for (key, value) in input.options.unwrap_or_default() {
+        match options.get_mut(&key) {
+            Some(option) => *option = value,
+            None => {
+                return Err(ApiError::BadRequest(format!(
+                    "{} has no option `{key}`",
+                    manifest.title
+                )));
+            }
+        }
+    }
+    if let Some(given) = input.tags {
+        base.clear();
+        for (field, values) in given {
+            tags::check_field(&field)?;
+            let mut normal = Vec::new();
+            for value in values {
+                let value = tags::normalize(&field, &value)?;
+                if !normal.contains(&value) {
+                    normal.push(value);
+                }
+            }
+            if !normal.is_empty() {
+                base.insert(field, normal);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A folder of its own for a download's files, under the server's
+/// temporary directory. It is not made yet.
+fn fresh_out(state: &AppState) -> PathBuf {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    state.tmp.join(format!(
+        "download-{}-{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    ))
 }
 
 /// Everything a download tab's panel shows.
@@ -425,33 +493,7 @@ async fn configure(
     let manifest = downloader_of(&state, tab)?;
     let conn = state.db.lock().unwrap();
     let (mut options, mut base) = settings(&conn, &manifest, tab)?;
-    for (key, value) in input.options.unwrap_or_default() {
-        match options.get_mut(&key) {
-            Some(option) => *option = value,
-            None => {
-                return Err(ApiError::BadRequest(format!(
-                    "{} has no option `{key}`",
-                    manifest.title
-                )));
-            }
-        }
-    }
-    if let Some(given) = input.tags {
-        base.clear();
-        for (field, values) in given {
-            tags::check_field(&field)?;
-            let mut normal = Vec::new();
-            for value in values {
-                let value = tags::normalize(&field, &value)?;
-                if !normal.contains(&value) {
-                    normal.push(value);
-                }
-            }
-            if !normal.is_empty() {
-                base.insert(field, normal);
-            }
-        }
-    }
+    change(&manifest, &mut options, &mut base, input)?;
     conn.execute(
         "INSERT INTO tab_download (tab_id, options, tags) VALUES (?1, ?2, ?3)
          ON CONFLICT (tab_id) DO UPDATE SET options = excluded.options, tags = excluded.tags",
@@ -518,12 +560,7 @@ async fn start(
         (options, base, seen)
     };
 
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let out = state.tmp.join(format!(
-        "download-{}-{}",
-        std::process::id(),
-        COUNTER.fetch_add(1, Ordering::Relaxed)
-    ));
+    let out = fresh_out(&state);
     let cookies = Some(cookie_file(&state, &manifest)).filter(|file| file.exists());
     let request = json!({
         "url": url,

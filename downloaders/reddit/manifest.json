@@ -3,6 +3,7 @@
   "source": "reddit",
   "command": ["uv", "run", "--quiet", "--script", "reddit.py"],
   "url_hint": "A post URL",
+  "sites": ["reddit.com", "redd.it"],
   "cookies": {
     "browsers": ["chrome", "firefox", "safari", "brave", "edge", "chromium", "opera", "vivaldi"]
   },

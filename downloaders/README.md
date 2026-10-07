@@ -22,6 +22,7 @@ when asked, so a new one shows up without a restart.
   "source": "pinterest",
   "command": ["uv", "run", "--quiet", "--script", "pinterest.py"],
   "url_hint": "A pin, board, board section or profile URL",
+  "sites": ["pinterest.*", "pin.it"],
   "cookies": { "browsers": ["chrome", "firefox"] },
   "options": [{ "key": "recursive", "label": "Go into sections", "default": true }]
 }
@@ -33,6 +34,7 @@ when asked, so a new one shows up without a restart.
 | `source`   | The `source` tag given to every file it downloads                       |
 | `command`  | The program and its first arguments, run from the downloader's folder   |
 | `url_hint` | What can be pasted into the download box                                |
+| `sites`    | Optional. The sites it downloads from, by which an address sent to the inbox finds it: a domain, which stands for its subdomains too, or a name and `.*` for that name under any ending |
 | `cookies`  | Optional. Present if it can use a login read from one of these browsers |
 | `options`  | Optional. Switches the user sets per tab; each is true or false         |
 
@@ -155,6 +157,33 @@ the site it writes nothing and prints `{"logged_in": false}`.
 
 The server keeps the file under the data directory, readable only by the
 user, and passes its path with every later download.
+
+## The inbox
+
+A download can also be asked for from outside the interface, with nothing
+but an address: by the browser extension in `extension/`, or by anything
+else that can make a request.
+
+```
+POST /api/inbox
+{ "url": "https://www.reddit.com/r/…/comments/…" }
+```
+
+The server finds the downloader from the address, by the `sites` of each
+manifest (or takes the one named in `"downloader"`), and puts the request
+in a queue. The queue is kept in the database and worked through one
+request at a time. The answer is the request as queued, with its `id`;
+`GET /api/inbox/queue/<id>` says what has become of it: its `status` is
+`queued`, `running`, `done`, `failed` or `cancelled`, and its `message`
+says why it failed.
+
+The script is run exactly as for a download tab, with two differences. Its
+options and base tags are the ones the downloader is set to in the inbox,
+not a tab's. And `seen` is always empty: what is asked for one thing at a
+time is wanted, and a file the library already has is only listed again.
+
+What is downloaded is listed under one tab, the inbox, which every
+downloader shares. It lists it until the user clears it.
 
 ## A custom panel
 

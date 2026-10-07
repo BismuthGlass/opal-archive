@@ -45,6 +45,8 @@ struct AppState {
     cookies: PathBuf,
     /// The downloads running, or last run, by tab.
     downloads: downloads::Jobs,
+    /// Whether the inbox's queue is being worked through.
+    inbox_busy: Arc<std::sync::atomic::AtomicBool>,
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -106,7 +108,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         downloaders: std::path::absolute(env_or("OPALARCHIVE_DOWNLOADERS", "downloaders"))?,
         cookies: data_dir.join("cookies"),
         downloads: Default::default(),
+        inbox_busy: Default::default(),
     };
+    // What was waiting in the inbox when the server last stopped.
+    downloads::inbox::resume(&state)?;
 
     // Anything outside /api is the SPA; unknown paths get index.html so
     // client-side routes survive a reload.

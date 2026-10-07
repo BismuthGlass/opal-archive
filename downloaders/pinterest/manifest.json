@@ -3,6 +3,7 @@
   "source": "pinterest",
   "command": ["uv", "run", "--quiet", "--script", "pinterest.py"],
   "url_hint": "A pin, board, board section or profile URL",
+  "sites": ["pinterest.*", "pin.it"],
   "cookies": {
     "browsers": ["chrome", "firefox", "safari", "brave", "edge", "chromium", "opera", "vivaldi"]
   },
