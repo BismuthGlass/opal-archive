@@ -1,6 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { dismiss, upload, uploads } from "../uploads";
 import Icon from "./Icon";
+import Modal from "./Modal";
 
 /**
  * The box at the top of an upload tab: click to pick files, or drop them.
@@ -20,6 +21,7 @@ export function UploadBox() {
         <Icon name="upload" />
         <span>
           <strong>Choose files</strong> or drop them anywhere
+          <small>A zip is unpacked: its files are added, and its folders become collections</small>
         </span>
       </button>
       <input
@@ -115,6 +117,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 export function UploadPanel() {
   const overall = () => (uploads.done + uploads.progress) / uploads.total;
+  /** Whether the list of what failed is open. */
+  const [showFailed, setShowFailed] = createSignal(false);
 
   return (
     <Show when={uploads.total > 0}>
@@ -132,30 +136,59 @@ export function UploadPanel() {
         >
           <header>
             <strong>
-              Uploading {Math.min(uploads.done + 1, uploads.total)} of {uploads.total}
+              <Show
+                when={uploads.unpacking}
+                fallback={`Uploading ${Math.min(uploads.done + 1, uploads.total)} of ${uploads.total}`}
+              >
+                Unpacking {uploads.unpacking}
+              </Show>
             </strong>
           </header>
-          <progress value={overall()} />
+          {/* With no value the bar shows that work is going on, how much
+              of it being unknown. */}
+          <Show when={uploads.unpacking} fallback={<progress value={overall()} />}>
+            <progress />
+          </Show>
         </Show>
         <p>
           {uploads.added} added
-          <Show when={uploads.duplicates > 0}>, {uploads.duplicates} already in the library</Show>
-          <Show when={uploads.failures.length > 0}>
-            , {plural(uploads.failures.length, "failure")}
+          <Show when={uploads.collections > 0}>
+            , in {plural(uploads.collections, "collection")}
           </Show>
+          <Show when={uploads.duplicates > 0}>, {uploads.duplicates} already in the library</Show>
         </p>
         <Show when={uploads.failures.length > 0}>
+          <button
+            class="link upload-failed"
+            title="Show what was not taken in, and why"
+            onClick={() => setShowFailed(true)}
+          >
+            {uploads.failures.length} failed: show {uploads.failures.length === 1 ? "it" : "them"}
+          </button>
+        </Show>
+      </section>
+      <Show when={showFailed()}>
+        <Modal
+          title={`${plural(uploads.failures.length, "upload")} failed`}
+          medium
+          onClose={() => setShowFailed(false)}
+        >
+          <p class="hint">
+            What was not taken into the library, and why. A file inside a zip is named with the
+            zip and where it is in it.
+          </p>
           <ul class="upload-failures">
             <For each={uploads.failures}>
               {(failure) => (
                 <li>
-                  <span class="name">{failure.name}</span> {failure.reason}
+                  <span class="name">{failure.name}</span>
+                  <span class="reason">{failure.reason}</span>
                 </li>
               )}
             </For>
           </ul>
-        </Show>
-      </section>
+        </Modal>
+      </Show>
     </Show>
   );
 }

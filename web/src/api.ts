@@ -489,21 +489,23 @@ export async function fetchFile(
  * same content was already in the library. Uses XMLHttpRequest because
  * fetch cannot report upload progress.
  */
-export function uploadFile(
+/** Sends a file as the body of a request, saying how far it has got. */
+function sendFile(
+  path: string,
   file: File,
   tab: number,
   onProgress: (fraction: number) => void,
-): Promise<{ file: FileEntity; duplicate: boolean }> {
+): Promise<{ status: number; answer: unknown }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `/api/files?${params({ name: file.name, tab })}`);
+    xhr.open("POST", `/api${path}?${params({ name: file.name, tab })}`);
     xhr.responseType = "json";
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(event.loaded / event.total);
     };
     xhr.onload = () => {
       if (xhr.status === 200 || xhr.status === 201) {
-        resolve({ file: xhr.response, duplicate: xhr.status === 200 });
+        resolve({ status: xhr.status, answer: xhr.response });
       } else {
         reject(new Error(xhr.response?.error ?? `HTTP ${xhr.status}`));
       }
@@ -512,3 +514,27 @@ export function uploadFile(
     xhr.send(file);
   });
 }
+
+export const uploadFile = (file: File, tab: number, onProgress: (fraction: number) => void) =>
+  sendFile("/files", file, tab, onProgress).then(({ status, answer }) => ({
+    file: answer as FileEntity,
+    duplicate: status === 200,
+  }));
+
+/** What came of unpacking an archive into the library. */
+export type Unpacked = {
+  /** Files that were new to the library, and ones it already had. */
+  added: number;
+  duplicates: number;
+  /** Collections made of its folders. */
+  collections: number;
+  /** The files in it that were not taken in, by where they are in it. */
+  failures: { name: string; reason: string }[];
+};
+
+/**
+ * Uploads a zip to be unpacked: its files go into the library, its folders
+ * become collections, and the archive itself is not kept.
+ */
+export const uploadArchive = (file: File, tab: number, onProgress: (fraction: number) => void) =>
+  sendFile("/files/archive", file, tab, onProgress).then(({ answer }) => answer as Unpacked);

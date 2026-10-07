@@ -311,6 +311,10 @@ async fn upload(
             fail(&mut unpacked, "an archive inside the archive is not unpacked".to_string());
             continue;
         }
+        if size == 0 {
+            fail(&mut unpacked, "an empty file".to_string());
+            continue;
+        }
         // Looked at before it is kept: what the library cannot show stays out.
         if media::media_type(&out.0, &extension).await == "other" {
             fail(&mut unpacked, "not an image, a video, audio or a book".to_string());

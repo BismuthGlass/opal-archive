@@ -12,9 +12,13 @@ const idle = {
   done: 0,
   added: 0,
   duplicates: 0,
+  /** Collections made of the folders of archives. */
+  collections: 0,
   failures: [] as Failure[],
   /** Fraction of the file currently uploading. */
   progress: 0,
+  /** The archive the server is unpacking, once it has all of it. */
+  unpacking: null as string | null,
 };
 
 const [uploads, setUploads] = createStore({ ...idle });
@@ -25,6 +29,10 @@ export { uploads };
 type Source = File | string;
 
 const nameOf = (source: Source) => (typeof source === "string" ? source : source.name);
+
+/** A zip is unpacked by the server, not kept as a file. */
+const isArchive = (source: Source): source is File =>
+  typeof source !== "string" && /\.zip$/i.test(source.name);
 
 const queue: { file: Source; tab: number }[] = [];
 
@@ -58,17 +66,34 @@ async function run() {
     const { file, tab } = queue.shift()!;
     setUploads("progress", 0);
     try {
-      // How far a fetch by the server has got is not known.
-      const result =
-        typeof file === "string"
-          ? await api.fetchFile(file, tab)
-          : await api.uploadFile(file, tab, (fraction) => setUploads("progress", fraction));
-      setUploads(result.duplicate ? "duplicates" : "added", (n) => n + 1);
+      if (isArchive(file)) {
+        const unpacked = await api.uploadArchive(file, tab, (fraction) => {
+          setUploads("progress", fraction);
+          // All of it sent: what is left is the server's work.
+          if (fraction >= 1) setUploads("unpacking", file.name);
+        });
+        setUploads("added", (n) => n + unpacked.added);
+        setUploads("duplicates", (n) => n + unpacked.duplicates);
+        setUploads("collections", (n) => n + unpacked.collections);
+        // Each of its files that was passed over is a failure of its own.
+        const inside = unpacked.failures.map((failure) => ({
+          name: `${file.name} › ${failure.name}`,
+          reason: failure.reason,
+        }));
+        setUploads("failures", (list) => [...list, ...inside]);
+      } else {
+        // How far a fetch by the server has got is not known.
+        const result =
+          typeof file === "string"
+            ? await api.fetchFile(file, tab)
+            : await api.uploadFile(file, tab, (fraction) => setUploads("progress", fraction));
+        setUploads(result.duplicate ? "duplicates" : "added", (n) => n + 1);
+      }
     } catch (err) {
       const reason = errorMessage(err);
       setUploads("failures", (list) => [...list, { name: nameOf(file), reason }]);
     }
-    setUploads("done", (n) => n + 1);
+    setUploads({ done: uploads.done + 1, unpacking: null });
     waiting.add(tab);
     // Show new files as they arrive, without reloading for every one.
     if (Date.now() - lastRefresh > 2000) {
