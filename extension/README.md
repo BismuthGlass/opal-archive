@@ -11,6 +11,9 @@ an address, which goes into the inbox's queue (see `downloaders/README.md`).
   post. Shift-click on the button sends it at once, with no tags. The button turns into a spinner while the post
   waits and downloads, then a tick, or a cross that says why when pointed
   at. Pressing it again sends the post again.
+- On Pinterest, the same button on the corner of each pin, in grids and
+  on the pin's own page, and on each board of a profile, where it sends
+  the whole board.
 - Everywhere, "Send to OpalArchive" in the right-click menu, for a link or
   the page itself, and the extension's own button for the page on show.
   These work for any site OpalArchive has a downloader for.
