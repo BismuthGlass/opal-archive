@@ -666,6 +666,18 @@ async fn a_set_describes_itself_and_variants_are_grouped() {
     assert_eq!(api.found("source_url~example.com/book").await, [a, b]);
     assert_eq!(api.found("reference=shelf:*").await, [a, b]);
     assert_eq!(api.found("collection=site:shelves").await, [a, b]);
+    // A search can be kept to a collection, as to a set: to what is part
+    // of it, or in a set that is. A set is still listed once if asked.
+    api.edit(&[c], json!({ "add_collection": ["site:shelves"] })).await;
+    let within = async |more: &str| -> Value {
+        let path = format!("/search/ids?q=sort%3Did&collection=site:shelves{more}");
+        api.get(&path).await["ids"].clone()
+    };
+    assert_eq!(within("").await, json!([a, b, c]));
+    assert_eq!(within("&collapse=1").await, json!([a, c]));
+    let other = "/search/ids?q=&collection=site:shel*";
+    assert_eq!(api.get(other).await["ids"], json!([]));
+    api.edit(&[c], json!({ "remove_collection": ["site:shelves"] })).await;
     assert_eq!(api.found("has=identifier").await, [a, b]);
     assert_eq!(api.found("set_title~book").await, [a, b]);
 

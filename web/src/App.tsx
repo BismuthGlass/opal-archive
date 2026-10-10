@@ -50,6 +50,7 @@ import {
   shownSet as setShown,
   showsTrashed,
   stepKey,
+  stepWithin,
   trail,
 } from "./tabs";
 import Trail, { goBack } from "./components/Trail";
@@ -111,7 +112,7 @@ export default function App() {
         // So it is with sets listed once, which a set itself never is.
         const stacked = collapsesSets() ? "\u0003" : "";
         return inside()
-          ? `${tab.id}:\u0001${way}:${trashed}${inside()!.query}`
+          ? `${tab.id}:\u0001${way}:${trashed}${stacked}${inside()!.query}`
           : `${tab.id}:${trashed}${stacked}${tab.query}`;
       },
       (key) => {
@@ -130,8 +131,19 @@ export default function App() {
         shown = { tab: tab.id, inside: !!step, depth: trail().length, stacked };
         if (step) {
           // Not saved with the tab: the trail is the page's alone.
-          const within = "variants" in step ? { variants: step.variants } : { set: step.id };
-          runSearch(step.query, null, key, null, within, false, entered, showsTrashed());
+          // A set is listed once in a collection, as anywhere but in a set.
+          const once = stacked && "collection" in step;
+          runSearch(
+            step.query,
+            null,
+            key,
+            null,
+            stepWithin(step),
+            false,
+            entered,
+            showsTrashed(),
+            once,
+          );
         } else {
           // Listing the whole library is not done just for opening a tab.
           const wait = tab.kind === "gallery" && tab.query === "" && !asked;

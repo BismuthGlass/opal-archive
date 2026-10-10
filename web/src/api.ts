@@ -324,12 +324,15 @@ export const saveTabView = (id: number, view: TabView) =>
 export const orderTabs = (ids: number[]) => request<Tab[]>("PUT", "/tabs/order", { ids });
 export const deleteTab = (id: number) => request<void>("DELETE", `/tabs/${id}`);
 
-/** What a search is kept to within a tab: a set's files, or a group's variants. */
-export type Within = { set: number } | { variants: string };
+/**
+ * What a search is kept to within a tab: a set's files, a group's
+ * variants, or what is part of a collection.
+ */
+export type Within = { set: number } | { variants: string } | { collection: string };
 
 /**
  * `tab` narrows a search to what an upload or set tab holds, and `within`
- * to the files of a set or the variants of a group instead.
+ * to a set, a group of variants or a collection instead.
  */
 const scoped = (tab: number | null, within: Within | null = null): Record<string, string | number> => ({
   ...(tab === null ? {} : { tab }),

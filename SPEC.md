@@ -106,11 +106,11 @@ A row can be saved under a name, to be used again: the + then offers the saved q
 
 The saved queries are a setting. The settings list them, to write, rename, delete and drag into the order they are offered in.
 
-## Going into a set, or a file's variants
+## Going into a set, a file's variants, or a collection
 
-Pressing the set mark on a file's tile goes into its set, in the same tab: the view becomes the set's files, and a bar above it shows the way back. So does clicking the set in the side panel or in the viewer. A file's variants are gone into the same way, from the variants mark, and the view becomes the files of its group.
+Pressing the set mark on a file's tile goes into its set, in the same tab: the view becomes the set's files, and a bar above it shows the way back. So does clicking the set in the side panel or in the viewer. A file's variants are gone into the same way, from the variants mark, and the view becomes the files of its group; and so is a collection, from its name in the side panel, and the view becomes what is part of it.
 
-- The bar has a back arrow, what was gone through to get here, and a button that opens the set in a tab of its own; for variants, that tab is a search for the group. From a file's variants the tab can go on into the set of one of them, and from a set into a file's variants: any earlier point of the way in can be gone back to directly. Backspace goes back one.
+- The bar has a back arrow, what was gone through to get here, and a button that opens the set in a tab of its own; for variants or a collection, that tab is a search for them. From a file's variants the tab can go on into the set of one of them, and from a set into a file's variants: any earlier point of the way in can be gone back to directly. Backspace goes back one.
 - Coming back out, the view outside is as it was left: the same results, order and page, scrolled as far, with the same selection.
 - Inside, the search box filters the set, as it does in a set's own tab. The tab's query is untouched and is there again on coming out.
 - A set is shown in its order, and a new order dragged into can be saved from here.
@@ -183,7 +183,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - The parts between colons can't be empty and have no spaces around them: `metroid: samus` is stored as `metroid:samus`, and `metroid::samus` is not a valid tag.
 - Namespaces apply within a type. `metroid:samus` as a `character` says nothing about a `metroid` namespace in `tags`.
 - Source URLs, identifiers, references and collections are not tags. Each is a plain list on a file, with no namespaces, aliases or suggestions: source URLs are web addresses shown as links, the others are shown as text. They can still be searched, with `source_url=`, `identifier=`, `reference=`, `collection=` and the `~` forms.
-- A collection says what a file, or a set, is part of where it came from: the board of a pin (`pinterest:<user>:<board>`), the thread of a post (`4chan:<board>:<number>`). It is a name and nothing more: it groups nothing, has no record of its own, and a file can have several. `collection=4chan:g:*` finds what is part of any thread of a board. Downloaders fill it in. References are kept as a list of their own, for whatever else a file is to point at; nothing fills them in.
+- A collection says what a file, or a set, is part of where it came from: the board of a pin (`pinterest:<user>:<board>`), the thread of a post (`4chan:<board>:<number>`). It is a name and nothing more: it groups nothing, has no record of its own, and a file can have several. `collection=4chan:g:*` finds what is part of any thread of a board. A collection's name, where a file or a set lists it, is clicked to open it as a set is opened: the tab shows what is part of it, files of a set that is part of it included, and can be gone back out of. Downloaders fill it in. References are kept as a list of their own, for whatever else a file is to point at; nothing fills them in.
 
 ### Searching
 

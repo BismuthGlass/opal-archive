@@ -32,6 +32,9 @@ struct SearchParams {
     /// A group of variants to search within, as `set` is a set: the files
     /// that share this `alt_group_id`.
     variants: Option<String>,
+    /// A collection to search within, in place of what `tab` holds: the
+    /// files that are part of it, or in a set that is.
+    collection: Option<String>,
     /// Present to have trashed entities included without `@trashed`.
     trashed: Option<String>,
     /// Present to have a set listed once, by the first of its files that
@@ -56,6 +59,7 @@ impl SearchParams {
             tab: self.tab,
             set: self.set,
             variants: self.variants.as_deref(),
+            collection: self.collection.as_deref(),
         }
     }
 }
@@ -96,10 +100,12 @@ pub struct Scope<'a> {
     pub set: Option<i64>,
     /// A group of variants, in place of either.
     pub variants: Option<&'a str>,
+    /// A collection, in place of any of those: what is part of it.
+    pub collection: Option<&'a str>,
 }
 
-/// Compiles `source`, narrowed to its scope: the variants of a group, or
-/// the files of a set, or what a tab holds. A set is shown in its own
+/// Compiles `source`, narrowed to its scope: what is part of a collection,
+/// or the variants of a group, or the files of a set, or what a tab holds. A set is shown in its own
 /// order unless the query asks for another. Returns whether it was
 /// narrowed to a set or a group, too.
 fn compile(
@@ -110,6 +116,19 @@ fn compile(
     include_trashed: bool,
 ) -> Result<(query::Compiled, bool), ApiError> {
     let mut compiled = query::compile(source, seed, &tags::aliases(conn)?, include_trashed)?;
+    if let Some(collection) = scope.collection {
+        // As `collection=` finds them, but by the name exactly as it is.
+        compiled.filter = format!(
+            "({}) AND (EXISTS (SELECT 1 FROM collection l
+                               WHERE l.entity_id = e0.id AND l.value = ?)
+                       OR EXISTS (SELECT 1 FROM set_collection l JOIN set_file sf USING (set_key)
+                                  WHERE sf.file_id = e0.id AND l.value = ?))",
+            compiled.filter
+        );
+        let name = Value::Text(collection.to_string());
+        compiled.filter_params.extend([name.clone(), name]);
+        return Ok((compiled, false));
+    }
     if let Some(group) = scope.variants {
         compiled.filter = format!("({}) AND f0.alt_group_id = ?", compiled.filter);
         compiled.filter_params.push(Value::Text(group.to_string()));

@@ -2,6 +2,7 @@ import { createSignal, For, Show } from "solid-js";
 import type { Changes, Metadata } from "../api";
 import { ListLabel } from "./fields";
 import type { FieldProps, ListMode } from "./fields";
+import { enter } from "../tabs";
 import Icon from "./Icon";
 
 /** Only web addresses are made into links; anything else is shown as text. */
@@ -37,6 +38,8 @@ export const PLAIN_LISTS = [
     label: "Collection",
     placeholder: "Add…",
     links: false,
+    // A collection is opened as a set is: the tab shows what is part of it.
+    open: (value: string) => void enter({ collection: value }),
     values: (data: Metadata) => data.collection,
     add: (value: string): Changes => ({ add_collection: [value] }),
     remove: (value: string): Changes => ({ remove_collection: [value] }),
@@ -97,9 +100,26 @@ function Values(props: ListProps) {
             <Show
               when={props.list.links && isWebAddress(entry.value)}
               fallback={
-                <span class="link-text" title={entry.value}>
-                  {entry.value}
-                </span>
+                <Show
+                  // Not from the modal where the list is edited: that would
+                  // stay in front of what was opened.
+                  when={!props.editing && "open" in props.list && props.list.open}
+                  fallback={
+                    <span class="link-text" title={entry.value}>
+                      {entry.value}
+                    </span>
+                  }
+                >
+                  {(open) => (
+                    <button
+                      class="link link-text"
+                      title={`${entry.value}: show what is part of it`}
+                      onClick={() => open()(entry.value)}
+                    >
+                      {entry.value}
+                    </button>
+                  )}
+                </Show>
               }
             >
               <a

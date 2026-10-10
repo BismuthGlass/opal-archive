@@ -23,11 +23,16 @@ function outermost(): string {
   return tab.kind === "upload" ? "Uploads" : "Results";
 }
 
-/** Gives what the tab is inside a tab of its own: a set's, or a search for the variants. */
+/**
+ * Gives what the tab is inside a tab of its own: a set's, or a search for
+ * the variants or for the collection.
+ */
 const openInTab = (step: Step) =>
   "variants" in step
     ? open("gallery", `alt_group_id=${quoteValue(step.variants)}`)
-    : openSet(step.id);
+    : "collection" in step
+      ? open("gallery", `collection=${quoteValue(step.collection)}`)
+      : openSet(step.id);
 
 /**
  * Above the grid while the tab is inside a set or a group of variants: the

@@ -57,21 +57,40 @@ export function setShowsTrashed(tab: number, show: boolean) {
 }
 
 /**
- * A set a tab has gone into, or a group of variants, and the filter typed
- * while in it.
+ * A set a tab has gone into, or a group of variants, or a collection, and
+ * the filter typed while in it.
  */
-export type Step = (api.SetName | { variants: string }) & { query: string };
+export type Step = (api.SetName | { variants: string } | { collection: string }) & {
+  query: string;
+};
 
 /** What a step is called. */
 export const stepName = (step: Step) =>
-  "variants" in step ? "Variants" : step.title || step.set_id;
+  "variants" in step
+    ? "Variants"
+    : "collection" in step
+      ? step.collection
+      : step.title || step.set_id;
 
 /** What tells a step from any other. */
-export const stepKey = (step: Step) => ("variants" in step ? `v${step.variants}` : `s${step.id}`);
+export const stepKey = (step: Step) =>
+  "variants" in step
+    ? `v${step.variants}`
+    : "collection" in step
+      ? `c${step.collection}`
+      : `s${step.id}`;
 
-// A tab can go into the set of one of its results, or its variants, and
-// into the set of one of those, and back out: the way in is its trail. It
-// is kept while the page is open, and not with the tab.
+/** What a step keeps a search to. */
+export const stepWithin = (step: Step): api.Within =>
+  "variants" in step
+    ? { variants: step.variants }
+    : "collection" in step
+      ? { collection: step.collection }
+      : { set: step.id };
+
+// A tab can go into the set of one of its results, or its variants, or a
+// collection it is part of, and on from there, and back out: the way in
+// is its trail. It is kept while the page is open, and not with the tab.
 const [trails, setTrails] = createStore<Record<number, Step[]>>({});
 
 // Remembered per browser, like the active tab, so a reload keeps them.
@@ -87,11 +106,13 @@ function saveTrails() {
 
 /** A step as it is now, if what it goes into is still there. */
 async function current(
-  step: { id: number } | { variants: string },
+  step: { id: number } | { variants: string } | { collection: string },
   query: string,
 ): Promise<Step | null> {
-  // A group is its ID and nothing more: there is nothing of it to read.
+  // A group is its ID and nothing more, and a collection its name: there
+  // is nothing of either to read.
   if ("variants" in step) return { variants: String(step.variants), query };
+  if ("collection" in step) return { collection: String(step.collection), query };
   const set = await api.getSet(step.id).catch(() => null);
   return set && { id: set.id, set_id: set.set_id, title: set.title, query };
 }
@@ -132,7 +153,13 @@ export const inside = (): Step | undefined => trail().at(-1);
 export const shownSet = (): api.SetName | undefined => {
   const step = inside();
   if (!step) return activeTab()?.set ?? undefined;
-  return "variants" in step ? undefined : step;
+  return "variants" in step || "collection" in step ? undefined : step;
+};
+
+/** The collection the active tab shows, if it has gone into one. */
+export const shownCollection = (): string | undefined => {
+  const step = inside();
+  return step && "collection" in step ? step.collection : undefined;
 };
 
 /** The group of variants the active tab shows, if it has gone into one. */
@@ -141,11 +168,16 @@ export const shownVariants = (): string | undefined => {
   return step && "variants" in step ? step.variants : undefined;
 };
 
-/** Goes into a set, or a group of variants, in the active tab. */
-export async function enter(into: { id: number } | { variants: string }) {
+/** Goes into a set, a group of variants or a collection, in the active tab. */
+export async function enter(into: { id: number } | { variants: string } | { collection: string }) {
   const tab = activeId();
   // What is on show is already gone into.
-  const here = "variants" in into ? shownVariants() === into.variants : shownSet()?.id === into.id;
+  const here =
+    "variants" in into
+      ? shownVariants() === into.variants
+      : "collection" in into
+        ? shownCollection() === into.collection
+        : shownSet()?.id === into.id;
   if (tab === null || here) return;
   await guard(async () => {
     const step = await current(into, "");

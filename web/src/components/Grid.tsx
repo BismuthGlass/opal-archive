@@ -30,7 +30,7 @@ import {
   setScrollTo,
 } from "../search";
 import { stats } from "../stats";
-import { activeTab, enter, inside, shownSet, shownVariants } from "../tabs";
+import { activeTab, enter, inside, shownCollection, shownSet, shownVariants } from "../tabs";
 import { openContextMenu } from "./ContextMenu";
 import Icon from "./Icon";
 
@@ -82,6 +82,7 @@ const EMPTY: Record<string, string> = {
   selection: "Nothing of what this tab was opened on is left.",
   set: "This set is empty.",
   variants: "None of these variants is left.",
+  collection: "Nothing is part of this collection.",
 };
 
 export default function Grid(props: { onOpen: (index: number) => void }) {
@@ -263,7 +264,9 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
               : inside() && search.query === ""
                 ? shownVariants() !== undefined
                   ? EMPTY.variants
-                  : EMPTY.set
+                  : shownCollection() !== undefined
+                    ? EMPTY.collection
+                    : EMPTY.set
                 : search.scope !== null && search.query === ""
                   ? EMPTY[activeTab()?.kind ?? "upload"]
                   : "No results."}

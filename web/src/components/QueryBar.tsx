@@ -8,6 +8,7 @@ import {
   inside,
   setQuery,
   setShowsTrashed,
+  shownCollection,
   shownVariants,
   showsTrashed,
 } from "../tabs";
@@ -139,6 +140,8 @@ export default function QueryBar() {
   const placeholder = () =>
     shownVariants() !== undefined
       ? "Filter these variants"
+      : shownCollection() !== undefined
+        ? "Filter this collection"
       : inside() || activeTab()?.kind === "set"
         ? "Filter this set"
       : activeTab()?.kind === "upload"
