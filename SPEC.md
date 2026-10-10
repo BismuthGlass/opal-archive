@@ -111,6 +111,10 @@ Marks belong to the tab, not to one view of it. A file marked in a search is mar
 
 The count of each mark above the grid, and selecting by mark, take in only what the view on show lists. Clearing a mark takes it off everything in the tab that has it.
 
+## Preview
+
+The side panel ends in a drawer that shows the selected file: bigger than its tile, without opening the viewer. Of several selected, it shows the one selected last. Closed, the drawer is only its heading at the bottom of the panel; open, it comes up over the lower part of the panel, half of it at first and then as far as its top edge is dragged. Whether it is open and how tall are remembered by the browser. It shows what the viewer can: pictures, video and audio, which wait to be played, and PDFs.
+
 ## Stacked and saved queries
 
 A search is a stack of queries, shown as rows in the search box. Each row is a query of its own, and narrows down what the rows before it found. A + under the rows adds one; a row can be taken out again. Rows left empty count for nothing.

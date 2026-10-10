@@ -9,6 +9,7 @@ import InboxPanel from "./components/InboxPanel";
 import { modalOpen } from "./components/Modal";
 import Icon from "./components/Icon";
 import { createStoredFlag, Module } from "./components/Panel";
+import Preview from "./components/Preview";
 import QueryBar from "./components/QueryBar";
 import SearchHelp from "./components/SearchHelp";
 import SettingsModal from "./components/SettingsModal";
@@ -479,6 +480,7 @@ export default function App() {
         {/* The panel is a stack of modules; add new ones here. */}
         <Show when={panelOpen()}>
           <aside class="panel" aria-label="Side panel">
+            <div class="panel-modules">
             <Module
               id="search"
               title="Search"
@@ -538,6 +540,8 @@ export default function App() {
                 <Sidebar />
               </Show>
             </Module>
+            </div>
+            <Preview />
           </aside>
         </Show>
         <main class="content">

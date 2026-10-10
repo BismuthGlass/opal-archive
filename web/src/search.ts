@@ -38,6 +38,18 @@ const [search, setSearch] = createStore({
 });
 const [pages, setPages] = createStore<Record<number, Item[]>>({});
 const [selected, setSelected] = createSignal<ReadonlySet<number>>(new Set());
+/** The result selected last, by a click, while it is still selected. */
+const [lastSelected, setLastSelected] = createSignal<number | null>(null);
+/**
+ * The result the side panel's preview shows: of those selected, the one
+ * selected last, or failing that the last of them.
+ */
+export function previewed(): number | null {
+  const chosen = selected();
+  const last = lastSelected();
+  if (last !== null && chosen.has(last)) return last;
+  return chosen.size > 0 ? [...chosen].at(-1)! : null;
+}
 /** How many marks there are, numbered from 1. */
 export const MARKS = 5;
 /**
@@ -401,6 +413,7 @@ export function runSearch(
     error: null,
   });
   setSelected(left?.selected ?? new Set<number>());
+  setLastSelected(null);
   setMarks(tabMarks.get(tabOf(key) ?? -1) ?? new Map<number, number>());
   setListing((n) => n + 1);
   setSearchCount((n) => n + 1);
@@ -621,10 +634,12 @@ export async function clickSelect(
     // The range may span pages that were never loaded.
     const ids = await resultIds();
     const range = ids.slice(Math.min(anchor, index), Math.max(anchor, index) + 1);
+    setLastSelected(id);
     setSelected(new Set(modifiers.toggle ? [...selected(), ...range] : range));
     return;
   }
   anchor = index;
+  setLastSelected(id);
   if (modifiers.toggle) {
     const next = new Set(selected());
     if (!next.delete(id)) next.add(id);
