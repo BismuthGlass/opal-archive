@@ -1635,6 +1635,29 @@ span.chip-label:hover {
   border-style: dashed;
 }
 
+/* In the tag editor, changes that wait to be saved: a tag to be put on
+   stands out, one to be taken off is struck through. */
+.chip.added {
+  box-shadow: 0 0 0 1px currentColor;
+}
+
+.chip.removed {
+  opacity: 0.55;
+}
+
+.chip.removed .chip-label {
+  text-decoration: line-through;
+}
+
+.dialog footer.tags-footer {
+  align-items: center;
+  margin-top: 12px;
+}
+
+.tags-footer .hint {
+  margin-right: auto;
+}
+
 .chip button {
   background: none;
   border: none;

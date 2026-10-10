@@ -1,7 +1,7 @@
 import { createMemo, createResource, createSignal, For, Show } from "solid-js";
 import * as api from "../api";
 import type { Changes, Metadata } from "../api";
-import { errorMessage, fieldLabel, tagQuery } from "../format";
+import { errorMessage, fieldLabel, plural, tagQuery } from "../format";
 import { changed, dataVersion } from "../search";
 import {
   aggregatedTypes,
@@ -76,7 +76,7 @@ function createTagBox(props: FieldProps & { initial?: string }) {
     const { field, value, naming } = read();
     if (naming !== null) return typesStarting(naming).map((field) => ({ kind: "type", field }));
     if (!field) return [];
-    const carried = props.data.tags[field] ?? [];
+    const carried = carriedTags(props.data, field);
     if (removing()) {
       // To take off: the tags of that type the selection carries.
       const typed = value.toLowerCase();
@@ -126,7 +126,7 @@ function createTagBox(props: FieldProps & { initial?: string }) {
       reset();
       return props.apply({ add: { [field]: [name] } });
     }
-    const carried = (props.data.tags[field] ?? []).find(
+    const carried = carriedTags(props.data, field).find(
       (tag) => tag.value.toLowerCase() === name.toLowerCase(),
     );
     if (!carried) return setProblem(`${tagText(field, name)} is not on the selection.`);
@@ -153,6 +153,9 @@ function createTagBox(props: FieldProps & { initial?: string }) {
       setActive((i) => (i < 0 ? count - 1 : i - 1));
     } else if (event.key === "Enter") {
       event.preventDefault();
+      // With Shift it saves the editor's changes, which is the editor's
+      // to do: with nothing typed, that is all it does.
+      if (event.shiftKey && text().trim() === "") return;
       if (active() >= 0) {
         pick(options()[active()]);
       } else if (read().naming !== null) {
@@ -161,6 +164,10 @@ function createTagBox(props: FieldProps & { initial?: string }) {
       } else {
         commit(read().field, read().value);
       }
+      // What was typed goes in with the changes saved. Nothing is saved
+      // while the box still holds something: a type to finish, or a tag
+      // that could not be taken off.
+      if (event.shiftKey && text() !== "") event.stopPropagation();
     }
   };
 
@@ -278,7 +285,79 @@ function createTagBox(props: FieldProps & { initial?: string }) {
   return { input, suggestions };
 }
 
-type Tag = Metadata["tags"][string][number];
+/**
+ * A tag of the selection. In the editor, where changes wait to be saved,
+ * `pending` says what is to become of it: put on everything selected, or
+ * taken off.
+ */
+type Tag = Metadata["tags"][string][number] & { pending?: "added" | "removed" };
+
+/** The tags of a type the selection carries, or will once the editor is saved. */
+const carriedTags = (data: Metadata, field: string): Tag[] =>
+  (data.tags[field] ?? []).filter((tag: Tag) => tag.pending !== "removed");
+
+/** The changes to tags waiting in the editor: tag field to values. */
+type Staged = { add: Record<string, string[]>; remove: Record<string, string[]> };
+
+const sameTag = (a: string) => (b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** A list of values by field with one put in, or taken out. */
+function withValue(
+  lists: Record<string, string[]>,
+  field: string,
+  value: string,
+  keep: boolean,
+): Record<string, string[]> {
+  const rest = (lists[field] ?? []).filter((had) => !sameTag(value)(had));
+  const { [field]: _, ...others } = lists;
+  const next = keep ? [...rest, value] : rest;
+  return next.length > 0 ? { ...others, [field]: next } : others;
+}
+
+/**
+ * Takes a change asked for in the editor into those waiting. Asking for
+ * the opposite of one that waits calls it off: a tag to be taken off is
+ * kept as it was, and one to be put on is not.
+ */
+function stage(staged: Staged, base: Metadata, changes: Changes): Staged {
+  let { add, remove } = staged;
+  for (const [field, values] of Object.entries(changes.add ?? {})) {
+    for (const value of values) {
+      const carried = (base.tags[field] ?? []).find((tag) => sameTag(value)(tag.value));
+      if (remove[field]?.some(sameTag(value))) remove = withValue(remove, field, value, false);
+      else if (carried?.count !== base.count) add = withValue(add, field, carried?.value ?? value, true);
+    }
+  }
+  for (const [field, values] of Object.entries(changes.remove ?? {})) {
+    for (const value of values) {
+      const carried = (base.tags[field] ?? []).find((tag) => sameTag(value)(tag.value));
+      add = withValue(add, field, value, false);
+      if (carried) remove = withValue(remove, field, carried.value, true);
+    }
+  }
+  return { add, remove };
+}
+
+/** The selection's metadata as it will be once the changes waiting are saved. */
+function staged(base: Metadata, changes: Staged): Metadata {
+  const tags: Record<string, Tag[]> = {};
+  for (const field of new Set([...Object.keys(base.tags), ...Object.keys(changes.add)])) {
+    const adding = changes.add[field] ?? [];
+    const removing = changes.remove[field] ?? [];
+    const had: Tag[] = (base.tags[field] ?? []).map((tag) =>
+      removing.some(sameTag(tag.value))
+        ? { ...tag, pending: "removed" }
+        : adding.some(sameTag(tag.value))
+          ? { ...tag, count: base.count, pending: "added" }
+          : tag,
+    );
+    const fresh: Tag[] = adding
+      .filter((value) => !had.some((tag) => sameTag(value)(tag.value)))
+      .map((value) => ({ value, count: base.count, description: null, pending: "added" }));
+    tags[field] = [...had, ...fresh];
+  }
+  return { ...base, tags };
+}
 
 /**
  * One tag as a pill in its type's colours. In the panel a click adds the
@@ -292,12 +371,24 @@ function TagChip(
     editing?: boolean;
   },
 ) {
-  const partial = () => props.tag.count < props.data.count;
+  const removed = () => props.tag.pending === "removed";
+  const partial = () => !removed() && props.tag.count < props.data.count;
   /** The tag's namespace, with its colon. */
   const namespace = () => props.tag.value.slice(0, props.tag.value.lastIndexOf(":") + 1);
   const name = () => props.tag.value.slice(namespace().length);
   return (
-    <span class="chip tinted" classList={{ partial: partial() }} style={pillStyle(props.field)}>
+    <span
+      class="chip tinted"
+      classList={{ partial: partial(), added: props.tag.pending === "added", removed: removed() }}
+      title={
+        removed()
+          ? "Taken off when the changes are saved"
+          : props.tag.pending === "added"
+            ? "Put on when the changes are saved"
+            : undefined
+      }
+      style={pillStyle(props.field)}
+    >
       <button
         class="chip-label"
         // In the editor a pill is just a value; in the panel it searches.
@@ -326,7 +417,19 @@ function TagChip(
           ({props.tag.count})
         </span>
       </Show>
-      <Show when={props.editing}>
+      <Show when={props.editing && removed()}>
+        <span class="chip-actions">
+          <button
+            class="chip-add"
+            aria-label={`Keep ${props.tag.value}`}
+            title="Keep it after all"
+            onClick={() => props.apply({ add: { [props.field]: [props.tag.value] } })}
+          >
+            <Icon name="undo" />
+          </button>
+        </span>
+      </Show>
+      <Show when={props.editing && !removed()}>
         <span class="chip-actions">
           <Show when={partial()}>
             <button
@@ -388,6 +491,10 @@ export function TagsEditor(props: FieldProps & { initial?: string }) {
 /**
  * The tag editor in a modal of its own, for the given entities: what the
  * tagging hotkey opens, on the selection or on the file in the viewer.
+ *
+ * Nothing is changed as the tags are put on and taken off: the changes
+ * wait, shown as they will be, until they are saved, with the button or
+ * with Shift and Enter. Closing the modal with changes waiting asks first.
  */
 export function TagsModal(props: {
   ids: number[];
@@ -398,24 +505,55 @@ export function TagsModal(props: {
   onClose: () => void;
 }) {
   const [error, setError] = createSignal<string | null>(null);
+  const [saving, setSaving] = createSignal(false);
+  const [waiting, setWaiting] = createSignal<Staged>({ add: {}, remove: {} });
   const [metadata] = createResource(
     () => [props.ids, dataVersion()] as const,
     ([ids]) => api.getMetadata(ids),
   );
-  const apply = async (changes: Changes) => {
+  /** The tags as they will be once what waits is saved. */
+  const shown = createMemo(() => metadata.latest && staged(metadata.latest, waiting()));
+  const count = () =>
+    [waiting().add, waiting().remove]
+      .flatMap((lists) => Object.values(lists))
+      .reduce((sum, values) => sum + values.length, 0);
+  const apply = (changes: Changes) => {
+    const base = metadata.latest;
+    if (base) setWaiting((had) => stage(had, base, changes));
+  };
+  const save = async () => {
+    if (saving()) return;
+    if (count() === 0) return props.onClose();
+    setSaving(true);
     try {
-      await api.edit(props.ids, changes);
-      setError(null);
+      await api.edit(props.ids, waiting());
+      changed();
+      props.onClose();
     } catch (err) {
       setError(errorMessage(err));
+      setSaving(false);
     }
-    changed();
   };
   return (
-    <Modal title={`Tags of ${props.target}`} medium onClose={props.onClose}>
-      <div class="field-editor">
-        {/* `latest` keeps the tags on screen while a change reloads them. */}
-        <Show when={metadata.latest} fallback={<div class="field" />}>
+    <Modal
+      title={`Tags of ${props.target}`}
+      medium
+      onClose={props.onClose}
+      canClose={() =>
+        count() === 0 ||
+        confirm(`Close without saving? ${plural(count(), "change")} to the tags will be lost.`)
+      }
+    >
+      <div
+        class="field-editor"
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" || !event.shiftKey) return;
+          event.preventDefault();
+          save();
+        }}
+      >
+        {/* `latest` keeps the tags on screen while they are read again. */}
+        <Show when={shown()} fallback={<div class="field" />}>
           {(data) => <TagsEditor data={data()} apply={apply} initial={props.initial} />}
         </Show>
       </div>
@@ -424,6 +562,26 @@ export function TagsModal(props: {
           {error()}
         </p>
       </Show>
+      <footer class="tags-footer">
+        <span class="hint">
+          {count() === 0
+            ? "Nothing changes until it is saved: "
+            : `${plural(count(), "change")} not saved yet: `}
+          <kbd>Shift + Enter</kbd> saves.
+        </span>
+        <button type="button" onClick={props.onClose}>
+          {count() === 0 ? "Close" : "Discard"}
+        </button>
+        <button
+          type="button"
+          class="primary"
+          disabled={count() === 0 || saving()}
+          title="Save the changes (Shift + Enter)"
+          onClick={save}
+        >
+          Save
+        </button>
+      </footer>
     </Modal>
   );
 }

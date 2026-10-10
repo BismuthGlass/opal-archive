@@ -228,6 +228,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - Wherever a tag is typed, to add it or to search for it, its type is written in front of it: `@cr:name` is the creator `name`. A tag with nothing in front is a plain tag.
 - Each type has a two-letter name: `@cr:` creator, `@ch:` character, `@sw:` source work, `@pe:` person, `@ge:` genre, `@st:` style, `@me:` medium, `@fl:` flaws, `@la:` language, `@so:` source, `@us:` usage tags, `@ai:` AI usage tags, `@bu:` bucket, and `@ta:` for plain tags. The full name works too (`@creator:`). Only the first colon ends the type; any after it belong to the tag's namespaces.
 - There is one place to add and remove tags, for every type. Typing `@` suggests the types; after the colon the suggestions are that type's tags.
+- Tags put on and taken off there change nothing until they are saved: they wait, shown as they will be, a tag to be put on standing out and one to be taken off struck through, and each can be called off. They are saved with the Save button or with Shift and Enter, which also takes in a tag still typed in the box. Closing the window with changes waiting asks first; the Discard button drops them without asking.
 - The same goes for searching: `@us:wallpaper` finds that usage tag, `@us:*` everything with a usage tag. There is no other way to search tags by type.
 - No tag can start with `@`.
 - `@` is also how other things are told apart from plain tags. `@trashed` is the first: a state rather than a tag.
