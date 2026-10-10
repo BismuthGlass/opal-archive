@@ -38,7 +38,7 @@ use tokio::{
 };
 
 use crate::{
-    AppState,
+    AppState, collections,
     entities::{self, COLLECTIONS, SOURCE_URLS},
     error::ApiError,
     files,
@@ -164,7 +164,7 @@ struct Item {
     source_url: Option<String>,
     /// What its files are part of on the site, as a thread: kept as a
     /// collection of theirs, where a set would group them too much.
-    collection: Option<String>,
+    collection: Option<Part>,
     /// Its files, in order, in the folder the script was given.
     #[serde(default)]
     files: Vec<PathBuf>,
@@ -182,6 +182,59 @@ struct Item {
     set: Option<Whole>,
 }
 
+/// What a downloader says something is part of: the collection's name, or
+/// the name with what the site says of the collection itself.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Part {
+    Name(String),
+    Described {
+        /// Its name, which is what tells it from every other.
+        id: String,
+        /// Its address on the site, kept as its source URL.
+        url: Option<String>,
+        /// Given to it if it has none.
+        title: Option<String>,
+        description: Option<String>,
+    },
+}
+
+impl Part {
+    /// The collection's name, and with it kept what the site says of the
+    /// collection, where it says anything. Nothing the user wrote of it is
+    /// written over.
+    fn note(&self, conn: &Connection) -> rusqlite::Result<Option<String>> {
+        let text = |text: &Option<String>| {
+            let text = text.as_deref().map(str::trim);
+            text.filter(|text| !text.is_empty()).map(str::to_string)
+        };
+        let (name, url, title, description) = match self {
+            Part::Name(name) => (name, None, None, None),
+            Part::Described {
+                id,
+                url,
+                title,
+                description,
+            } => (id, text(url), text(title), text(description)),
+        };
+        let name = name.trim();
+        if name.is_empty() {
+            return Ok(None);
+        }
+        // An address that is not one is passed over, as a tag that is not.
+        if let Some(url) = url.and_then(|url| entities::source_url(&url).ok()) {
+            collections::add_to_list(conn, name, collections::SOURCE_URLS, &url)?;
+        }
+        if let Some(title) = title {
+            collections::fill(conn, name, "title", &title)?;
+        }
+        if let Some(description) = description {
+            collections::fill(conn, name, "description", &description)?;
+        }
+        Ok(Some(name.to_string()))
+    }
+}
+
 /// A set a downloader asks for, to hold the files of one post.
 #[derive(Deserialize)]
 struct Whole {
@@ -194,7 +247,7 @@ struct Whole {
     title: Option<String>,
     description: Option<String>,
     /// What it is part of on the site, kept as a collection of its own.
-    collection: Option<String>,
+    collection: Option<Part>,
     /// Tags for its files, by field, besides the source and the tab's.
     #[serde(default)]
     tags: BaseTags,
@@ -1006,7 +1059,9 @@ impl Download {
             if let Some(url) = text(&whole.url) {
                 sets::add_to_list(&tx, set, sets::SOURCE_URLS, &url)?;
             }
-            if let Some(collection) = text(&whole.collection) {
+            if let Some(part) = &whole.collection
+                && let Some(collection) = part.note(&tx)?
+            {
                 sets::add_to_list(&tx, set, sets::COLLECTIONS, &collection)?;
             }
             // None of them may have been free to go in it.
@@ -1028,7 +1083,9 @@ impl Download {
         if let Some(url) = source_url {
             entities::add_to_list(&tx, &tagged, SOURCE_URLS, url)?;
         }
-        if let Some(collection) = text(&item.collection) {
+        if let Some(part) = &item.collection
+            && let Some(collection) = part.note(&tx)?
+        {
             entities::add_to_list(&tx, &tagged, COLLECTIONS, &collection)?;
         }
         let source = [("source".to_string(), self.manifest.source.clone())];

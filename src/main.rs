@@ -2,6 +2,7 @@
 mod api_tests;
 mod archive;
 mod book;
+mod collections;
 mod db;
 mod downloads;
 mod entities;
@@ -72,6 +73,7 @@ fn api() -> Router<AppState> {
         .merge(search::router())
         .merge(entities::router())
         .merge(sets::router())
+        .merge(collections::router())
         .merge(export::router())
         .fallback(|| async { ApiError::NotFound })
 }

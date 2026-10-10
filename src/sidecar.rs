@@ -8,6 +8,7 @@ use serde_json::{Map, Value, json};
 use crate::{
     archive::reason,
     entities::{self, COLLECTIONS, IDENTIFIERS, REFERENCES, SCALARS, SOURCE_URLS},
+    collections,
     query::TAG_FIELDS,
     sets, tags,
 };
@@ -81,6 +82,24 @@ pub fn write_set(conn: &Connection, set: i64) -> rusqlite::Result<Option<(Metada
     whole.insert("metadata_type".into(), json!("set"));
     whole.extend(meta);
     Ok(Some((whole, says)))
+}
+
+/// The sidecar of a collection, if anything is known of it but its name:
+/// one that is its name alone has none, as the files that are part of it
+/// say that name themselves.
+pub fn write_collection(conn: &Connection, name: &str) -> rusqlite::Result<Option<Metadata>> {
+    if !collections::known(conn, name)? {
+        return Ok(None);
+    }
+    let Value::Object(mut meta) = collections::describe(conn, name)? else {
+        return Ok(None);
+    };
+    // The library's own business, as above.
+    meta.remove("files");
+    let mut whole = Map::new();
+    whole.insert("metadata_type".into(), json!("collection"));
+    whole.extend(filled(meta));
+    Ok(Some(whole))
 }
 
 /// The text values of a field that holds a list of them. One by itself is
@@ -306,6 +325,52 @@ pub fn apply_set(
             match value.trim() {
                 "" => problems.push(format!("empty {field}")),
                 value => sets::add_to_list(conn, set, list, value)?,
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Keeps what a collection's sidecar says of it, as `apply_set` does for a
+/// set: its title and description where it has none, and the lists added
+/// to. A sidecar that gives no name is of the collection `otherwise`.
+pub fn apply_collection(
+    conn: &Connection,
+    meta: &Metadata,
+    otherwise: &str,
+    problems: &mut Vec<String>,
+) -> rusqlite::Result<()> {
+    let name = match meta.get("name") {
+        None | Some(Value::Null) => otherwise,
+        Some(Value::String(name)) if !name.trim().is_empty() => name.trim(),
+        Some(_) => {
+            problems.push("`name` must be text".to_string());
+            return Ok(());
+        }
+    };
+    for field in ["title", "description"] {
+        match meta.get(field) {
+            None | Some(Value::Null) => {}
+            Some(Value::String(text)) if text.trim().is_empty() => {}
+            Some(Value::String(text)) => collections::fill(conn, name, field, text.trim())?,
+            Some(_) => problems.push(format!("`{field}` must be text")),
+        }
+    }
+    for url in texts(meta, "source_url", problems) {
+        match entities::source_url(url) {
+            Ok(url) => collections::add_to_list(conn, name, collections::SOURCE_URLS, &url)?,
+            Err(err) => problems.push(reason(err)),
+        }
+    }
+    let plain = [
+        ("identifier", collections::IDENTIFIERS),
+        ("reference", collections::REFERENCES),
+    ];
+    for (field, list) in plain {
+        for value in texts(meta, field, problems) {
+            match value.trim() {
+                "" => problems.push(format!("empty {field}")),
+                value => collections::add_to_list(conn, name, list, value)?,
             }
         }
     }

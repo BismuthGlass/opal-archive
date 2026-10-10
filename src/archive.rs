@@ -12,7 +12,8 @@
 //! names are the file's sets, whatever folder the file is in. A `_set.json`
 //! in a folder says which set the folder is and what is known of it, and
 //! a sidecar that says it is of a set, wherever it is, does so for that
-//! set: the one in the library that has its set ID, or a new one. The
+//! set: the one in the library that has its set ID, or a new one. One that
+//! says it is of a collection gives what it knows of that collection. The
 //! sidecars are not kept either.
 //!
 //! A file can be in several sets, and one the library already had is put
@@ -109,6 +110,8 @@ struct Sidecars {
     folders: HashMap<String, Metadata>,
     /// Those of sets, with where each is.
     sets: Vec<(String, Metadata)>,
+    /// Those of collections, likewise.
+    collections: Vec<(String, Metadata)>,
 }
 
 /// Where the files taken in are to go, once they all are.
@@ -281,6 +284,8 @@ fn read_sidecars(
             sidecars.files.insert(of.to_string(), meta);
         } else if meta.get("metadata_type").and_then(Value::as_str) == Some("set") {
             sidecars.sets.push((path, meta));
+        } else if meta.get("metadata_type").and_then(Value::as_str) == Some("collection") {
+            sidecars.collections.push((path, meta));
         } else {
             fail("a sidecar of no file in the archive");
         }
@@ -396,6 +401,15 @@ fn gather(
         if new {
             placing.made.push(set);
         }
+        unpacked.report(&path, problems);
+    }
+    // What is known of a collection is kept whether or not anything here is
+    // part of it: it is a name, and has nothing to be put in.
+    for (path, meta) in sidecars.collections {
+        let mut problems = Vec::new();
+        let name = path.rsplit('/').next().unwrap_or(&path);
+        let name = name.strip_suffix(".json").unwrap_or(name);
+        sidecar::apply_collection(&tx, &meta, name, &mut problems)?;
         unpacked.report(&path, problems);
     }
     for folder in sidecars.folders.into_keys() {

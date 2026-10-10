@@ -1,6 +1,7 @@
 import { createEffect, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import SetDialog from "./components/SetDialog";
 import SetPanel from "./components/SetPanel";
+import CollectionPanel from "./components/CollectionPanel";
 import ContextMenu, { contextMenuOpen } from "./components/ContextMenu";
 import Grid from "./components/Grid";
 import InboxPanel from "./components/InboxPanel";
@@ -48,6 +49,7 @@ import {
   load,
   open,
   refresh,
+  shownCollection as collectionShown,
   shownSet as setShown,
   showsTrashed,
   stepKey,
@@ -72,6 +74,8 @@ export default function App() {
   const [grouping, setGrouping] = createSignal<number[] | null>(null);
   /** The set on show, described when nothing is selected. */
   const shownSet = () => (selected().size === 0 ? setShown() : undefined);
+  /** The collection on show, likewise. */
+  const shownCollection = () => (selected().size === 0 ? collectionShown() : undefined);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [helpOpen, setHelpOpen] = createSignal(false);
   /** What the tagging hotkey applies to, while the tag editor it opens is up. */
@@ -382,7 +386,9 @@ export default function App() {
                   ? `${plural(selected().size, "item")} selected`
                   : shownSet()
                     ? "This set"
-                    : "Selection"
+                    : shownCollection() !== undefined
+                      ? "This collection"
+                      : "Selection"
               }
               action={
                 <Show when={selected().size > 0}>
@@ -399,7 +405,15 @@ export default function App() {
                   // the set itself.
                   <Show
                     when={shownSet()}
-                    fallback={<p class="hint">Select items to see and edit their metadata.</p>}
+                    fallback={
+                      // As it is about a collection, showing one.
+                      <Show
+                        when={shownCollection()}
+                        fallback={<p class="hint">Select items to see and edit their metadata.</p>}
+                      >
+                        {(name) => <CollectionPanel name={name()} />}
+                      </Show>
+                    }
                   >
                     {(set) => <SetPanel set={set().id} />}
                   </Show>

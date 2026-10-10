@@ -740,6 +740,79 @@ async fn a_set_describes_itself_and_variants_are_grouped() {
 }
 
 #[tokio::test]
+async fn a_collection_is_a_name_until_something_is_known_of_it() {
+    let api = Api::new();
+    let (a, b, c) = (api.file("a.png"), api.file("b.png"), api.file("c.png"));
+    api.edit(&[a], json!({ "add_collection": ["4chan:g:1"] })).await;
+    let set = api.post("/sets", json!({ "files": [b, c] })).await["id"]
+        .as_i64()
+        .unwrap();
+    api.ok("PATCH", &format!("/sets/{set}"), Some(json!({ "add_collection": ["4chan:g:1"] })))
+        .await;
+    let kept = || {
+        let conn = api.state.db.lock().unwrap();
+        conn.query_row("SELECT count(*) FROM collection_info", [], |row| row.get::<_, i64>(0))
+            .unwrap()
+    };
+
+    // It is there to be asked about for being named, with what is part of
+    // it counted, itself or through a set; nothing is kept of it yet.
+    let path = "/collections?name=4chan:g:1";
+    let nothing = json!({
+        "name": "4chan:g:1", "title": null, "description": null, "files": 3,
+        "source_url": [], "identifier": [], "reference": [],
+    });
+    assert_eq!(api.get(path).await, nothing);
+    assert_eq!(api.get("/collections?name=never:named").await["files"], 0);
+    assert_eq!(kept(), 0);
+
+    // Said something of, it is kept, by its name.
+    let changed = api
+        .ok(
+            "PATCH",
+            path,
+            Some(json!({
+                "set": { "title": " A thread ", "description": "Of things" },
+                "add_source_url": ["boards.4chan.org/g/thread/1"],
+                "add_identifier": ["1"],
+                "add_reference": ["see:also"],
+            })),
+        )
+        .await;
+    assert_eq!(
+        changed,
+        json!({
+            "name": "4chan:g:1", "title": "A thread", "description": "Of things", "files": 3,
+            "source_url": ["https://boards.4chan.org/g/thread/1"], "identifier": ["1"],
+            "reference": ["see:also"],
+        })
+    );
+    assert_eq!((api.get(path).await, kept()), (changed, 1));
+    // A change is all or nothing, and only what a collection has can be set.
+    for bad in [
+        json!({ "set": { "title": "New" }, "add_source_url": ["not a url"] }),
+        json!({ "set": { "name": "other" } }),
+        json!({ "add_reference": [" "] }),
+    ] {
+        assert_eq!(api.refused_with("PATCH", path, bad).await, StatusCode::BAD_REQUEST);
+    }
+    assert_eq!(api.refused_with("PATCH", "/collections?name=+", json!({})).await, StatusCode::BAD_REQUEST);
+    assert_eq!(api.get(path).await["title"], "A thread");
+
+    // With nothing known of it any more it is a name again, and no less a
+    // collection for it.
+    let cleared = json!({
+        "set": { "title": "", "description": null },
+        "remove_source_url": ["https://boards.4chan.org/g/thread/1"],
+        "remove_identifier": ["1"],
+        "remove_reference": ["see:also"],
+    });
+    assert_eq!(api.ok("PATCH", path, Some(cleared)).await, nothing);
+    assert_eq!(kept(), 0);
+    assert_eq!(api.found("collection=4chan:g:1").await, [a, b, c]);
+}
+
+#[tokio::test]
 async fn tags_are_defined_described_and_deleted() {
     let api = Api::new();
     let a = api.file("a.png");
@@ -990,7 +1063,7 @@ for n in 1 2; do
   if [ "$n" = 2 ]; then
     part='"set":{"id":"fake#2","url":"'$key'","description":" A pair ","collection":"fake:board:part","tags":{"genre":["Twos"],"nonsense":["x"]}}'
   else
-    part='"collection":" fake:board "'
+    part='"collection":{"id":" fake:board ","url":"example.test/board","title":" Board ","description":""}'
   fi
   more='"title":" Thing '$n' ","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]},'$part
   echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":\"$key\",\"files\":[$files],$more}"
@@ -1174,6 +1247,14 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     // The first said what it is part of, which is kept as its collection.
     assert_eq!(carried(&all, "collection"), [tag("fake:board", 1)]);
     assert_eq!(api.found("collection=fake:board").await, files[..1]);
+    // It said where the collection is and what it is called, which is
+    // kept of the collection itself; the other gave a name and no more.
+    let board = api.get("/collections?name=fake:board").await;
+    assert_eq!(
+        (&board["title"], &board["description"], &board["source_url"], &board["files"]),
+        (&json!("Board"), &Value::Null, &json!(["https://example.test/board"]), &json!(1))
+    );
+    assert_eq!(api.get("/collections?name=fake:board:part").await["source_url"], json!([]));
 
     // The second thing asked for a set of its own: it holds its files in
     // order, under the ID and description given for it. Given no title,
@@ -1210,6 +1291,8 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         )
         .await;
     assert_eq!(forgotten["forgotten"], 1);
+    api.ok("PATCH", "/collections?name=fake:board", Some(json!({ "set": { "title": "My board" } })))
+        .await;
     // A title the user wrote stays when the thing is fetched again. The
     // set is found by its ID, whatever else about it has changed.
     api.edit(&files[1..2], json!({ "set": { "title": "Mine" } }))
@@ -1244,6 +1327,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     api.download(tab, "https://example.test/board").await;
     assert_eq!(api.members(set), [(files[2], Some(1)), (files[1], Some(2))]);
     assert_eq!(api.members(other), [(files[1], Some(0))]);
+    assert_eq!(api.get("/collections?name=fake:board").await["title"], "My board");
     assert_eq!(api.get(&path).await["seen"], 2);
     assert_eq!(
         api.post(&format!("{path}/seen/forget"), json!({})).await["forgotten"],
@@ -1787,6 +1871,9 @@ async fn an_export_carries_metadata_to_another_library() {
         .await;
     from.post("/sets", json!({ "set_id": "pinterest:pin:1", "files": [c, a] })).await;
     from.edit(&[a, d], json!({ "set": { "alt_group_id": "alt:a" } })).await;
+    // Something is known of the collection one of them is part of.
+    let thread = json!({ "set": { "title": "A thread" }, "add_source_url": ["boards.4chan.org/g/thread/1"] });
+    from.ok("PATCH", "/collections?name=4chan:g:1", Some(thread)).await;
 
     let zip_of = async |form: String| {
         let request = Request::builder()
@@ -1816,6 +1903,7 @@ async fn an_export_carries_metadata_to_another_library() {
     assert_eq!(
         names_in(&exported),
         [
+            "4chan_g_1.json",
             "a (2).pdf",
             "a (2).pdf.json",
             "a.pdf",
@@ -1867,6 +1955,15 @@ async fn an_export_carries_metadata_to_another_library() {
             "set_id": "book:series",
             "title": "Series",
             "reference": ["shelf:3"],
+        })
+    );
+    assert_eq!(
+        sidecar("4chan_g_1.json"),
+        json!({
+            "metadata_type": "collection",
+            "name": "4chan:g:1",
+            "title": "A thread",
+            "source_url": ["https://boards.4chan.org/g/thread/1"],
         })
     );
     assert_eq!(
@@ -1949,6 +2046,12 @@ async fn an_export_carries_metadata_to_another_library() {
     let pin = sets[1]["id"].as_i64().unwrap();
     assert_eq!(to.members(pin), [(one("name=c.pdf").await, Some(0)), (first, Some(1))]);
     assert_eq!(to.found("alt_group_id=alt:a").await.len(), 2);
+    // And what was known of the collection.
+    let thread = to.get("/collections?name=4chan:g:1").await;
+    assert_eq!(
+        (&thread["title"], &thread["source_url"], &thread["files"]),
+        (&json!("A thread"), &json!(["https://boards.4chan.org/g/thread/1"]), &json!(1))
+    );
     assert_eq!(to.in_tab(tab).await.len(), 4);
 
     // Sent again, nothing the library has is replaced: what the user has

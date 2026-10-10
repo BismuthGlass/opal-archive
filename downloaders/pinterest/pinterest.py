@@ -67,6 +67,14 @@ def pin_url(pin_id: str) -> str:
     return f"https://www.pinterest.com/pin/{pin_id}/"
 
 
+def collection_of(inside: str) -> dict:
+    """What a pin is part of, with where that is on the site: a board, a
+    section of one, or the pins a user created."""
+    user, *rest = inside.split(":")[1:]
+    path = "/".join([user, *rest]) if rest else f"{user}/_created"
+    return {"id": inside, "url": f"https://www.pinterest.com/{path}/"}
+
+
 def get(url: str, **kwargs) -> requests.Response:
     """GET with retries on rate limiting and transient errors."""
     for attempt in range(6):
@@ -416,9 +424,9 @@ def download() -> int:
                     "description": description,
                 }
                 if inside:
-                    whole["set"]["collection"] = inside
+                    whole["set"]["collection"] = collection_of(inside)
             elif inside:
-                whole["collection"] = inside
+                whole["collection"] = collection_of(inside)
             emit(
                 "item",
                 key=key,

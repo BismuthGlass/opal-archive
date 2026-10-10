@@ -214,7 +214,11 @@ def download() -> int:
 
     # Each file says which thread it is of, and is in no set for it. Thread
     # numbers are a board's own, so the board is part of the collection.
-    collection = f"4chan:{board}:{thread}"
+    # The thread's address is the collection's own.
+    collection = {
+        "id": f"4chan:{board}:{thread}",
+        "url": THREAD.format(board=board, thread=thread),
+    }
 
     todo = []
     for post in posts:

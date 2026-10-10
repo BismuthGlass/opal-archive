@@ -442,6 +442,28 @@ export type SetChanges = Omit<Changes, "add" | "remove">;
 export const createSet = (files: number[], title: string, set_id = "") =>
   request<{ id: number; set_id: string }>("POST", "/sets", { files, title, set_id });
 export const getSet = (id: number) => request<FileSet>("GET", `/sets/${id}`);
+/**
+ * What is known of a collection, by the name files and sets give it. It
+ * may be the name alone: nothing is kept of a collection until something
+ * is said of it.
+ */
+export type Collection = {
+  name: string;
+  title: string | null;
+  description: string | null;
+  /** How many files not in the trash are part of it, themselves or through a set. */
+  files: number;
+  source_url: string[];
+  identifier: string[];
+  reference: string[];
+};
+
+export const getCollection = (name: string) =>
+  request<Collection>("GET", `/collections?${params({ name })}`);
+/** Changes what is known of a collection; the first change is what keeps anything of it. */
+export const changeCollection = (name: string, changes: SetChanges) =>
+  request<Collection>("PATCH", `/collections?${params({ name })}`, changes);
+
 /** The sets whose title or set ID contains the text, for picking one. */
 export const listSets = (q: string) =>
   request<(SetName & { files: number })[]>("GET", `/sets?${params({ q })}`);

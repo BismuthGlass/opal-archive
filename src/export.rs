@@ -2,7 +2,8 @@
 //!
 //! An export is the same zip with the metadata in it too: beside each file
 //! a sidecar, `<name>.json`, and one for each set the files are in that
-//! says something of itself, in the format `schema.md` describes.
+//! says something of itself, and for each collection they are part of that
+//! something is known of, in the format `schema.md` describes.
 //! Uploading the zip to a library gives the files there what the sidecars
 //! say.
 
@@ -64,6 +65,8 @@ enum Entry {
     Sidecar(i64),
     /// The sidecar of a set.
     SetSidecar(i64),
+    /// The sidecar of a collection, by its name.
+    CollectionSidecar(String),
 }
 
 pub fn router() -> Router<AppState> {
@@ -165,6 +168,9 @@ fn write_zip(
             Entry::SetSidecar(set) => sidecar::write_set(&db.lock().unwrap(), set)
                 .map_err(io::Error::other)?
                 .map(|(meta, _)| meta),
+            Entry::CollectionSidecar(name) => {
+                sidecar::write_collection(&db.lock().unwrap(), &name).map_err(io::Error::other)?
+            }
         };
         if let Some(meta) = meta {
             zip.start_file(name, text).map_err(io::Error::other)?;
@@ -200,6 +206,40 @@ fn set_sidecars(
         };
         let name = unique_name(&format!("{name}.json"), false, taken);
         entries.push((name, Entry::SetSidecar(set)));
+    }
+    Ok(entries)
+}
+
+/// The sidecars of the collections the files are part of, themselves or
+/// through a set, each named for the collection. Only a collection of
+/// which something is known has one.
+fn collection_sidecars(
+    conn: &Connection,
+    ids: &str,
+    taken: &mut HashSet<String>,
+) -> rusqlite::Result<Vec<(String, Entry)>> {
+    let mut stmt = conn.prepare(
+        "SELECT i.name FROM collection_info i
+         WHERE i.name IN (
+             SELECT l.value FROM collection l
+             WHERE l.entity_id IN (SELECT value FROM json_each(?1))
+             UNION
+             SELECT l.value FROM set_collection l JOIN set_file sf USING (set_key)
+             WHERE sf.file_id IN (SELECT value FROM json_each(?1))
+         )
+         ORDER BY i.name",
+    )?;
+    let names = stmt
+        .query_map([ids], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<String>>>()?;
+    let mut entries = Vec::new();
+    for collection in names {
+        let name = match safe_name(&collection).as_str() {
+            "" => "collection".to_string(),
+            name => name.to_string(),
+        };
+        let name = unique_name(&format!("{name}.json"), false, taken);
+        entries.push((name, Entry::CollectionSidecar(collection)));
     }
     Ok(entries)
 }
@@ -251,6 +291,7 @@ async fn export(
         }
         if with_sidecars {
             entries.extend(set_sidecars(&conn, &ids, &mut taken)?);
+            entries.extend(collection_sidecars(&conn, &ids, &mut taken)?);
         }
     }
     let db = state.db.clone();

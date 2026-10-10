@@ -16,7 +16,7 @@ Field names are lowercase snake_case.  The TypeScript interfaces below describe 
 
 ```ts
 type ContentRating = "safe" | "risky" | "nsfw";
-type MetadataType = "file" | "set";
+type MetadataType = "file" | "set" | "collection";
 
 // The sidecar of a set.
 interface SetMetadata {
@@ -49,6 +49,24 @@ interface FileSet {
   // Position within the set: files come lowest first, and those
   // without one after them.
   set_index?: number;
+}
+
+// The sidecar of a collection: what is known of it, beyond its name.
+interface CollectionMetadata {
+  metadata_type: "collection";
+
+  // Which collection: the name files and sets give in `collection`.
+  // One with no `name` is of the collection named as the sidecar is,
+  // minus the `.json` extension.
+  name?: string;
+
+  title?: string;
+  description?: string;
+
+  // Where the collection is, as a file's fields of the same names.
+  source_url?: string[];
+  identifier?: string[];
+  reference?: string[];
 }
 
 interface FileMetadata {
@@ -132,7 +150,8 @@ interface FileMetadata {
   // What the file is part of where it came from, as a plain list of
   // strings: a board (`pinterest:someone:a-board`), a thread
   // (`4chan:g:109956993`).  It names, and groups nothing: files that
-  // belong together in an order are a set.
+  // belong together in an order are a set.  A sidecar for the collection
+  // is optional, and says what is known of it.
   collection?: string[];
 
   // Description provided to an AI to identify the file.

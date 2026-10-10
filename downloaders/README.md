@@ -93,6 +93,13 @@ others are found (`collection=4chan:g:109956993`, or
 groups nothing. Start it with the downloader's name and namespace it with
 colons, as a set's `id` below.
 
+In place of the name alone it may be an object, which says something of
+the collection itself as well: `{"id": "4chan:g:109956993", "url":
+"https://…", "title": "…", "description": "…"}`. The `id` is the name; the
+`url` is kept as the collection's source URL, and the title and description
+are given to it if it has none. A set's `collection` may be written either
+way too.
+
 The tags are the manifest's `source`, the ones the user gave the tab, and
 any the item brings itself in `tags`: an object of tag field to values,
 `{"creator": ["Someone"], "tags": ["cat"]}`. A file that already has a tag
