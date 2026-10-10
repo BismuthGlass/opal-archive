@@ -454,8 +454,8 @@ export default function App() {
         <TabBar />
         <button
           class="icon-button"
-          aria-label="Tags"
-          title="Tags: rename, merge and alias"
+          aria-label="Tag manager"
+          title="Tag manager: describe, rename, merge and alias tags"
           onClick={openTagManager}
         >
           <Icon name="label-outline" />

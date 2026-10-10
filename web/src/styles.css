@@ -2450,8 +2450,8 @@ kbd {
   gap: 6px;
   align-items: center;
   width: 100%;
-  min-height: 32px;
-  padding: 3px 8px;
+  min-height: 26px;
+  padding: 2px 8px;
   text-align: left;
   color: var(--text);
   border-radius: 0;
@@ -2462,7 +2462,8 @@ kbd {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.tag-row .chip {
+.tag-row .tag-name {
+  display: block;
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -2507,8 +2508,9 @@ kbd {
   align-items: center;
 }
 
-.tag-details header .chip {
+.tag-details header .tag-name {
   font-size: 15px;
+  font-weight: 600;
 }
 
 .tag-details header input {

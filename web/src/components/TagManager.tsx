@@ -3,7 +3,7 @@ import * as api from "../api";
 import type { TagEntry } from "../api";
 import { errorMessage, fieldLabel, plural } from "../format";
 import { changed } from "../search";
-import { pillStyle, prefixOf, readTag, tagText, typesStarting } from "../tagTypes";
+import { prefixOf, readTag, tagText, tagTextStyle, typesStarting } from "../tagTypes";
 import Icon from "./Icon";
 import Modal from "./Modal";
 
@@ -184,7 +184,7 @@ export default function TagManager(props: {
   };
 
   return (
-    <Modal title="Tags" wide tall onClose={props.onClose}>
+    <Modal title="Tag Manager" wide tall onClose={props.onClose}>
       <div class="tag-manager-bar">
         <input
           type="text"
@@ -225,7 +225,7 @@ export default function TagManager(props: {
             {(type) => (
               <li>
                 <button class="plain tag-row" onClick={() => chooseType(type)}>
-                  <span class="chip tinted type-sample" style={pillStyle(type)}>
+                  <span class="tag-name" style={tagTextStyle(type)}>
                     {fieldLabel(type)}
                   </span>
                   <span class="tag-note">
@@ -244,7 +244,7 @@ export default function TagManager(props: {
               <button class="plain tag-row" onClick={create}>
                 <Icon name="add" />
                 Create
-                <span class="chip tinted type-sample" style={pillStyle(field())}>
+                <span class="tag-name" style={tagTextStyle(field())}>
                   {typed()}
                 </span>
                 <span class="tag-note">Enter</span>
@@ -271,7 +271,7 @@ export default function TagManager(props: {
                   aria-selected={selected() === tag}
                   onClick={() => select(tag)}
                 >
-                  <span class="chip tinted type-sample" style={pillStyle(field())}>
+                  <span class="tag-name" style={tagTextStyle(field())}>
                     {tag.value}
                   </span>
                   <span class="tag-uses" title={`On ${plural(tag.count, "item")}`}>
@@ -307,7 +307,7 @@ export default function TagManager(props: {
                   <Show
                     when={renaming()}
                     fallback={
-                      <span class="chip tinted type-sample" style={pillStyle(field())}>
+                      <span class="tag-name" style={tagTextStyle(field())}>
                         {tag().value}
                       </span>
                     }
