@@ -126,7 +126,7 @@ is on, for a query of several lines).
 | `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed`, `tab` and `collection` too |
 | `GET /entities/{id}`             | Everything about one file or collection                        |
 | `POST /entities/metadata`        | `{ids}` → what those entities have in common                   |
-| `POST /entities/edit`            | `{ids, set, add, remove, add_urls, remove_urls, add_identifier, remove_identifier, add_reference, remove_reference}` → the same edit applied to all. `set` takes `ordered` (true or false) and `collection_id` for collections (an ID another collection has is refused, as is giving one to several); the `_urls`, `_identifier` and `_reference` lists change those plain lists |
+| `POST /entities/edit`            | `{ids, set, add, remove, add_source_url, remove_source_url, add_identifier, remove_identifier, add_reference, remove_reference}` → the same edit applied to all. `set` takes `ordered` (true or false) and `collection_id` for collections (an ID another collection has is refused, as is giving one to several); the `_source_url`, `_identifier` and `_reference` lists change those plain lists |
 | `POST /entities/trash`           | `{ids}` → move to the trash: hidden from searches, nothing removed |
 | `POST /entities/restore`         | `{ids}` → take back out of the trash                           |
 | `POST /entities/delete`          | `{ids}` → delete for good those that are in the trash; files leave storage |

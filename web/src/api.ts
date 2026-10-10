@@ -178,7 +178,7 @@ export type Metadata = {
   /** The identifier of the selected collection: one collection's alone. */
   collection_id: { value: string | null; mixed: boolean };
   tags: Record<string, { value: string; count: number; description: string | null }[]>;
-  source_urls: { value: string; count: number }[];
+  source_url: { value: string; count: number }[];
   identifier: { value: string; count: number }[];
   reference: { value: string; count: number }[];
   memberships: {
@@ -196,8 +196,8 @@ export type Changes = {
   add?: Record<string, string[]>;
   remove?: Record<string, string[]>;
   /** Source URLs, which are a list of their own rather than tags. */
-  add_urls?: string[];
-  remove_urls?: string[];
+  add_source_url?: string[];
+  remove_source_url?: string[];
   /** Identifiers, likewise a list of their own. */
   add_identifier?: string[];
   remove_identifier?: string[];

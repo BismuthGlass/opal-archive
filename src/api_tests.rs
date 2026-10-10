@@ -196,7 +196,7 @@ fn tag(value: &str, count: i64) -> (String, i64) {
 /// The values of one field in a metadata answer, with their counts.
 fn carried(metadata: &Value, field: &str) -> Vec<(String, i64)> {
     let list = match field {
-        "source_urls" | "identifier" | "reference" => &metadata[field],
+        "source_url" | "identifier" | "reference" => &metadata[field],
         _ => &metadata["tags"][field],
     };
     list.as_array()
@@ -282,7 +282,7 @@ async fn an_edit_is_all_or_nothing() {
     .await;
     api.refused(
         "/entities/edit",
-        json!({ "ids": [a], "add": { "tags": ["fine"] }, "add_urls": ["javascript:alert(1)"] }),
+        json!({ "ids": [a], "add": { "tags": ["fine"] }, "add_source_url": ["javascript:alert(1)"] }),
     )
     .await;
     api.refused(
@@ -334,18 +334,18 @@ async fn links_identifiers_and_references_are_plain_lists() {
     api.edit(
         &[a, b],
         json!({
-            "add_urls": ["example.com/a"],
+            "add_source_url": ["example.com/a"],
             "add_identifier": [" isbn-1 "],
             "add_reference": [" ref-1 "],
         }),
     )
     .await;
-    api.edit(&[a], json!({ "add_urls": ["http://other.example/"] }))
+    api.edit(&[a], json!({ "add_source_url": ["http://other.example/"] }))
         .await;
 
     let both = api.metadata(&[a, b]).await;
     assert_eq!(
-        carried(&both, "source_urls"),
+        carried(&both, "source_url"),
         [
             tag("http://other.example/", 1),
             tag("https://example.com/a", 2)
@@ -361,7 +361,7 @@ async fn links_identifiers_and_references_are_plain_lists() {
     api.edit(
         &[a, b],
         json!({
-            "remove_urls": ["https://example.com/a"],
+            "remove_source_url": ["https://example.com/a"],
             "remove_identifier": ["isbn-1"],
             "remove_reference": ["ref-1"],
         }),
@@ -369,7 +369,7 @@ async fn links_identifiers_and_references_are_plain_lists() {
     .await;
     let both = api.metadata(&[a, b]).await;
     assert_eq!(
-        carried(&both, "source_urls"),
+        carried(&both, "source_url"),
         [tag("http://other.example/", 1)]
     );
     assert_eq!(carried(&both, "identifier"), []);
@@ -1015,7 +1015,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         json!({ "value": null, "mixed": false })
     );
     assert_eq!(
-        carried(&all, "source_urls"),
+        carried(&all, "source_url"),
         [
             tag("https://example.test/item/1", 1),
             tag("https://example.test/item/2", 2)
@@ -1041,7 +1041,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     assert_eq!(carried(&set, "creator"), [tag("Someone", 1)]);
     assert_eq!(carried(&set, "genre"), [tag("Twos", 1)]);
     assert_eq!(
-        carried(&set, "source_urls"),
+        carried(&set, "source_url"),
         [tag("https://example.test/item/2", 1)]
     );
 
@@ -1059,7 +1059,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     assert_eq!(carried(&whole, "source"), [tag("fakesite", 1)]);
     assert_eq!(carried(&whole, "creator"), [tag("Someone", 1)]);
     assert_eq!(
-        carried(&whole, "source_urls"),
+        carried(&whole, "source_url"),
         [tag("https://example.test/board", 1)]
     );
 
@@ -1092,7 +1092,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         .await;
     api.edit(
         &sets,
-        json!({ "remove_urls": ["https://example.test/item/2"] }),
+        json!({ "remove_source_url": ["https://example.test/item/2"] }),
     )
     .await;
     api.post("/entities/trash", json!({ "ids": sets })).await;
@@ -1242,7 +1242,7 @@ async fn a_file_is_fetched_from_its_address() {
     let id = file["id"].as_i64().unwrap();
     assert_eq!(api.in_tab(tab, "file").await, [id]);
     assert_eq!(
-        api.get(&format!("/entities/{id}")).await["source_urls"],
+        api.get(&format!("/entities/{id}")).await["source_url"],
         json!([url])
     );
 

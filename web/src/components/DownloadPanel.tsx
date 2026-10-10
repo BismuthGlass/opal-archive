@@ -249,7 +249,7 @@ export function BaseTags(props: {
         values.map((value) => ({ value, count: 1, description: null })),
       ]),
     ),
-    source_urls: [],
+    source_url: [],
     identifier: [],
     reference: [],
     memberships: [],

@@ -15,7 +15,7 @@ const isWebAddress = (url: string) => /^https?:\/\//i.test(url);
 export const PLAIN_LISTS = [
   {
     field: "identifier",
-    label: "Identifiers",
+    label: "Identifier",
     placeholder: "Add…",
     links: false,
     values: (data: Metadata) => data.identifier,
@@ -24,7 +24,7 @@ export const PLAIN_LISTS = [
   },
   {
     field: "reference",
-    label: "References",
+    label: "Reference",
     placeholder: "Add…",
     links: false,
     values: (data: Metadata) => data.reference,
@@ -33,12 +33,12 @@ export const PLAIN_LISTS = [
   },
   {
     field: "source_url",
-    label: "Source URLs",
+    label: "Source URL",
     placeholder: "Add a link…",
     links: true,
-    values: (data: Metadata) => data.source_urls,
-    add: (value: string): Changes => ({ add_urls: [value] }),
-    remove: (value: string): Changes => ({ remove_urls: [value] }),
+    values: (data: Metadata) => data.source_url,
+    add: (value: string): Changes => ({ add_source_url: [value] }),
+    remove: (value: string): Changes => ({ remove_source_url: [value] }),
   },
 ];
 

@@ -55,10 +55,10 @@ struct EditInput {
     remove: BTreeMap<String, Vec<String>>,
     /// Source URLs to attach.
     #[serde(default)]
-    add_urls: Vec<String>,
+    add_source_url: Vec<String>,
     /// Source URLs to detach.
     #[serde(default)]
-    remove_urls: Vec<String>,
+    remove_source_url: Vec<String>,
     /// Identifiers to attach.
     #[serde(default)]
     add_identifier: Vec<String>,
@@ -196,7 +196,7 @@ async fn entity(
     )?;
     result.insert("tags".into(), json!(tags_of(&conn, id)?));
     result.insert(
-        "source_urls".into(),
+        "source_url".into(),
         json!(list_of(&conn, SOURCE_URLS, id)?),
     );
     result.insert(
@@ -361,7 +361,7 @@ async fn metadata(
         "ordered": shared_of_collections::<bool>(&conn, &ids, "ordered")?,
         "collection_id": shared_of_collections::<String>(&conn, &ids, "collection_id")?,
         "tags": counted_tags(&conn, &ids)?,
-        "source_urls": counted(&conn, &ids, SOURCE_URLS)?,
+        "source_url": counted(&conn, &ids, SOURCE_URLS)?,
         "identifier": counted(&conn, &ids, IDENTIFIERS)?,
         "reference": counted(&conn, &ids, REFERENCES)?,
         "memberships": memberships(&conn, &ids)?,
@@ -628,7 +628,7 @@ async fn edit(
     let added = tag_values(&input.add, true)?;
     let removed = tag_values(&input.remove, false)?;
     let added_urls = input
-        .add_urls
+        .add_source_url
         .iter()
         .map(|url| source_url(url))
         .collect::<Result<Vec<_>, _>>()?;
@@ -667,7 +667,7 @@ async fn edit(
         add_to_list(&tx, &ids, SOURCE_URLS, url)?;
     }
     // Removed as written, so one stored before the rules can be taken off.
-    for url in &input.remove_urls {
+    for url in &input.remove_source_url {
         remove_from_list(&tx, &ids, SOURCE_URLS, url.trim())?;
     }
     for value in &added_identifiers {
