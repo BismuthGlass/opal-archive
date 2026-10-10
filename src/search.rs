@@ -40,6 +40,16 @@ struct SearchParams {
     collapse: Option<String>,
 }
 
+/// A set a result is in.
+#[derive(Serialize)]
+struct ItemSet {
+    id: i64,
+    set_id: String,
+    title: Option<String>,
+    /// How many files not in the trash it holds.
+    files: i64,
+}
+
 impl SearchParams {
     fn scope(&self) -> Scope<'_> {
         Scope {
@@ -58,9 +68,8 @@ struct Item {
     media_type: String,
     extension: String,
     length: Option<f64>,
-    /// The set it is in, and how many files not in the trash that holds.
-    set: Option<i64>,
-    set_files: Option<i64>,
+    /// The sets it is in.
+    sets: Vec<ItemSet>,
     /// The group of variants it is one of, and how many files not in the
     /// trash are in it, this one included.
     alt_group_id: Option<String>,
@@ -128,11 +137,15 @@ fn compile(
         }
         (Some((_, Some(set))), _) => {
             in_set = true;
-            compiled.filter = format!("({}) AND f0.set_key = ?", compiled.filter);
+            compiled.filter = format!(
+                "({}) AND e0.id IN (SELECT file_id FROM set_file WHERE set_key = ?)",
+                compiled.filter
+            );
             compiled.filter_params.push(Value::Integer(set));
             if !compiled.sorted {
-                compiled.order = "f0.set_index IS NULL, f0.set_index, e0.id".to_string();
-                compiled.order_params = Vec::new();
+                let index = "(SELECT set_index FROM set_file WHERE set_key = ? AND file_id = e0.id)";
+                compiled.order = format!("{index} IS NULL, {index}, e0.id");
+                compiled.order_params = vec![Value::Integer(set); 2];
             }
         }
         _ => {}
@@ -141,7 +154,8 @@ fn compile(
 }
 
 /// IDs of everything matching `source`, in the query's order. With
-/// `collapse`, a set is listed once, as the first of its files found.
+/// `collapse`, a set is listed once, as the first of its files found: a
+/// file is passed over if a set it is in has been listed already.
 pub fn matching_ids(
     conn: &Connection,
     source: &str,
@@ -152,7 +166,8 @@ pub fn matching_ids(
 ) -> Result<Vec<i64>, ApiError> {
     let (compiled, in_set) = compile(conn, source, seed, scope, include_trashed)?;
     let sql = format!(
-        "SELECT e0.id, f0.set_key FROM {} WHERE {} ORDER BY {}",
+        "SELECT e0.id, (SELECT json_group_array(set_key) FROM set_file WHERE file_id = e0.id)
+         FROM {} WHERE {} ORDER BY {}",
         query::FROM,
         compiled.filter,
         compiled.order
@@ -161,10 +176,16 @@ pub fn matching_ids(
     let mut stmt = conn.prepare(&sql)?;
     let found = stmt
         .query_map(params_from_iter(params), |row| Ok((row.get(0)?, row.get(1)?)))?
-        .collect::<rusqlite::Result<Vec<(i64, Option<i64>)>>>()?;
-    let mut listed = HashSet::new();
-    let ids = found.into_iter().filter_map(|(id, set)| {
-        let again = collapse && !in_set && set.is_some_and(|set| !listed.insert(set));
+        .collect::<rusqlite::Result<Vec<(i64, String)>>>()?;
+    if !collapse || in_set {
+        return Ok(found.into_iter().map(|(id, _)| id).collect());
+    }
+    let mut listed: HashSet<i64> = HashSet::new();
+    let ids = found.into_iter().filter_map(|(id, sets)| {
+        // The table only holds numbers, so this is a list of them.
+        let sets: Vec<i64> = serde_json::from_str(&sets).unwrap_or_default();
+        let again = sets.iter().any(|set| listed.contains(set));
+        listed.extend(sets);
         (!again).then_some(id)
     });
     Ok(ids.collect())
@@ -191,9 +212,7 @@ async fn search(
     )?;
 
     let sql = format!(
-        "SELECT e0.id, e0.title, f0.media_type, f0.extension, f0.length, f0.set_key,
-                (SELECT count(*) FROM file sf JOIN entity se ON se.id = sf.entity_id
-                 WHERE sf.set_key = f0.set_key AND se.trashed = 0),
+        "SELECT e0.id, e0.title, f0.media_type, f0.extension, f0.length,
                 f0.has_thumbnail, f0.hash, e0.trashed, f0.alt_group_id,
                 (SELECT count(*) FROM file vf JOIN entity ve ON ve.id = vf.entity_id
                  WHERE vf.alt_group_id = f0.alt_group_id AND ve.trashed = 0)
@@ -211,27 +230,45 @@ async fn search(
     let mut stmt = conn.prepare(&sql)?;
     let items = stmt
         .query_map(params_from_iter(sql_params), |row| {
-            let set: Option<i64> = row.get(5)?;
-            let has_thumbnail: bool = row.get(7)?;
-            let hash: String = row.get(8)?;
-            let alt_group_id: Option<String> = row.get(10)?;
+            let has_thumbnail: bool = row.get(5)?;
+            let hash: String = row.get(6)?;
+            let alt_group_id: Option<String> = row.get(8)?;
             Ok(Item {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 media_type: row.get(2)?,
                 extension: row.get(3)?,
                 length: row.get(4)?,
-                set,
-                set_files: set.and(row.get(6)?),
-                variants: alt_group_id.as_ref().and(row.get(11)?),
+                sets: Vec::new(),
+                variants: alt_group_id.as_ref().and(row.get(9)?),
                 alt_group_id,
                 has_thumbnail,
                 thumbnail_version: has_thumbnail
                     .then(|| files::thumbnail_version(&hash).to_string()),
-                trashed: row.get(9)?,
+                trashed: row.get(7)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    let mut items = items;
+    let mut sets = conn.prepare(
+        "SELECT s.id, s.set_id, s.title,
+                (SELECT count(*) FROM set_file o JOIN entity oe ON oe.id = o.file_id
+                 WHERE o.set_key = s.id AND oe.trashed = 0)
+         FROM set_file f JOIN file_set s ON s.id = f.set_key
+         WHERE f.file_id = ?1 ORDER BY s.title IS NULL, s.title, s.set_id",
+    )?;
+    for item in &mut items {
+        let found = sets.query_map([item.id], |row| {
+            Ok(ItemSet {
+                id: row.get(0)?,
+                set_id: row.get(1)?,
+                title: row.get(2)?,
+                files: row.get(3)?,
+            })
+        })?;
+        item.sets = found.collect::<rusqlite::Result<_>>()?;
+    }
 
     Ok(Json(
         json!({ "total": total, "offset": offset, "items": items }),

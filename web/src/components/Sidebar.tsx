@@ -429,7 +429,7 @@ function Stars(props: { scalar: Scalar; onChange: (score: number | null) => void
  * "Add field" and its menu of the fields not on show, in groups with a
  * line between them.
  */
-function AddField(props: {
+export function AddField(props: {
   groups: { field: string; label: string }[][];
   onPick: (field: string) => void;
 }) {

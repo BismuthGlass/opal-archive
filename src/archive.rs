@@ -8,15 +8,17 @@
 //! says of each what it was and why.
 //!
 //! A sidecar in it, `<name>.json` beside a file, gives that file its
-//! metadata, as `schema.md` describes and an export writes: the set it
-//! names is the file's set, whatever folder the file is in. A `_set.json`
+//! metadata, as `schema.md` describes and an export writes: the sets it
+//! names are the file's sets, whatever folder the file is in. A `_set.json`
 //! in a folder says which set the folder is and what is known of it, and
 //! a sidecar that says it is of a set, wherever it is, does so for that
 //! set: the one in the library that has its set ID, or a new one. The
 //! sidecars are not kept either.
 //!
-//! A file the library already had, and that is in a set there, stays in
-//! that set.
+//! A file can be in several sets, and one the library already had is put
+//! in the sets the archive names besides those it is in. Only a folder that
+//! does not say which set it is takes none that is in a set already: sent
+//! again, such an archive makes no second set of the same files.
 
 use std::{
     cmp::Ordering,
@@ -118,6 +120,9 @@ struct Placing {
     wanted: Vec<(String, Option<i64>, i64)>,
     /// Files to put in a set the library has.
     placed: Vec<(i64, Option<i64>, i64)>,
+    /// The sets of folders that did not say which set they are: they take
+    /// only files that are in no set.
+    unnamed: HashSet<i64>,
     /// The sets made for this archive.
     made: Vec<i64>,
 }
@@ -353,6 +358,9 @@ fn folder(
     if let Some(meta) = &meta {
         sidecar::apply_set(&conn, set, meta, &mut problems)?;
     }
+    if !meta.as_ref().is_some_and(|meta| meta.contains_key("set_id")) {
+        placing.unnamed.insert(set);
+    }
     if new {
         // Named for the folder, unless its sidecar had a title.
         conn.execute(
@@ -368,7 +376,7 @@ fn folder(
 
 /// What is left to do once the files are in: the sets that have sidecars
 /// of their own are found or made, and every file is put in its set, in
-/// the order the sidecars give. One that is in a set already stays there.
+/// the order the sidecars give.
 fn gather(
     state: &AppState,
     sidecars: Sidecars,
@@ -410,8 +418,17 @@ fn gather(
     placing
         .placed
         .sort_by_key(|(set, index, _)| (*set, index.is_none(), *index));
-    for (set, _, file) in placing.placed {
+    // The named sets first: what they take is then in a set, and not for a
+    // folder that names none.
+    let (unnamed, named): (Vec<_>, Vec<_>) = placing
+        .placed
+        .into_iter()
+        .partition(|(set, ..)| placing.unnamed.contains(set));
+    for (set, _, file) in named {
         sets::add_files(&tx, set, &[file], false)?;
+    }
+    for (set, _, file) in unnamed {
+        sets::add_files(&tx, set, &[file], true)?;
     }
     // One that nothing could be put in is not kept.
     sets::prune(&tx)?;
@@ -516,8 +533,8 @@ async fn upload(
             unpacked.duplicates += 1;
         }
         let path = parts.join("/");
-        // The set its sidecar names, or else its folder's.
-        let mut named = None;
+        // The sets its sidecar names, or else its folder's.
+        let mut named = Vec::new();
         if let Some(meta) = sidecars.files.remove(&path) {
             let mut problems = Vec::new();
             {
@@ -526,16 +543,15 @@ async fn upload(
                 sidecar::apply(&tx, file.id, &meta, new, &mut problems)?;
                 tx.commit()?;
             }
-            named = sidecar::wanted_set(&meta, &mut problems);
+            named = sidecar::wanted_sets(&meta, &mut problems);
             unpacked.report(&format!("{path}.json"), problems);
         }
-        match named {
-            Some((set_id, index)) => placing.wanted.push((set_id, index, file.id)),
-            None if !folders.is_empty() => {
-                let set = folder(&state, &mut placing, &mut sidecars, &mut unpacked, folders)?;
-                placing.placed.push((set, None, file.id));
-            }
-            None => {}
+        if named.is_empty() && !folders.is_empty() {
+            let set = folder(&state, &mut placing, &mut sidecars, &mut unpacked, folders)?;
+            placing.placed.push((set, None, file.id));
+        }
+        for (set_id, index) in named {
+            placing.wanted.push((set_id, index, file.id));
         }
     }
     gather(&state, sidecars, placing, &mut unpacked)?;

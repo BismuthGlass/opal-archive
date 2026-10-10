@@ -183,8 +183,8 @@ fn set_sidecars(
     taken: &mut HashSet<String>,
 ) -> rusqlite::Result<Vec<(String, Entry)>> {
     let mut stmt = conn.prepare(
-        "SELECT DISTINCT s.id, s.set_id FROM file f JOIN file_set s ON s.id = f.set_key
-         WHERE f.entity_id IN (SELECT value FROM json_each(?1)) ORDER BY s.id",
+        "SELECT DISTINCT s.id, s.set_id FROM set_file f JOIN file_set s ON s.id = f.set_key
+         WHERE f.file_id IN (SELECT value FROM json_each(?1)) ORDER BY s.id",
     )?;
     let sets = stmt
         .query_map([ids], |row| Ok((row.get(0)?, row.get(1)?)))?

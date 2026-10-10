@@ -6,10 +6,7 @@ import { tabs } from "../tabs";
 import { showToast } from "../toast";
 import Modal from "./Modal";
 
-/**
- * Puts the given files into a new or an existing set. A file is in one
- * set: those in another leave it.
- */
+/** Puts the given files into a new or an existing set, besides any they are in. */
 export default function SetDialog(props: { ids: number[]; onClose: () => void }) {
   const [mode, setMode] = createSignal<"new" | "existing">("new");
   const [title, setTitle] = createSignal("");
@@ -19,14 +16,9 @@ export default function SetDialog(props: { ids: number[]; onClose: () => void })
   const [error, setError] = createSignal<string | null>(null);
 
   // The sets some of the files are in already: the likeliest ones to want
-  // the rest of them, and the ones the others would leave.
+  // the rest of them.
   const [related] = createResource(async () => (await api.getMetadata(props.ids)).sets);
   const relatedIds = () => new Set((related() ?? []).map((set) => set.id));
-  /** How many of the files are in a set other than the one they are going to. */
-  const leaving = () =>
-    (related() ?? [])
-      .filter((set) => mode() === "new" || set.id !== target())
-      .reduce((sum, set) => sum + set.count, 0);
 
   const [existing] = createResource(
     () => (mode() === "existing" ? filter() : null),
@@ -159,12 +151,6 @@ export default function SetDialog(props: { ids: number[]; onClose: () => void })
           </label>
         </Show>
 
-        <Show when={leaving() > 0}>
-          <p class="hint">
-            {plural(leaving(), "file")} of these {leaving() === 1 ? "is" : "are"} in another set, and
-            will leave it: a file is in one set.
-          </p>
-        </Show>
         <Show when={error()}>
           <p class="form-error" role="alert">
             {error()}

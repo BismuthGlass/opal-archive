@@ -1,5 +1,5 @@
-//! Sets: files that belong together, in an order. A file is in at most one,
-//! and says so itself (`file.set_key`, `file.set_index`). A set is not an
+//! Sets: files that belong together, in an order. A file can be in several:
+//! which, and where in each, is kept in `set_file`. A set is not an
 //! entity: it has no tags and is not searched for, only opened from one of
 //! its files. It has a set ID that tells it from every other, a title, a
 //! description, and the lists that say where it came from.
@@ -133,20 +133,22 @@ pub fn find_or_make(conn: &Connection, set_id: &str) -> rusqlite::Result<(i64, b
 }
 
 /// Puts files in a set, in the order given, after what it holds. Those
-/// already in it stay where they are. One in another set is taken out of
-/// that one if `take` is set, and otherwise left where it is.
-pub fn add_files(conn: &Connection, set: i64, files: &[i64], take: bool) -> rusqlite::Result<()> {
+/// already in it stay where they are. With `free`, only the files that
+/// are in no set at all are put in it.
+pub fn add_files(conn: &Connection, set: i64, files: &[i64], free: bool) -> rusqlite::Result<()> {
     let mut next: i64 = conn.query_row(
-        "SELECT coalesce(max(set_index), -1) + 1 FROM file WHERE set_key = ?1",
+        "SELECT coalesce(max(set_index), -1) + 1 FROM set_file WHERE set_key = ?1",
         [set],
         |row| row.get(0),
     )?;
     let mut put = conn.prepare(
-        "UPDATE file SET set_key = ?1, set_index = ?3
-         WHERE entity_id = ?2 AND (set_key IS NULL OR (?4 AND set_key <> ?1))",
+        "INSERT OR IGNORE INTO set_file (set_key, file_id, set_index)
+         SELECT ?1, entity_id, ?3 FROM file
+         WHERE entity_id = ?2
+           AND NOT (?4 AND EXISTS (SELECT 1 FROM set_file WHERE file_id = ?2))",
     )?;
     for file in files {
-        if put.execute(params![set, file, next, take])? == 1 {
+        if put.execute(params![set, file, next, free])? == 1 {
             next += 1;
         }
     }
@@ -156,8 +158,7 @@ pub fn add_files(conn: &Connection, set: i64, files: &[i64], take: bool) -> rusq
 /// Deletes the sets that hold no file: there is no way left to open one.
 pub fn prune(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute(
-        "DELETE FROM file_set
-         WHERE id NOT IN (SELECT set_key FROM file WHERE set_key IS NOT NULL)",
+        "DELETE FROM file_set WHERE id NOT IN (SELECT set_key FROM set_file)",
         [],
     )?;
     Ok(())
@@ -187,7 +188,7 @@ pub fn describe(conn: &Connection, set: i64) -> rusqlite::Result<Option<Value>> 
     let found = conn
         .query_row(
             "SELECT s.id, s.set_id, s.title, s.description,
-                    (SELECT count(*) FROM file f JOIN entity e ON e.id = f.entity_id
+                    (SELECT count(*) FROM set_file f JOIN entity e ON e.id = f.file_id
                      WHERE f.set_key = s.id AND e.trashed = 0)
              FROM file_set s WHERE s.id = ?1",
             [set],
@@ -250,7 +251,7 @@ async fn list(
     let conn = state.db.lock().unwrap();
     let mut stmt = conn.prepare(
         "SELECT s.id, s.set_id, s.title,
-                (SELECT count(*) FROM file f WHERE f.set_key = s.id)
+                (SELECT count(*) FROM set_file f WHERE f.set_key = s.id)
          FROM file_set s
          WHERE s.title LIKE ?1 ESCAPE '\\' OR s.set_id LIKE ?1 ESCAPE '\\'
          ORDER BY s.title IS NULL, s.title COLLATE NOCASE, s.set_id COLLATE NOCASE LIMIT ?2",
@@ -269,7 +270,7 @@ async fn list(
     Ok(Json(json!(sets)))
 }
 
-/// Makes a set of the files given. Any of them in another set leave it.
+/// Makes a set of the files given.
 async fn create(
     State(state): State<AppState>,
     Json(input): Json<NewSet>,
@@ -289,16 +290,15 @@ async fn create(
         params![set_id, text(&input.title)],
     )?;
     let id = tx.last_insert_rowid();
-    add_files(&tx, id, &input.files, true)?;
+    add_files(&tx, id, &input.files, false)?;
     let held: bool = tx.query_row(
-        "SELECT EXISTS (SELECT 1 FROM file WHERE set_key = ?1)",
+        "SELECT EXISTS (SELECT 1 FROM set_file WHERE set_key = ?1)",
         [id],
         |row| row.get(0),
     )?;
     if !held {
         return Err(ApiError::bad_request("a set is made of at least one file"));
     }
-    prune(&tx)?;
     tx.commit()?;
     Ok((StatusCode::CREATED, Json(json!({ "id": id, "set_id": set_id }))))
 }
@@ -380,8 +380,8 @@ async fn dissolve(
     }
 }
 
-/// Puts files in the set, taking them out of any other, or takes them out
-/// of it. A set left with none is gone.
+/// Puts files in the set, or takes them out of it. A set left with none is
+/// gone.
 async fn change_files(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -391,14 +391,14 @@ async fn change_files(
     let tx = conn.transaction()?;
     exists(&tx, id)?;
     tx.execute(
-        "UPDATE file SET set_key = NULL, set_index = NULL
-         WHERE set_key = ?1 AND entity_id IN (SELECT value FROM json_each(?2))",
+        "DELETE FROM set_file
+         WHERE set_key = ?1 AND file_id IN (SELECT value FROM json_each(?2))",
         params![id, ids_json(&input.remove)],
     )?;
-    add_files(&tx, id, &input.add, true)?;
+    add_files(&tx, id, &input.add, false)?;
     prune(&tx)?;
     let count: i64 = tx.query_row(
-        "SELECT count(*) FROM file WHERE set_key = ?1",
+        "SELECT count(*) FROM set_file WHERE set_key = ?1",
         [id],
         |row| row.get(0),
     )?;
@@ -418,8 +418,8 @@ async fn set_order(
     exists(&tx, id)?;
     let rest = {
         let mut stmt = tx.prepare(
-            "SELECT entity_id FROM file WHERE set_key = ?1
-             ORDER BY set_index IS NULL, set_index, entity_id",
+            "SELECT file_id FROM set_file WHERE set_key = ?1
+             ORDER BY set_index IS NULL, set_index, file_id",
         )?;
         stmt.query_map([id], |row| row.get::<_, i64>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?
@@ -431,7 +431,7 @@ async fn set_order(
         .chain(rest.iter().filter(|file| !listed.contains(file)));
     for (index, file) in order.enumerate() {
         tx.execute(
-            "UPDATE file SET set_index = ?1 WHERE set_key = ?2 AND entity_id = ?3",
+            "UPDATE set_file SET set_index = ?1 WHERE set_key = ?2 AND file_id = ?3",
             params![index as i64, id, file],
         )?;
     }

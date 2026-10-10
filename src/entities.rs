@@ -152,22 +152,22 @@ pub fn file_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value
     .optional()
 }
 
-/// The set a file is in, if it is in one, and where in it.
-pub fn set_of(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
-    conn.query_row(
+/// The sets a file is in, and where in each.
+pub fn sets_of_file(conn: &Connection, id: i64) -> rusqlite::Result<Vec<Value>> {
+    let mut stmt = conn.prepare(
         "SELECT s.id, s.set_id, s.title, f.set_index
-         FROM file f JOIN file_set s ON s.id = f.set_key WHERE f.entity_id = ?1",
-        [id],
-        |row| {
-            Ok(json!({
-                "id": row.get::<_, i64>(0)?,
-                "set_id": row.get::<_, String>(1)?,
-                "title": row.get::<_, Option<String>>(2)?,
-                "index": row.get::<_, Option<i64>>(3)?,
-            }))
-        },
-    )
-    .optional()
+         FROM set_file f JOIN file_set s ON s.id = f.set_key
+         WHERE f.file_id = ?1 ORDER BY s.title IS NULL, s.title, s.set_id",
+    )?;
+    stmt.query_map([id], |row| {
+        Ok(json!({
+            "id": row.get::<_, i64>(0)?,
+            "set_id": row.get::<_, String>(1)?,
+            "title": row.get::<_, Option<String>>(2)?,
+            "index": row.get::<_, Option<i64>>(3)?,
+        }))
+    })?
+    .collect()
 }
 
 /// Everything known about one entity.
@@ -203,7 +203,7 @@ async fn entity(
     );
     result.insert("reference".into(), json!(list_of(&conn, REFERENCES, id)?));
     result.insert("file".into(), json!(file_details(&conn, id)?));
-    result.insert("set".into(), json!(set_of(&conn, id)?));
+    result.insert("sets".into(), json!(sets_of_file(&conn, id)?));
     Ok(Json(Value::Object(result)))
 }
 
@@ -287,8 +287,8 @@ fn counted_tags(conn: &Connection, ids: &str) -> rusqlite::Result<BTreeMap<Strin
 fn sets_of(conn: &Connection, ids: &str) -> rusqlite::Result<Vec<Value>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT s.id, s.set_id, s.title, count(*)
-         FROM file f JOIN file_set s ON s.id = f.set_key
-         WHERE f.entity_id {IN_IDS} GROUP BY s.id ORDER BY s.title, s.set_id"
+         FROM set_file f JOIN file_set s ON s.id = f.set_key
+         WHERE f.file_id {IN_IDS} GROUP BY s.id ORDER BY s.title IS NULL, s.title, s.set_id"
     ))?;
     stmt.query_map([ids], |row| {
         Ok(json!({

@@ -4,11 +4,11 @@ This file describes the metastasis v2.0 format for media file metadata.  It is t
 
 Metadata is stored as a JSON object in a sidecar file with the same path as the media file, but with a `.json` extension appended.  The sidecar file for `file.png` is `file.png.json`.
 
-Files that belong together are a set.  A file says which set it is in with `set_id`, and where in it with `set_index`; it is in at most one.  That is all a set needs: files that give the same `set_id` are in the same set, and no other file has to exist for it.
+Files that belong together are a set.  A file lists the sets it is in under `sets`, each by its `set_id`, with where in it the file comes as `set_index`; it can be in several.  That is all a set needs: files that give the same `set_id` are in the same set, and no other file has to exist for it.
 
 A set may say something of itself as well: a title, a description, where it came from.  That goes in a sidecar of its own, which says so with `metadata_type: "set"` and may be anywhere.  It is conventionally named for the set ID (`pinterest_pin_123.json` for `pinterest:pin:123`), but it is its `set_id` field that says which set it is of; one with no `set_id` is of the set named as the sidecar is, minus the `.json` extension.  A set has no tags and none of the fields that describe a work: those are its files'.
 
-A directory can be a set.  Its files, those directly in it, are in the set of the directory unless their own sidecars name another.  A `_set.json` file in the directory is that set's sidecar: it gives the set its `set_id` and whatever else is known of it.
+A directory can be a set.  Its files, those directly in it, are in the set of the directory unless their own sidecars name sets.  A `_set.json` file in the directory is that set's sidecar: it gives the set its `set_id` and whatever else is known of it.
 
 Files that are variants of each other (another crop, another resolution, an edit) share an `alt_group_id`.  A group is the ID alone: nothing else is said of it.
 
@@ -39,6 +39,17 @@ interface SetMetadata {
   reference?: string[];
 }
 
+// A set a file is in.
+interface FileSet {
+  // Which set.  A sidecar for the set is optional, and it's valid to
+  // simply use `set_id` to tie files together.
+  set_id: string;
+
+  // Position within the set: files come lowest first, and those
+  // without one after them.
+  set_index?: number;
+}
+
 interface FileMetadata {
   // Defines what this metadata file describes.
   // If omited, the type is "file".
@@ -54,12 +65,12 @@ interface FileMetadata {
   // Title of the work.
   title?: string;
 
-  // The set the file is in.  A sidecar for the set is optional, and
-  // it's valid to simply use `set_id` to tie files together.
-  set_id?: string;
+  // The sets the file is in.
+  sets?: FileSet[];
 
-  // Position within the set: files come lowest first, and those
-  // without one after them.
+  // A file in one set may name it here instead, as one of `sets`
+  // is written.  Both are read; `sets` is what is written.
+  set_id?: string;
   set_index?: number;
 
   // What the file shares with the files it is a variant of.
@@ -158,6 +169,6 @@ The library has no custom fields: a field not listed here is ignored when a side
 
 ## Changes
 
-v2.0: collections are gone.  A file is in at most one set, which it names with `set_id` and `set_index` in place of the `collection` list, and variants share an `alt_group_id` in place of a collection of that type.  A set's own sidecar has `metadata_type: "set"` and only a title, a description and the lists that say where it came from; it has no type, no tags, and cannot be in another set.  A directory's is `_set.json`, formerly `_collection.json`.  `collection_id`, `collection_type` and `ordered` are gone: a set is always in the order its files give.
+v2.0: collections are gone.  A file lists the sets it is in under `sets`, each with its `set_id` and `set_index`, in place of the `collection` list, and variants share an `alt_group_id` in place of a collection of that type.  A set's own sidecar has `metadata_type: "set"` and only a title, a description and the lists that say where it came from; it has no type, no tags, and cannot be in another set.  A directory's is `_set.json`, formerly `_collection.json`.  `collection_id`, `collection_type` and `ordered` are gone: a set is always in the order its files give.
 
 v1.1: a collection says what it is itself, with `collection_type` and `ordered`, and need not have a `collection_id`; `date_added` is a date and time; `media_type`, `size` and `original_name` are added to the file attributes; `ai_content` is gone, a `medium` tag saying it instead; unknown fields are ignored rather than preserved, and unknown values are refused rather than only warned about.

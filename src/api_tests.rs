@@ -173,13 +173,18 @@ impl Api {
             .collect()
     }
 
+    /// The sets a file says it is in, as its details give them.
+    async fn sets_of(&self, file: i64) -> Value {
+        self.get(&format!("/entities/{file}")).await["sets"].clone()
+    }
+
     /// The files of a set, in its order, each with its index.
     fn members(&self, set: i64) -> Vec<(i64, Option<i64>)> {
         let conn = self.state.db.lock().unwrap();
         let mut stmt = conn
             .prepare(
-                "SELECT entity_id, set_index FROM file WHERE set_key = ?1
-                 ORDER BY set_index IS NULL, set_index, entity_id",
+                "SELECT file_id, set_index FROM set_file WHERE set_key = ?1
+                 ORDER BY set_index IS NULL, set_index, file_id",
             )
             .unwrap();
         stmt.query_map([set], |row| Ok((row.get(0)?, row.get(1)?)))
@@ -466,8 +471,8 @@ async fn sets_hold_files_in_order() {
     );
     // Its files say which set they are in, and are found by it.
     assert_eq!(
-        api.get(&format!("/entities/{a}")).await["set"],
-        json!({ "id": set, "set_id": set_id, "title": "Mine", "index": 1 })
+        api.sets_of(a).await,
+        json!([{ "id": set, "set_id": set_id, "title": "Mine", "index": 1 }])
     );
     assert_eq!(api.found(&format!("set_id={set_id}")).await, [a, b, c]);
     assert_eq!(
@@ -536,21 +541,41 @@ async fn sets_hold_files_in_order() {
         [(b, Some(0)), (d, Some(1)), (c, Some(2)), (a, Some(3))]
     );
 
-    // A file is in one set: put in another, it leaves the first.
+    // A file can be in several sets, with a place of its own in each, and
+    // a result says which.
     let other = api
         .post("/sets", json!({ "set_id": " site:post:1 ", "files": [b] }))
         .await;
     assert_eq!(other["set_id"], "site:post:1");
     let other = other["id"].as_i64().unwrap();
-    assert_eq!(api.members(set).len(), 3);
+    assert_eq!(api.members(set).len(), 4);
     assert_eq!(api.members(other), [(b, Some(0))]);
+    assert_eq!(
+        api.sets_of(b).await,
+        json!([
+            { "id": set, "set_id": set_id, "title": "Mine", "index": 0 },
+            { "id": other, "set_id": "site:post:1", "title": null, "index": 0 },
+        ])
+    );
+    assert_eq!(api.found("set_id=site:post:1").await, [b]);
+    assert_eq!(
+        api.get(&format!("/search?q=id%3D{b}")).await["items"][0]["sets"],
+        json!([
+            { "id": set, "set_id": set_id, "title": "Mine", "files": 4 },
+            { "id": other, "set_id": "site:post:1", "title": null, "files": 1 },
+        ])
+    );
+    // Listed once, a set is passed over if a file of it has stood for
+    // another set already.
+    assert_eq!(collapsed("sort%3Did").await, [a]);
+    assert_eq!(collapsed(&format!("sort%3Did+-id%3D{a}")).await, [b]);
 
     // Sets are listed for picking one, by what they are called.
     let listed = api.get("/sets").await;
     assert_eq!(
         listed,
         json!([
-            { "id": set, "set_id": set_id, "title": "Mine", "files": 3 },
+            { "id": set, "set_id": set_id, "title": "Mine", "files": 4 },
             { "id": other, "set_id": "site:post:1", "title": null, "files": 1 },
         ])
     );
@@ -580,7 +605,7 @@ async fn sets_hold_files_in_order() {
         api.call("GET", &format!("/sets/{other}"), None).await.0,
         StatusCode::NOT_FOUND
     );
-    assert_eq!(api.get(&format!("/entities/{b}")).await["set"], Value::Null);
+    assert_eq!(api.sets_of(b).await.as_array().unwrap().len(), 1);
     let (status, _) = api.call("DELETE", &format!("/sets/{set}"), None).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(api.found("has=set_id").await, [] as [i64; 0]);
@@ -1129,12 +1154,12 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     // order, under the ID and description given for it. Given no title,
     // it has none: its ID is not its title. The tags given for it are its
     // files'.
-    let set = api.get(&format!("/entities/{}", files[1])).await["set"].clone();
+    let sets = api.sets_of(files[1]).await;
     assert_eq!(
-        set,
-        json!({ "id": set["id"], "set_id": "fake#2", "title": null, "index": 0 })
+        sets,
+        json!([{ "id": sets[0]["id"], "set_id": "fake#2", "title": null, "index": 0 }])
     );
-    let set = set["id"].as_i64().unwrap();
+    let set = sets[0]["id"].as_i64().unwrap();
     assert_eq!(api.members(set), [(files[1], Some(0)), (files[2], Some(1))]);
     assert_eq!(api.found("set_id=fake#2").await, files[1..]);
     assert_eq!(carried(&all, "genre"), [tag("Twos", 2)]);
@@ -1180,9 +1205,10 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         (&json!("A pair of mine"), &json!("Two"))
     );
 
-    // A file that is in a set stays in it, though it is downloaded again
-    // as part of something else.
-    let other = api.post("/sets", json!({ "files": [files[2]] })).await["id"]
+    // A file taken out of the set is put back in it, after the rest, when
+    // the thing is fetched again, whatever other set it is in by then.
+    api.post(&format!("/sets/{set}/files"), json!({ "remove": [files[1]] })).await;
+    let other = api.post("/sets", json!({ "files": [files[1]] })).await["id"]
         .as_i64()
         .unwrap();
     api.post(
@@ -1191,8 +1217,8 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     )
     .await;
     api.download(tab, "https://example.test/board").await;
-    assert_eq!(api.members(set), [(files[1], Some(0))]);
-    assert_eq!(api.members(other), [(files[2], Some(0))]);
+    assert_eq!(api.members(set), [(files[2], Some(1)), (files[1], Some(2))]);
+    assert_eq!(api.members(other), [(files[1], Some(0))]);
     assert_eq!(api.get(&path).await["seen"], 2);
     assert_eq!(
         api.post(&format!("{path}/seen/forget"), json!({})).await["forgotten"],
@@ -1656,7 +1682,7 @@ async fn a_zip_is_unpacked_into_files_and_sets() {
     // before 10. What is at the top is in no set.
     let set_of = async |query: &str| {
         let file = api.found(query).await[0];
-        api.get(&format!("/entities/{file}")).await["set"].clone()
+        api.sets_of(file).await[0].clone()
     };
     let inside = |set: &Value| {
         let files = api.members(set["id"].as_i64().unwrap());
@@ -1726,13 +1752,14 @@ async fn an_export_carries_metadata_to_another_library() {
         .unwrap()
         .execute("UPDATE entity SET date_added = '2020-01-02T03:04:05Z' WHERE id = ?1", [a])
         .unwrap();
-    // Two of them are a set that says something of itself, one is in a
-    // set that says nothing, and two are variants of each other.
+    // Two of them are a set that says something of itself, one of those
+    // and another are in a set that says nothing, and two are variants of
+    // each other.
     let series = json!({ "set_id": "book:series", "title": "Series", "files": [b, a] });
     let series = from.post("/sets", series).await["id"].as_i64().unwrap();
     from.ok("PATCH", &format!("/sets/{series}"), Some(json!({ "add_reference": ["shelf:3"] })))
         .await;
-    from.post("/sets", json!({ "set_id": "pinterest:pin:1", "files": [c] })).await;
+    from.post("/sets", json!({ "set_id": "pinterest:pin:1", "files": [c, a] })).await;
     from.edit(&[a, d], json!({ "set": { "alt_group_id": "alt:a" } })).await;
 
     let zip_of = async |form: String| {
@@ -1794,8 +1821,10 @@ async fn an_export_carries_metadata_to_another_library() {
             "source_url": ["https://example.com/a"],
             "identifier": ["site:1"],
             "reference": ["4chan:g:1"],
-            "set_id": "book:series",
-            "set_index": 1,
+            "sets": [
+                { "set_id": "book:series", "set_index": 1 },
+                { "set_id": "pinterest:pin:1", "set_index": 1 },
+            ],
             "alt_group_id": "alt:a",
             "hash": format!("{a:064x}"),
             "extension": "png",
@@ -1813,7 +1842,10 @@ async fn an_export_carries_metadata_to_another_library() {
             "reference": ["shelf:3"],
         })
     );
-    assert_eq!(sidecar("c.pdf.json")["set_id"], "pinterest:pin:1");
+    assert_eq!(
+        sidecar("c.pdf.json")["sets"],
+        json!([{ "set_id": "pinterest:pin:1", "set_index": 0 }])
+    );
     // The files can be named otherwise: by title where they have one, by
     // hash, or by nothing at all. The sidecar still has the name each had.
     assert_eq!(
@@ -1875,15 +1907,19 @@ async fn an_export_carries_metadata_to_another_library() {
     // The sets are as they were: the one in its order, with what it said
     // of itself, and the other with its ID alone. So are the variants.
     let second = one("name=b.pdf").await;
-    let series = to.get(&format!("/entities/{first}")).await["set"].clone();
+    let sets = to.sets_of(first).await;
     assert_eq!(
-        series,
-        json!({ "id": series["id"], "set_id": "book:series", "title": "Series", "index": 1 })
+        sets,
+        json!([
+            { "id": sets[0]["id"], "set_id": "book:series", "title": "Series", "index": 1 },
+            { "id": sets[1]["id"], "set_id": "pinterest:pin:1", "title": null, "index": 1 },
+        ])
     );
-    let series = series["id"].as_i64().unwrap();
+    let series = sets[0]["id"].as_i64().unwrap();
     assert_eq!(to.members(series), [(second, Some(0)), (first, Some(1))]);
     assert_eq!(to.get(&format!("/sets/{series}")).await["reference"], json!(["shelf:3"]));
-    assert_eq!(to.found("set_id=pinterest:pin:1").await, [one("name=c.pdf").await]);
+    let pin = sets[1]["id"].as_i64().unwrap();
+    assert_eq!(to.members(pin), [(one("name=c.pdf").await, Some(0)), (first, Some(1))]);
     assert_eq!(to.found("alt_group_id=alt:a").await.len(), 2);
     assert_eq!(to.in_tab(tab).await.len(), 4);
 
@@ -1899,7 +1935,7 @@ async fn an_export_carries_metadata_to_another_library() {
     );
     let entity = to.get(&format!("/entities/{first}")).await;
     assert_eq!((&entity["title"], &entity["score"]), (&json!("Mine"), &json!(6)));
-    assert_eq!(entity["set"]["title"], "My series");
+    assert_eq!(entity["sets"][0]["title"], "My series");
     assert_eq!(to.members(series).len(), 2);
 
     // Sidecars written by hand: what can be used of one is, and the rest
@@ -1911,8 +1947,8 @@ async fn an_export_carries_metadata_to_another_library() {
         "score": 9,
         "tags": ["fine", "@not"],
         "genre": "noir",
-        "set_id": "group:1",
-        "set_index": "first",
+        "sets": [{ "set_id": "group:1", "set_index": "first" }, { "index": 2 }],
+        "set_id": "book:1",
         "alt_group_id": " pair:1 ",
         "anything_else": { "is": "ignored" },
     });
@@ -1942,7 +1978,10 @@ async fn an_export_carries_metadata_to_another_library() {
     assert_eq!(failed, ["broken.pdf.json", "stray.json", "x.pdf.json", "Empty/_set.json"]);
     let reason = unpacked["failures"][2]["reason"].as_str().unwrap();
     assert!(
-        reason.contains("`score`") && reason.contains("@not") && reason.contains("`set_index`"),
+        reason.contains("`score`")
+            && reason.contains("@not")
+            && reason.contains("`set_index`")
+            && reason.contains("each of `sets`"),
         "{reason}"
     );
     let loose = one("title=Loose").await;
@@ -1950,11 +1989,17 @@ async fn an_export_carries_metadata_to_another_library() {
     assert_eq!(entity["score"], Value::Null);
     assert_eq!(entity["tags"], json!({ "genre": ["noir"], "tags": ["fine"] }));
     assert_eq!(entity["file"]["alt_group_id"], "pair:1");
-    assert_eq!((&entity["set"]["set_id"], &entity["set"]["title"]), (&json!("group:1"), &json!("Group")));
+    // It is in the set it lists, and in the one it names by itself, which
+    // is the folder's.
+    let named: Vec<_> = entity["sets"].as_array().unwrap().iter().map(|set| &set["set_id"]).collect();
+    assert_eq!(named, ["book:1", "group:1"]);
+    assert_eq!(entity["sets"][1]["title"], "Group");
     let chapter = to.get(&format!("/entities/{}", one("name=1.pdf").await)).await;
     assert_eq!(
-        (&chapter["set"]["set_id"], &chapter["set"]["title"]),
+        (&chapter["sets"][0]["set_id"], &chapter["sets"][0]["title"]),
         (&json!("book:1"), &json!("Chapters"))
     );
-    assert_eq!(to.found("source_url~example.com/book").await, [chapter["id"].as_i64().unwrap()]);
+    let mut book = vec![loose, chapter["id"].as_i64().unwrap()];
+    book.sort();
+    assert_eq!(to.found("source_url~example.com/book").await, book);
 }

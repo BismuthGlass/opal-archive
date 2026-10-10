@@ -67,7 +67,31 @@ SELECT c.entity_id, coalesce(c.collection_id, 'set:' || c.entity_id),
        CASE WHEN e.title IN ('Set', 'Sequence', 'Source Set') THEN NULL ELSE e.title END,
        e.description
 FROM collection c JOIN entity e ON e.id = c.entity_id
-WHERE c.entity_id IN (SELECT collection FROM chosen);
+WHERE c.entity_id IN (
+    SELECT m.collection_id FROM membership m
+    JOIN file f ON f.entity_id = m.member_id
+    JOIN collection held ON held.entity_id = m.collection_id
+    JOIN entity he ON he.id = held.entity_id
+    WHERE held.collection_type IN ('set', 'sequence', 'sourceset') AND he.trashed = 0
+);
+
+-- Which files each set holds, and where in it each comes: a file is in
+-- every set it was directly in.
+CREATE TABLE set_file (
+    set_key   INTEGER NOT NULL REFERENCES file_set (id) ON DELETE CASCADE,
+    file_id   INTEGER NOT NULL REFERENCES file (entity_id) ON DELETE CASCADE,
+    -- Those without follow, in the order of their IDs.
+    set_index INTEGER,
+    PRIMARY KEY (set_key, file_id)
+) STRICT, WITHOUT ROWID;
+
+CREATE INDEX set_file_file ON set_file (file_id);
+
+INSERT INTO set_file (set_key, file_id, set_index)
+SELECT m.collection_id, m.member_id, m.position
+FROM membership m
+JOIN file f ON f.entity_id = m.member_id
+WHERE m.collection_id IN (SELECT id FROM file_set);
 
 INSERT INTO set_source_url (set_key, url)
 SELECT entity_id, url FROM source_url WHERE entity_id IN (SELECT id FROM file_set);

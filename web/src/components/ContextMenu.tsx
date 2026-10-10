@@ -393,7 +393,7 @@ function Menu(props: {
       <li role="none">
         <button
           role="menuitem"
-          title="Put in a set, new or existing. A file is in one set."
+          title="Put in a set, new or existing, besides any they are in"
           onClick={() => {
             close();
             props.onGroup(ids);

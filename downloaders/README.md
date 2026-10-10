@@ -141,8 +141,8 @@ arrive, so no second set is ever made of the same thing. The user is free
 to retitle it or take its source URL off: none of that is looked at again.
 Only if it is gone, or its ID was changed, is a new one made.
 
-A file is in one set. One that is in a set already when it arrives, as the
-same picture posted twice is, stays in the set it is in.
+A file can be in several sets. One that is in another set already when it
+arrives, as the same picture posted twice is, is then in both.
 
 A set is not an entity: it has no tags and is not listed in the tab. Its
 files are, and what the set says of where it came from (its `url`, its

@@ -1,13 +1,20 @@
-import { createResource, createSignal, For, Show } from "solid-js";
+import { createEffect, createResource, createSignal, For, on, Show } from "solid-js";
 import * as api from "../api";
 import type { Changes, FileSet, Metadata } from "../api";
 import { errorMessage, plural } from "../format";
 import { changed, dataVersion } from "../search";
 import { activeTab, inside, leave, openSet, shownSet } from "../tabs";
 import { showToast } from "../toast";
-import Detail from "./Detail";
+import Detail, { isSet } from "./Detail";
 import Modal from "./Modal";
 import PlainList, { PLAIN_LISTS, PlainListRow } from "./PlainList";
+import { AddField } from "./Sidebar";
+
+/** The single-valued fields a set may have or not, in the order they are listed. */
+const SET_FIELDS = [
+  { field: "title", label: "Title", long: false },
+  { field: "description", label: "Description", long: true },
+] as const;
 
 /** A set's lists as the list editors read a selection's: one item with them all. */
 const asSelection = (set: FileSet): Metadata => {
@@ -26,13 +33,21 @@ const asSelection = (set: FileSet): Metadata => {
 
 /**
  * The set on show, for the side panel while nothing in it is selected:
- * what it is called and says of itself, to read and to change. A set has
- * no tags: those are its files'.
+ * what it is called and says of itself, to read and to change. Only what
+ * is set is listed, as for a file: "Add field" brings in one of the rest.
  */
 export default function SetPanel(props: { set: number }) {
   const [error, setError] = createSignal<string | null>(null);
   /** The list open in the modal where its values are added and removed. */
   const [editingList, setEditingList] = createSignal<string | null>(null);
+  /** An unset field picked from "Add field", shown while it is filled in. */
+  const [adding, setAdding] = createSignal<string | null>(null);
+  // A half-added field belongs to the set it began on.
+  createEffect(on(() => props.set, () => setAdding(null), { defer: true }));
+  const pick = (field: string) => {
+    if (PLAIN_LISTS.some((list) => list.field === field)) setEditingList(field);
+    else setAdding(field);
+  };
   const [loaded] = createResource(
     () => [props.set, dataVersion()] as const,
     ([id]) => api.getSet(id).catch(() => undefined),
@@ -50,6 +65,19 @@ export default function SetPanel(props: { set: number }) {
     changed();
   };
   const scalar = (value: string | null) => ({ value, mixed: false });
+  // Once a newly added field's value has been saved and reloaded, the row
+  // shows because it is set, and no longer needs to be held open.
+  let addedSaved = false;
+  createEffect(
+    on(
+      () => loaded.latest,
+      () => {
+        if (addedSaved) setAdding(null);
+        addedSaved = false;
+      },
+      { defer: true },
+    ),
+  );
 
   /** Takes the set apart, once it has been agreed to. Its files stay. */
   const dissolve = async (set: FileSet) => {
@@ -71,17 +99,24 @@ export default function SetPanel(props: { set: number }) {
       {(current) => (
         <>
           <dl class="facts">
-            <Detail
-              label="Title"
-              scalar={scalar(current().title)}
-              onCommit={(title) => apply({ set: { title } })}
-            />
-            <Detail
-              label="Description"
-              scalar={scalar(current().description)}
-              long
-              onCommit={(description) => apply({ set: { description } })}
-            />
+            <For each={SET_FIELDS}>
+              {(detail) => (
+                <Show when={isSet(scalar(current()[detail.field])) || adding() === detail.field}>
+                  <Detail
+                    label={detail.label}
+                    scalar={scalar(current()[detail.field])}
+                    long={detail.long}
+                    startOpen={adding() === detail.field}
+                    onCommit={(value) => apply({ set: { [detail.field]: value } })}
+                    onClose={(saved) => {
+                      if (adding() !== detail.field) return;
+                      if (saved) addedSaved = true;
+                      else setAdding(null);
+                    }}
+                  />
+                </Show>
+              )}
+            </For>
             <Detail
               label="Set ID"
               scalar={scalar(current().set_id)}
@@ -92,21 +127,33 @@ export default function SetPanel(props: { set: number }) {
             <dd>{current().files}</dd>
             <For each={PLAIN_LISTS}>
               {(list) => (
-                <PlainListRow
-                  list={list}
-                  data={asSelection(current())}
-                  apply={apply}
-                  onEdit={() => setEditingList(list.field)}
-                />
+                <Show when={list.values(asSelection(current())).length > 0}>
+                  <PlainListRow
+                    list={list}
+                    data={asSelection(current())}
+                    apply={apply}
+                    onEdit={() => setEditingList(list.field)}
+                  />
+                </Show>
               )}
             </For>
           </dl>
+          <AddField
+            groups={[
+              SET_FIELDS.filter(
+                (detail) => !isSet(scalar(current()[detail.field])) && adding() !== detail.field,
+              ).map(({ field, label }) => ({ field, label })),
+              PLAIN_LISTS.filter((list) => list.values(asSelection(current())).length === 0).map(
+                ({ field, label }) => ({ field, label }),
+              ),
+            ]}
+            onPick={pick}
+          />
           <Show when={error()}>
             <p class="form-error" role="alert">
               {error()}
             </p>
           </Show>
-          <p class="hint">A set has no tags of its own. Select its files to tag them.</p>
           <div class="panel-actions">
             <Show when={activeTab()?.set?.id !== current().id}>
               <button title="Open this set in a tab of its own" onClick={() => openSet(current().id)}>

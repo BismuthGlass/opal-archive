@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import { thumbnailUrl } from "../api";
 import type { Item } from "../api";
-import { duration, plural } from "../format";
+import { duration, plural, setName } from "../format";
 import {
   clickSelect,
   dataVersion,
@@ -40,9 +40,12 @@ const PAGE_HOLD = 600;
 const placeholder = (item: Item) =>
   item.extension ? item.extension.toUpperCase() : item.media_type;
 
-/** Whether a result stands for its whole set: in a view that lists a set once. */
-const stands = (item: Item | undefined) =>
-  search.collapsed && item !== undefined && item.set !== null && (item.set_files ?? 0) > 1;
+/**
+ * The set a result stands for, in a view that lists a set once: the first
+ * of its sets that holds more than itself.
+ */
+const stoodFor = (item: Item | undefined) =>
+  search.collapsed ? item?.sets.find((set) => set.files > 1) : undefined;
 
 function badge(item: Item): string | null {
   if (item.length !== null && item.media_type !== "image") return duration(item.length);
@@ -264,7 +267,7 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                 class="tile"
                 classList={{
                   selected: item() !== undefined && selected().has(item()!.id),
-                  stack: stands(item()),
+                  stack: stoodFor(item()) !== undefined,
                   trashed: item()?.trashed ?? false,
                   moving: item() !== undefined && (drag()?.ids.includes(item()!.id) ?? false),
                 }}
@@ -293,7 +296,8 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                   // A file is opened in the viewer; one that stands for its
                   // set is gone into, in this tab.
                   const current = item();
-                  if (current && stands(current)) enter({ id: current.set! });
+                  const set = stoodFor(current);
+                  if (set) enter(set);
                   else if (current) props.onOpen(index);
                 }}
                 onContextMenu={(event) => {
@@ -336,27 +340,26 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                           )}
                         </Show>
                         <span class="badges">
-                          {/* A file of a set says so, unless the set is what
-                              is on show: pressed, the tab goes into the set. */}
-                          <Show when={current().set !== null && current().set !== shownSet()?.id}>
-                            <button
-                              class="badge set-badge"
-                              title={
-                                stands(current())
-                                  ? `The first found of a set of ${plural(current().set_files ?? 0, "file")}: open the set`
-                                  : `In a set of ${plural(current().set_files ?? 0, "file")}: open it`
-                              }
-                              onPointerDown={(event) => event.stopPropagation()}
-                              onDblClick={(event) => event.stopPropagation()}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                enter({ id: current().set! });
-                              }}
-                            >
-                              <Icon name="photo-library-outline" />
-                              {current().set_files}
-                            </button>
-                          </Show>
+                          {/* A file of a set says so, with a badge for each
+                              set it is in but the one on show: pressed, the
+                              tab goes into that set. */}
+                          <For each={current().sets.filter((set) => set.id !== shownSet()?.id)}>
+                            {(set) => (
+                              <button
+                                class="badge set-badge"
+                                title={`In “${setName(set)}”, a set of ${plural(set.files, "file")}: open it`}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onDblClick={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  enter(set);
+                                }}
+                              >
+                                <Icon name="photo-library-outline" />
+                                {set.files}
+                              </button>
+                            )}
+                          </For>
                           {/* So does one that has variants, unless they are
                               what is on show: pressed, the tab shows them. */}
                           <Show

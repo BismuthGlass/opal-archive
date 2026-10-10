@@ -45,10 +45,15 @@ pub fn write(conn: &Connection, id: i64) -> rusqlite::Result<Metadata> {
     for list in [SOURCE_URLS, IDENTIFIERS, REFERENCES] {
         meta.insert(list.0.into(), json!(entities::list_of(conn, list, id)?));
     }
-    if let Some(set) = entities::set_of(conn, id)? {
-        meta.insert("set_id".into(), set["set_id"].clone());
-        meta.insert("set_index".into(), set["index"].clone());
-    }
+    let sets = entities::sets_of_file(conn, id)?.into_iter().map(|set| {
+        let mut within = Map::new();
+        within.insert("set_id".into(), set["set_id"].clone());
+        if !set["index"].is_null() {
+            within.insert("set_index".into(), set["index"].clone());
+        }
+        Value::Object(within)
+    });
+    meta.insert("sets".into(), Value::Array(sets.collect()));
     // What it is as a file; the flags that are the library's own business
     // stay out.
     if let Some(Value::Object(detail)) = entities::file_details(conn, id)? {
@@ -97,8 +102,8 @@ fn texts<'a>(meta: &'a Metadata, field: &str, problems: &mut Vec<String>) -> Vec
 /// and references are added to what it has; a field that holds one value
 /// is only filled in where the file has none. What only the library
 /// decides (when it was added, the name of the file) is taken from the
-/// sidecar for a file that is `new`, and left alone otherwise. Which set
-/// it is in is for `wanted_set`.
+/// sidecar for a file that is `new`, and left alone otherwise. Which sets
+/// it is in is for `wanted_sets`.
 /// What the file itself says (its hash, its size, its dimensions) is never
 /// read from a sidecar. Each thing in it that could not be used is added
 /// to `problems`, and the rest still is.
@@ -199,9 +204,10 @@ pub fn apply(
     Ok(())
 }
 
-/// A set ID a sidecar gives, as it is kept.
-fn set_id(meta: &Metadata, problems: &mut Vec<String>) -> Option<String> {
-    match meta.get("set_id") {
+/// A set ID a sidecar gives, as it is kept. `within` is the sidecar, or one
+/// of the sets a file's sidecar lists.
+fn set_id(within: &Metadata, problems: &mut Vec<String>) -> Option<String> {
+    match within.get("set_id") {
         None | Some(Value::Null) => None,
         Some(Value::String(id)) => Some(id.trim().to_string()).filter(|id| !id.is_empty()),
         Some(_) => {
@@ -211,18 +217,43 @@ fn set_id(meta: &Metadata, problems: &mut Vec<String>) -> Option<String> {
     }
 }
 
-/// The set a file's sidecar says it is in, and where in it.
-pub fn wanted_set(meta: &Metadata, problems: &mut Vec<String>) -> Option<(String, Option<i64>)> {
-    let set = set_id(meta, problems)?;
-    let index = match meta.get("set_index") {
-        None | Some(Value::Null) => None,
-        Some(index) if index.is_i64() => index.as_i64(),
-        Some(_) => {
-            problems.push("`set_index` must be a whole number".to_string());
-            None
+/// The sets a file's sidecar says it is in, and where in each: those it
+/// lists in `sets`, and the one it names itself with `set_id` and
+/// `set_index`, which is how a file in one set may say so.
+pub fn wanted_sets(meta: &Metadata, problems: &mut Vec<String>) -> Vec<(String, Option<i64>)> {
+    let listed = match meta.get("sets") {
+        None | Some(Value::Null) => Vec::new(),
+        Some(Value::Array(listed)) => listed.iter().collect(),
+        Some(one) => vec![one],
+    };
+    let mut wanted: Vec<(String, Option<i64>)> = Vec::new();
+    let mut want = |within: &Metadata, required: bool, problems: &mut Vec<String>| {
+        let Some(set) = set_id(within, problems) else {
+            if required {
+                problems.push("each of `sets` must have a `set_id`".to_string());
+            }
+            return;
+        };
+        let index = match within.get("set_index") {
+            None | Some(Value::Null) => None,
+            Some(index) if index.is_i64() => index.as_i64(),
+            Some(_) => {
+                problems.push("`set_index` must be a whole number".to_string());
+                None
+            }
+        };
+        if !wanted.iter().any(|(had, _)| *had == set) {
+            wanted.push((set, index));
         }
     };
-    Some((set, index))
+    for within in listed {
+        match within {
+            Value::Object(within) => want(within, true, problems),
+            _ => problems.push("each of `sets` must have a `set_id`".to_string()),
+        }
+    }
+    want(meta, false, problems);
+    wanted
 }
 
 /// The set a set's sidecar is of: the one in the library that has its set

@@ -1,7 +1,7 @@
 import {
   createEffect,
-  createResource,
   createSignal,
+  For,
   Match,
   on,
   onCleanup,
@@ -9,7 +9,7 @@ import {
   Show,
   Switch,
 } from "solid-js";
-import { contentUrl, getMetadata } from "../api";
+import { contentUrl } from "../api";
 import { setName } from "../format";
 import { ensureRange, itemAt, marks, search } from "../search";
 import { downloadNames, saveSetting, settings } from "../settings";
@@ -44,15 +44,11 @@ export default function Viewer(props: {
 
   createEffect(() => ensureRange(props.index, props.index));
 
-  // The set the result is in, named before its title.
-  const [sets] = createResource(
-    () => (item()?.set == null ? undefined : item()!.id),
-    async (id) => ({ of: id, set: (await getMetadata([id])).sets.at(0) }),
-  );
-  const inSet = () => {
-    const found = sets.error ? undefined : sets();
-    // That of the result shown before is not this one's.
-    return found && found.of === item()?.id ? found.set : undefined;
+  // The sets the result is in, named before its title: the one on show
+  // first.
+  const sets = () => {
+    const here = shownSet()?.id;
+    return [...(item()?.sets ?? [])].sort((a, b) => Number(b.id === here) - Number(a.id === here));
   };
   /** Leaves the viewer for the set, or the variants: the tab goes into them. */
   const goInto = (into: { id: number } | { variants: string }) => {
@@ -148,28 +144,31 @@ export default function Viewer(props: {
     <div class="viewer" role="dialog" aria-modal="true" aria-label="Viewer" onWheel={onWheel}>
       <header>
         <span class="viewer-title">
-          <Show when={inSet()}>
-            {(set) => (
-              <>
-                <span class="viewer-set">
-                  <button
-                    title={
-                      set().id === shownSet()?.id
-                        ? "The set on show: back to it"
-                        : "Go into this set"
-                    }
-                    onClick={() => goInto(set())}
-                  >
-                    {setName(set())}
-                  </button>
-                </span>
-                <Show when={item()?.title}>
-                  <span class="viewer-inside" aria-hidden="true">
-                    ›
-                  </span>
-                </Show>
-              </>
-            )}
+          <Show when={sets().length > 0}>
+            <span class="viewer-set">
+              <For each={sets()}>
+                {(set, index) => (
+                  <>
+                    {index() > 0 ? ", " : ""}
+                    <button
+                      title={
+                        set.id === shownSet()?.id
+                          ? "The set on show: back to it"
+                          : "Go into this set"
+                      }
+                      onClick={() => goInto(set)}
+                    >
+                      {setName(set)}
+                    </button>
+                  </>
+                )}
+              </For>
+            </span>
+            <Show when={item()?.title}>
+              <span class="viewer-inside" aria-hidden="true">
+                ›
+              </span>
+            </Show>
           </Show>
           <span class="viewer-name">{item()?.title ?? ""}</span>
         </span>

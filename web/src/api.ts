@@ -15,7 +15,7 @@ export type Tab = {
 export type SetName = { id: number; set_id: string; title: string | null };
 
 /**
- * Files that belong together, in an order. A file is in at most one, and a
+ * Files that belong together, in an order. A file can be in several, and a
  * set is not searched for: it is opened from one of its files.
  */
 export type FileSet = SetName & {
@@ -139,9 +139,8 @@ export type Item = {
   media_type: MediaType;
   extension: string;
   length: number | null;
-  /** The set it is in, and how many files not in the trash that holds. */
-  set: number | null;
-  set_files: number | null;
+  /** The sets it is in, each with how many files not in the trash it holds. */
+  sets: (SetName & { files: number })[];
   /**
    * The group of variants it is one of, and how many files not in the
    * trash are in it, this one included.
@@ -162,8 +161,8 @@ export type Entity = {
   date_added: string;
   title: string | null;
   file: Omit<FileEntity, "id" | "date_added">;
-  /** The set it is in, and where in it. */
-  set: (SetName & { index: number | null }) | null;
+  /** The sets it is in, and where in each. */
+  sets: (SetName & { index: number | null })[];
 };
 
 export type Scalar = { value: string | number | null; mixed: boolean };
@@ -427,8 +426,8 @@ export const applyAliases = () =>
 export type SetChanges = Omit<Changes, "add" | "remove">;
 
 /**
- * Makes a set of the files, in the order given. Any of them in another set
- * leave it. It is given a set ID if `set_id` is empty.
+ * Makes a set of the files, in the order given. It is given a set ID if
+ * `set_id` is empty.
  */
 export const createSet = (files: number[], title: string, set_id = "") =>
   request<{ id: number; set_id: string }>("POST", "/sets", { files, title, set_id });
@@ -440,7 +439,7 @@ export const changeSet = (id: number, changes: SetChanges) =>
   request<FileSet>("PATCH", `/sets/${id}`, changes);
 /** Takes a set apart: its files stay, in no set. */
 export const deleteSet = (id: number) => request<void>("DELETE", `/sets/${id}`);
-/** Puts files in a set, out of any other, or takes them out of it. */
+/** Puts files in a set, or takes them out of it. */
 export const changeSetFiles = (id: number, changes: { add?: number[]; remove?: number[] }) =>
   request<{ files: number }>("POST", `/sets/${id}/files`, changes);
 /** Sets the order of a set's files. */

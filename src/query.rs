@@ -55,14 +55,13 @@ pub const CONTENT_RATINGS: &[&str] = &["safe", "risky", "nsfw"];
 
 const SORT_KEYS: &[&str] = &[
     "added", "date", "score", "title", "name", "size", "width", "height", "length", "pages", "id",
-    "random", "set_id", "set_index",
+    "random",
 ];
 
-/// The tables a compiled filter refers to: `e0` is the entity, `f0` its
-/// file row, and `s0` the set it is in, if it is in one.
+/// The tables a compiled filter refers to: `e0` is the entity and `f0` its
+/// file row.
 pub const FROM: &str = "entity e0
-    JOIN file f0 ON f0.entity_id = e0.id
-    LEFT JOIN file_set s0 ON s0.id = f0.set_key";
+    JOIN file f0 ON f0.entity_id = e0.id";
 
 #[derive(Debug)]
 pub struct QueryError {
@@ -126,14 +125,16 @@ enum Unit {
     Size,
 }
 
-/// What a field name refers to. Columns are given as table letter (`e`, `f`
-/// or `s`) and column name.
+/// What a field name refers to. Columns are given as table letter (`e` or
+/// `f`) and column name.
 #[derive(Clone, Copy)]
 enum Field {
     /// A plain list of values kept in a table of its own (table, column):
     /// multi-valued like a tag field, but not tags. A file's set has such
-    /// lists too, in `set_<table>`, and what its set has a file has.
+    /// lists too, in `set_<table>`, and what one of its sets has a file has.
     List(&'static str, &'static str),
+    /// A column of the sets a file is in: it matches if any of them does.
+    OfSets(&'static str),
     Text(char, &'static str),
     Choice(char, &'static str, &'static [&'static str]),
     Number(char, &'static str, Unit),
@@ -160,9 +161,8 @@ fn lookup(name: &str) -> Option<Field> {
         "ext" => Field::Text('f', "extension"),
         "hash" => Field::Text('f', "hash"),
         "media" => Field::Choice('f', "media_type", MEDIA_TYPES),
-        "set_id" => Field::Text('s', "set_id"),
-        "set_title" => Field::Text('s', "title"),
-        "set_index" => Field::Number('f', "set_index", Unit::Plain),
+        "set_id" => Field::OfSets("set_id"),
+        "set_title" => Field::OfSets("title"),
         "alt_group_id" => Field::Text('f', "alt_group_id"),
         "score" => Field::Number('e', "score", Unit::Plain),
         "width" => Field::Number('f', "width", Unit::Plain),
@@ -608,10 +608,19 @@ impl Parser<'_> {
                 format!(
                     "(EXISTS (SELECT 1 FROM {table} l
                       WHERE l.entity_id = {} AND {own})
-                      OR EXISTS (SELECT 1 FROM set_{table} l
-                      WHERE l.set_key = {} AND {of_set}))",
+                      OR EXISTS (SELECT 1 FROM set_{table} l JOIN set_file sf USING (set_key)
+                      WHERE sf.file_id = {} AND {of_set}))",
                     self.column('e', "id"),
-                    self.column('f', "set_key")
+                    self.column('e', "id")
+                )
+            }
+            Field::OfSets(column) => {
+                allow(STRING)?;
+                let matches = self.string_match(&format!("s.{column}"), op, &values);
+                format!(
+                    "(EXISTS (SELECT 1 FROM set_file sf JOIN file_set s ON s.id = sf.set_key
+                      WHERE sf.file_id = {} AND {matches}))",
+                    self.column('e', "id")
                 )
             }
             Field::Text(table, column) => {
@@ -942,8 +951,14 @@ impl Parser<'_> {
             Some(Field::List(table, _)) => {
                 format!(
                     "(EXISTS (SELECT 1 FROM {table} l WHERE l.entity_id = {entity})
-                      OR EXISTS (SELECT 1 FROM set_{table} l WHERE l.set_key = {}))",
-                    self.column('f', "set_key")
+                      OR EXISTS (SELECT 1 FROM set_{table} l JOIN set_file sf USING (set_key)
+                      WHERE sf.file_id = {entity}))"
+                )
+            }
+            Some(Field::OfSets(column)) => {
+                format!(
+                    "EXISTS (SELECT 1 FROM set_file sf JOIN file_set s ON s.id = sf.set_key
+                     WHERE sf.file_id = {entity} AND s.{column} IS NOT NULL)"
                 )
             }
             Some(Field::Rating) => set(self.column('e', "content_rating")),
@@ -1003,8 +1018,6 @@ fn order_by(sorts: &[Sort], seed: i64) -> (String, Vec<Value>) {
                 clauses.push("shuffle(e0.id, ?)".to_string());
                 continue;
             }
-            "set_id" => "s0.set_id COLLATE NOCASE",
-            "set_index" => "f0.set_index",
             "added" => "e0.date_added",
             "date" => "e0.date",
             "score" => "e0.score",
@@ -1120,7 +1133,8 @@ mod tests {
                     (3, printf('%064d', 3), 'png', 'image', 2000, 'old.png', 10, 10, NULL, NULL),
                     (5, printf('%064d', 5), 'epub', 'book', 3000, 'book.epub', NULL, NULL, 120, NULL);
              INSERT INTO file_set (id, set_id, title) VALUES (4, 'pinterest:pin:77', 'Pets');
-             UPDATE file SET set_key = 4, set_index = 3 - entity_id WHERE entity_id IN (1, 2);
+             INSERT INTO file_set (id, set_id) VALUES (6, 'book:1');
+             INSERT INTO set_file (set_key, file_id, set_index) VALUES (4, 1, 2), (4, 2, 1), (6, 2, 0);
              UPDATE file SET alt_group_id = 'alt:1' WHERE entity_id IN (2, 5);
              INSERT INTO set_source_url (set_key, url) VALUES (4, 'https://pins.test/pin/77');
              INSERT INTO tag (id, field, value)
@@ -1189,7 +1203,11 @@ mod tests {
         assert_eq!(found(&conn, "set_id=PINTEREST:PIN:*"), [1, 2]);
         assert!(found(&conn, "set_id=pinterest").is_empty());
         assert_eq!(found(&conn, "set_title~pets"), [1, 2]);
-        assert_eq!(found(&conn, "set_index=1"), [2]);
+        // A file is found by any of the sets it is in.
+        assert_eq!(found(&conn, "set_id=book:1"), [2]);
+        assert_eq!(found(&conn, "set_id=book:* set_id=pinterest:*"), [2]);
+        assert_eq!(found(&conn, "-set_id=book:1 has=set_id"), [1]);
+        assert_eq!(found(&conn, "has=set_title"), [1, 2]);
         assert_eq!(found(&conn, "has=set_id"), [1, 2]);
         assert_eq!(found(&conn, "-has=set_id"), [5]);
         assert_eq!(found(&conn, "alt_group_id=alt:1"), [2, 5]);
@@ -1294,8 +1312,6 @@ mod tests {
         // Those without a score come last in either direction.
         assert_eq!(ordered(&conn, "sort=score", &none), [2, 1, 5]);
         assert_eq!(ordered(&conn, "sort=-score", &none), [1, 2, 5]);
-        // A set's files together, in its order; what is in none comes last.
-        assert_eq!(ordered(&conn, "sort=set_id,set_index", &none), [2, 1, 5]);
         assert!(fails("sort=nothing"));
         assert!(!compile("cat", 7, &none, false).unwrap().sorted);
         assert!(compile("cat sort=id", 7, &none, false).unwrap().sorted);

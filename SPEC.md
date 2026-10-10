@@ -50,20 +50,20 @@ Every file records when it was added to the library, as a date and time to the s
 
 ## Sets and variants
 
-There are no collections. A file says itself what it belongs with, in three fields:
+There are no collections. A file says itself what it belongs with:
 
-- `set_id`: the set it is in. A file is in at most one.
-- `set_index`: where in the set it comes. A set is always in an order; files that give no index follow those that do.
+- The sets it is in, each by its `set_id`. A file can be in several.
+- Where in each it comes, its `set_index` there. A set is always in an order; files that give no index follow those that do.
 - `alt_group_id`: the group of variants it is one of. Files that share one are variants of each other. Nothing else is kept about a group: it is the ID alone.
 
 A set is not an entity. It has no tags, score, date or rating, it is not in the trash or out of it, and a search never finds it: it finds files. Tagging is done on the files, once.
 
 - A set is what its files share. Besides its set ID it has a title and a description, and the plain lists that say where it came from: source URLs, identifiers and references. These are kept apart from the files, by set ID, and are not fields of the files.
 - The set ID is what says for certain which set is meant, here and in another library: `pinterest:pin:924574998519073090`. No two sets share one, and every set has one: a set made by hand is given one (`set:3f9a1c2e`), which can be changed. The title is for people and need not be unique. A set with no title is called by its set ID.
-- A file shows the set it is in, by its title, and the set is opened from there: in the side panel, on the file's tile in the gallery (a badge with how many files the set holds), and in the viewer. That is the only way to a set.
+- A file shows the set it is in, by its title, and the set is opened from there: in the side panel, on the file's tile in the gallery (a badge for each set, with how many files it holds), and in the viewer. That is the only way to a set.
 - What a set says of where it came from, its files are found by: `source_url~pinterest.com/pin/123` finds the files of the set with that address as well as files with it themselves. `set_id=`, `set_title~` and `alt_group_id=` find files by their set or group, and `set_id=pinterest:*` by namespace, as a tag is.
-- A view lists every file of a set, each as a file. A setting has it list a set once instead, as one tile that looks like a stack: the first of the set's files that the search finds, in the order of the results, with how many the set holds. Double-clicking that tile goes into the set. Selecting it selects that one file, and acts on it alone: the rest of the set is reached by going in. A view of a set itself always lists all of it.
-- A file put in a set leaves the set it was in. A set left with no file is gone, and so is one taken apart on purpose, whose files stay in the library, in no set. Files in the trash still count as in their set.
+- A view lists every file of a set, each as a file. A setting has it list a set once instead, as one tile that looks like a stack: the first of the set's files that the search finds, in the order of the results, with how many the set holds. A file in several sets stands for all of them, and is itself passed over if one of them has been listed already. Double-clicking that tile goes into the set. Selecting it selects that one file, and acts on it alone: the rest of the set is reached by going in. A view of a set itself always lists all of it.
+- Putting a file in a set leaves it in the sets it was in. A set left with no file is gone, and so is one taken apart on purpose, whose files stay in the library. Files in the trash still count as in their sets.
 - Variants are grouped from a selection, which gives them a group ID made for them, or the one some of them already have. The field can also be written or cleared by hand, like any other.
 - A file that has variants shows how many there are of it, itself included, and they are opened from there as a set is: on its tile (a second badge, in another colour), in the side panel and in the viewer. The tab then shows the variants, and can be gone back out of.
 - Broad piles that a file can be in several of are not sets: they are `bucket` tags.
@@ -75,7 +75,7 @@ Sidecar files are how metadata leaves the library and comes back into it: see Ex
 A selection can be downloaded or exported. A download is the files alone. An export is a zip of the files with their metadata, as sidecars in the format of `schema.md`, for keeping outside the library or for taking to another one.
 
 - Beside each file is its sidecar, `<name>.json`. Two files of one name are told apart in the zip, as in a download (`a.png`, `a (2).png`); the sidecar of each still has the name it had.
-- A file's sidecar says which set it is in, where in it, and which variant group it is of. That is enough to put it back in its set.
+- A file's sidecar says which sets it is in, where in each, and which variant group it is of. That is enough to put it back in its sets.
 - A set that says something of itself (a title, a description, where it came from) has a sidecar of its own as well, named for its set ID: `pinterest_pin_123.json` for `pinterest:pin:123`. A set that is its ID and nothing more has none.
 - What the files are called, downloaded or exported, one or many, is a setting: the name each was uploaded under (the default), its title (its name, where it has no title), its hash, or random letters and digits that say nothing of it. Whichever it is, an export's sidecars have the name each file had, and an import gives it back.
 - The zip is flat: there are no folders in it. What is in which set is said by the sidecars.
@@ -87,8 +87,8 @@ Uploading a zip reads the sidecars in it: this is the import. It works for any z
 - What the file itself says (its hash, size, dimensions, length) is always worked out from the file, never read from a sidecar.
 - A set is the one the library has by that set ID, if it has one: it is added to, and never made twice. Otherwise it is made. A set's own sidecar fills in its title and description where it has none, and adds to its lists.
 - Files are put in a set in the order their sidecars give. In a set the library already had, they follow what was there.
-- A file the library already had, and that is in a set there, stays in that set: an import fills in, and does not move.
-- A folder still becomes a set named for it, of the files directly in it. A `_set.json` in the folder says which set that is and what is known of it. A file whose own sidecar names a set goes in that one, whatever folder it is in.
+- A file is put in every set its sidecar names, besides those the library has it in.
+- A folder still becomes a set named for it, of the files directly in it. A `_set.json` in the folder says which set that is and what is known of it. A file whose own sidecar names sets goes in those, whatever folder it is in. A folder that does not say which set it is takes only files that are in no set yet, so that sending the same zip twice makes no second set of the same files.
 - Every file of the zip is listed in the upload tab.
 - A sidecar is used as far as it can be. A value that is not allowed is left out, and said with the uploads that failed, by the sidecar's name; a field the library has no place for is ignored. A `.json` that is the sidecar of nothing in the zip is said too.
 
@@ -138,7 +138,7 @@ A downloader fetches files from a website straight into the library. Each downlo
 - A downloader has options, set once for every tab and for the inbox, in a window of the settings of all the downloaders: each under its name, with its options and its login, one downloader after the other. An upload tab and the inbox each have a button that opens it. Pinterest has one: whether to go into what is inside (a board's sections, a profile's boards) or take only what sits directly in the board. 4chan has one: whether each file is described with the text of its post. Videos are always downloaded: there is no option to leave them out.
 - Everything downloaded gets the address it came from as a source URL (for Pinterest, the pin's; for 4chan, the post's), and a `source` tag naming the site. That tag is implied. What is downloaded also gets the tags the upload tab gives to everything that arrives in it.
 - What becomes a set is up to the downloader: nothing is grouped unless it asks. It gives the set a set ID, and may give it a title, an address, a description, a reference, and tags, which go to the set's files. The set gets the address as its source URL.
-- The set ID is what a downloaded set is found by: downloading more of the same thing, in any tab, adds to the set that has the ID, and never makes a second. Its title is the user's to change, as is everything else about it. A file that is in a set already, as the same picture posted twice is, stays in the set it is in.
+- The set ID is what a downloaded set is found by: downloading more of the same thing, in any tab, adds to the set that has the ID, and never makes a second. Its title is the user's to change, as is everything else about it. A file that is in another set already, as the same picture posted twice is, is then in both.
 - A Pinterest pin of several images becomes a set holding them in order, with the set ID `pinterest:pin:<number>`, the pin as its source URL and the pin's description.
 - A Pinterest profile stands for the pins its owner created and, with going into what is inside turned on, for all its boards too. Its two tabs have addresses of their own, ending in `_created` and `_saved`, which stand for the one or the other alone. A created pin is given the reference `pinterest:<user>`.
 - What is downloaded from a Pinterest board or section is not put in a set for it: that groups the pins more than is wanted. It is given a reference instead, `pinterest:<user>:<board>`, or `pinterest:<user>:<board>:<section>` for what is in a section: a pin of one image has it on its file, a pin of several on its set. A single pin downloaded by its own address has none.

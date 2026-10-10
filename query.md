@@ -178,9 +178,9 @@ matches. Write `\*` for a literal asterisk.
 `name` is the filename the file was uploaded with, and `ext` its extension
 without the dot.
 
-`set_id` is the ID of the set a file is in, which no two sets share, and
-`set_title` that set's title. A set is not found by itself: these find its
-files. A set ID may be namespaced with colons, as a tag is, and is searched
+`set_id` is the ID of a set a file is in, which no two sets share, and
+`set_title` that set's title. A file can be in several sets, and is found
+by any of them. A set is not found by itself: these find its files. A set ID may be namespaced with colons, as a tag is, and is searched
 the same way:
 
 ```
@@ -199,7 +199,7 @@ that is a variant of something.
 A set has plain lists of its own, of where it came from: `source_url`,
 `identifier` and `reference`. A file is found by its set's as by its own, so
 `source_url~pinterest.com/pin/123` finds every file of the set that has that
-address, and `has=source_url` a file whose set has one.
+address, and `has=source_url` a file one of whose sets has one.
 
 ### Choice fields
 
@@ -211,7 +211,7 @@ Only `=` and `!=`. A value outside the list is an error.
 
 ### Number fields
 
-`score` `width` `height` `pages` `length` `size` `set_index`
+`score` `width` `height` `pages` `length` `size`
 
 ```
 score=5        score>=5       score!=1
@@ -274,8 +274,7 @@ inside parentheses or negations. They are not filters: `cat or dog
 sort=score` sorts the whole result.
 
 Keys: `added` `date` `score` `title` `name` `size` `width` `height` `length`
-`pages` `id` `random`, and `set_id` and `set_index`: `sort=set_id,set_index`
-puts the files of each set together, in the set's order.
+`pages` `id` `random`.
 
 Entities with no value for the key sort last in either direction. The default
 is `sort=-added`. Ties are broken by `id`, in the direction of the first key.

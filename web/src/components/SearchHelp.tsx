@@ -65,7 +65,7 @@ const PARTS: Part[] = [
   },
   {
     title: "Numbers",
-    note: "Fields: score, width, height, pages, length, size, set_index. They take =, !=, <, <=, > and >=.",
+    note: "Fields: score, width, height, pages, length, size. They take =, !=, <, <=, > and >=.",
     rows: [
       ["score>=5", "scored 5 or more"],
       ["score=3..5", "from 3 to 5; ..3 and 3.. leave a side open"],
@@ -94,7 +94,7 @@ const PARTS: Part[] = [
   },
   {
     title: "Sets and variants",
-    note: "A file is in at most one set. A set is not found by itself: its files are, and what a set says of where it came from (source_url, identifier, reference) its files are found by too.",
+    note: "A file can be in several sets. A set is not found by itself: its files are, and what a set says of where it came from (source_url, identifier, reference) its files are found by too.",
     rows: [
       ["set_id=pinterest:pin:123", "the files of that set"],
       ["set_id=pinterest:*", "the files of every set with such an ID"],
@@ -113,13 +113,12 @@ const PARTS: Part[] = [
   },
   {
     title: "Order",
-    note: "Keys: added, date, score, title, name, size, width, height, length, pages, id, random, set_id, set_index. Newest added first if nothing is said.",
+    note: "Keys: added, date, score, title, name, size, width, height, length, pages, id, random. Newest added first if nothing is said.",
     rows: [
       ["sort=score", "lowest score first"],
       ["sort=-score", "highest first"],
       ["sort=-score sort=title", "by score, then by title"],
       ["sort=random", "shuffled"],
-      ["sort=set_id,set_index", "sets together, each in its own order"],
     ],
   },
   {
