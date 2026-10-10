@@ -684,30 +684,32 @@ button.primary {
   border-radius: 5px;
 }
 
-/* A file of a set: how many the set holds, on a badge in the colour sets
-   have, that opens the set. */
+/* A file of a set: a mark in the colour sets have, which opens the set if
+   the file is in one only. */
 .tile .set-badge,
 .tile .variants-badge {
   display: inline-flex;
-  gap: 3px;
   align-items: center;
-  padding: 1px 6px 1px 4px;
-  font-weight: 600;
+  padding: 2px 3px;
   line-height: inherit;
   color: var(--on-set);
-  cursor: pointer;
   background: var(--set);
   border: 0;
 }
 
-/* A file with variants: how many there are of it, on a badge of the colour
-   the page's own actions have, that shows them. */
+.tile button.set-badge,
+.tile .variants-badge {
+  cursor: pointer;
+}
+
+/* A file with variants: a mark of the colour the page's own actions have,
+   that shows them. */
 .tile .variants-badge {
   color: var(--on-accent);
   background: var(--accent);
 }
 
-.tile .set-badge:hover,
+.tile button.set-badge:hover,
 .tile .variants-badge:hover {
   filter: brightness(1.1);
 }

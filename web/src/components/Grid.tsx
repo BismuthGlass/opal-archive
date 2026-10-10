@@ -1,4 +1,15 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+} from "solid-js";
 import { thumbnailUrl } from "../api";
 import type { Item } from "../api";
 import { duration, plural, setName } from "../format";
@@ -46,6 +57,9 @@ const placeholder = (item: Item) =>
  */
 const stoodFor = (item: Item | undefined) =>
   search.collapsed ? item?.sets.find((set) => set.files > 1) : undefined;
+
+/** The sets a result is in, but for the one on show. */
+const otherSets = (item: Item) => item.sets.filter((set) => set.id !== shownSet()?.id);
 
 function badge(item: Item): string | null {
   if (item.length !== null && item.media_type !== "image") return duration(item.length);
@@ -340,26 +354,36 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                           )}
                         </Show>
                         <span class="badges">
-                          {/* A file of a set says so, with a badge for each
-                              set it is in but the one on show: pressed, the
-                              tab goes into that set. */}
-                          <For each={current().sets.filter((set) => set.id !== shownSet()?.id)}>
-                            {(set) => (
-                              <button
+                          {/* A file of a set says so, with one mark however
+                              many sets it is in, unless the only one is the set
+                              on show. In one set, the mark opens it. */}
+                          <Switch>
+                            <Match when={otherSets(current()).length === 1 && otherSets(current())[0]}>
+                              {(set) => (
+                                <button
+                                  class="badge set-badge"
+                                  aria-label="Open its set"
+                                  title={`In the set “${setName(set())}”: open it`}
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                  onDblClick={(event) => event.stopPropagation()}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    enter(set());
+                                  }}
+                                >
+                                  <Icon name="photo-library-outline" />
+                                </button>
+                              )}
+                            </Match>
+                            <Match when={otherSets(current()).length > 1}>
+                              <span
                                 class="badge set-badge"
-                                title={`In “${setName(set)}”, a set of ${plural(set.files, "file")}: open it`}
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onDblClick={(event) => event.stopPropagation()}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  enter(set);
-                                }}
+                                title={`In ${otherSets(current()).length} sets: ${otherSets(current()).map(setName).join(", ")}. Select it to open one from the side panel.`}
                               >
                                 <Icon name="photo-library-outline" />
-                                {set.files}
-                              </button>
-                            )}
-                          </For>
+                              </span>
+                            </Match>
+                          </Switch>
                           {/* So does one that has variants, unless they are
                               what is on show: pressed, the tab shows them. */}
                           <Show
@@ -370,6 +394,7 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                           >
                             <button
                               class="badge variants-badge"
+                              aria-label="Show its variants"
                               title={`One of ${current().variants} variants: show them`}
                               onPointerDown={(event) => event.stopPropagation()}
                               onDblClick={(event) => event.stopPropagation()}
@@ -379,7 +404,6 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                               }}
                             >
                               <Icon name="content-copy-outline" />
-                              {current().variants}
                             </button>
                           </Show>
                           <Show when={badge(current())}>
