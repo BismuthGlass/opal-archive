@@ -13,7 +13,7 @@ import { contentUrl, getMetadata } from "../api";
 import { setName } from "../format";
 import { ensureRange, itemAt, marks, search } from "../search";
 import { downloadNames, saveSetting, settings } from "../settings";
-import { enter, shownSet } from "../tabs";
+import { enter, shownSet, shownVariants } from "../tabs";
 import Icon from "./Icon";
 import { modalOpen } from "./Modal";
 
@@ -54,10 +54,16 @@ export default function Viewer(props: {
     // That of the result shown before is not this one's.
     return found && found.of === item()?.id ? found.set : undefined;
   };
-  /** Leaves the viewer for the set: the tab goes into it. */
-  const goInto = (set: { id: number }) => {
+  /** Leaves the viewer for the set, or the variants: the tab goes into them. */
+  const goInto = (into: { id: number } | { variants: string }) => {
     props.onMove(null);
-    enter(set);
+    enter(into);
+  };
+  /** The result's group of variants, if there are others to show. */
+  const variants = () => {
+    const current = item();
+    const more = (current?.variants ?? 0) > 1 && current?.alt_group_id !== shownVariants();
+    return more ? current!.alt_group_id! : undefined;
   };
 
   const step = (delta: number) => {
@@ -167,6 +173,15 @@ export default function Viewer(props: {
           </Show>
           <span class="viewer-name">{item()?.title ?? ""}</span>
         </span>
+        <Show when={variants()}>
+          {(group) => (
+            <span class="viewer-set">
+              <button title="Show the variants of this, in the tab" onClick={() => goInto({ variants: group() })}>
+                {item()?.variants} variants
+              </button>
+            </span>
+          )}
+        </Show>
         <Show when={item() && marks().get(item()!.id)}>
           {(mark) => <span class={`mark-badge mark-${mark()}`}>Mark {mark()}</span>}
         </Show>

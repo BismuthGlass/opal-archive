@@ -8,12 +8,11 @@ import {
   errorMessage,
   fileSize,
   plural,
-  quoteValue,
   setName,
 } from "../format";
 import { changed, dataVersion, selected } from "../search";
 import { aggregatedTypes, orderedTypes, prefixOf, tagType } from "../tagTypes";
-import { enter, open as openTab, shownSet } from "../tabs";
+import { enter, shownSet, shownVariants } from "../tabs";
 import Detail, { isSet } from "./Detail";
 import Icon from "./Icon";
 import Modal from "./Modal";
@@ -248,15 +247,15 @@ export default function Sidebar(props: {
                         <>
                           <dt>Variants</dt>
                           <dd>
-                            <button
-                              class="link"
-                              title="Search for the files of this variant group, in a new tab"
-                              onClick={() =>
-                                openTab("gallery", `alt_group_id=${quoteValue(group())}`)
-                              }
-                            >
-                              show them
-                            </button>
+                            <Show when={group() !== shownVariants()} fallback="on show">
+                              <button
+                                class="link"
+                                title="Show the files of this variant group, in this tab"
+                                onClick={() => enter({ variants: group() })}
+                              >
+                                show them
+                              </button>
+                            </Show>
                           </dd>
                         </>
                       )}

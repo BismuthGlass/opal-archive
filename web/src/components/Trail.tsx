@@ -1,10 +1,11 @@
 import { For, Show } from "solid-js";
-import { activeTab, inside, leave, openSet, trail } from "../tabs";
-import { setName } from "../format";
+import { activeTab, inside, leave, open, openSet, stepName, trail } from "../tabs";
+import type { Step } from "../tabs";
+import { quoteValue, setName } from "../format";
 import Icon from "./Icon";
 
 /**
- * Goes back out of the set the tab is inside: by one, or to where
+ * Goes back out of the set or group the tab is inside: by one, or to where
  * the trail was `depth` long. The view outside comes back as it was left.
  */
 export function goBack(depth?: number) {
@@ -22,16 +23,23 @@ function outermost(): string {
   return tab.kind === "upload" ? "Uploads" : "Results";
 }
 
+/** Gives what the tab is inside a tab of its own: a set's, or a search for the variants. */
+const openInTab = (step: Step) =>
+  "variants" in step
+    ? open("gallery", `alt_group_id=${quoteValue(step.variants)}`)
+    : openSet(step.id);
+
 /**
- * Above the grid while the tab is inside a set: the way back out, and a
- * way to give the set a tab of its own.
+ * Above the grid while the tab is inside a set or a group of variants: the
+ * way back out, what was gone through to get here, and a way to give this
+ * a tab of its own.
  */
 export default function Trail() {
   return (
     <Show when={inside()}>
       {(current) => (
-        <nav class="trail" aria-label="Sets gone into">
-          <button aria-label="Back" title="Back out of this set (Backspace)" onClick={() => goBack()}>
+        <nav class="trail" aria-label="Gone into">
+          <button aria-label="Back" title="Back out (Backspace)" onClick={() => goBack()}>
             <Icon name="arrow-back" />
             Back
           </button>
@@ -44,18 +52,18 @@ export default function Trail() {
             <For each={trail().slice(0, -1)}>
               {(step, index) => (
                 <li>
-                  <button class="link" title="Back to this set" onClick={() => goBack(index() + 1)}>
-                    {setName(step)}
+                  <button class="link" title="Back to this" onClick={() => goBack(index() + 1)}>
+                    {stepName(step)}
                   </button>
                 </li>
               )}
             </For>
-            <li aria-current="location">{setName(current())}</li>
+            <li aria-current="location">{stepName(current())}</li>
           </ol>
           <button
             class="trail-open"
-            title="Open this set in a tab of its own"
-            onClick={() => openSet(current().id)}
+            title="Open this in a tab of its own"
+            onClick={() => openInTab(current())}
           >
             <Icon name="open-in-new" />
             Open in a tab

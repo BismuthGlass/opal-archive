@@ -49,6 +49,7 @@ import {
   refresh,
   shownSet as setShown,
   showsTrashed,
+  stepKey,
   trail,
 } from "./tabs";
 import Trail, { goBack } from "./components/Trail";
@@ -104,7 +105,7 @@ export default function App() {
         // Inside a set, the view is of its files: one view for each way
         // in, kept apart from the tab's own by a character that cannot be
         // typed.
-        const way = trail().map((step) => step.id).join("/");
+        const way = trail().map(stepKey).join("/");
         // With the trash on show it is another view of the same query.
         const trashed = showsTrashed() ? "\u0002" : "";
         // So it is with sets listed once, which a set itself never is.
@@ -129,7 +130,8 @@ export default function App() {
         shown = { tab: tab.id, inside: !!step, depth: trail().length, stacked };
         if (step) {
           // Not saved with the tab: the trail is the page's alone.
-          runSearch(step.query, null, key, null, step.id, false, entered, showsTrashed());
+          const within = "variants" in step ? { variants: step.variants } : { set: step.id };
+          runSearch(step.query, null, key, null, within, false, entered, showsTrashed());
         } else {
           // Listing the whole library is not done just for opening a tab.
           const wait = tab.kind === "gallery" && tab.query === "" && !asked;

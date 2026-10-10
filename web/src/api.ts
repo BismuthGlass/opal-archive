@@ -142,6 +142,12 @@ export type Item = {
   /** The set it is in, and how many files not in the trash that holds. */
   set: number | null;
   set_files: number | null;
+  /**
+   * The group of variants it is one of, and how many files not in the
+   * trash are in it, this one included.
+   */
+  alt_group_id: string | null;
+  variants: number | null;
   has_thumbnail: boolean;
   /** Which file its thumbnail is of, for its address. */
   thumbnail_version: string | null;
@@ -312,13 +318,16 @@ export const saveTabView = (id: number, view: TabView) =>
 export const orderTabs = (ids: number[]) => request<Tab[]>("PUT", "/tabs/order", { ids });
 export const deleteTab = (id: number) => request<void>("DELETE", `/tabs/${id}`);
 
+/** What a search is kept to within a tab: a set's files, or a group's variants. */
+export type Within = { set: number } | { variants: string };
+
 /**
- * `tab` narrows a search to what an upload or set tab holds, and `set` to
- * the files of a set instead.
+ * `tab` narrows a search to what an upload or set tab holds, and `within`
+ * to the files of a set or the variants of a group instead.
  */
-const scoped = (tab: number | null, set: number | null = null): Record<string, number> => ({
+const scoped = (tab: number | null, within: Within | null = null): Record<string, string | number> => ({
   ...(tab === null ? {} : { tab }),
-  ...(set === null ? {} : { set }),
+  ...(within ?? {}),
 });
 
 export const search = (
@@ -338,7 +347,7 @@ export const searchIds = (
   q: string,
   seed: number,
   tab: number | null,
-  set: number | null = null,
+  within: Within | null = null,
   /** Without this, trashed entities only match a query with `@trashed`. */
   withTrashed = false,
   /** Lists a set once, as the first of its files that the search finds. */
@@ -349,7 +358,7 @@ export const searchIds = (
     `/search/ids?${params({
       q,
       seed,
-      ...scoped(tab, set),
+      ...scoped(tab, within),
       ...(withTrashed ? { trashed: 1 } : {}),
       ...(collapse ? { collapse: 1 } : {}),
     })}`,

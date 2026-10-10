@@ -667,6 +667,21 @@ async fn a_set_describes_itself_and_variants_are_grouped() {
         api.metadata(&[a, b, c]).await["scalars"]["alt_group_id"],
         json!({ "value": group, "mixed": false })
     );
+    // A search can be kept to a group, as it can to a set, and a result
+    // says which group it is of and how many are in it.
+    let variants = format!("/search/ids?q=sort%3D-id&variants={group}&collapse=1");
+    assert_eq!(api.get(&variants).await["ids"], json!([c, b, a]));
+    let page = api.get(&format!("/search?q=id%3D{a},{c}+sort%3Did")).await;
+    assert_eq!(
+        (&page["items"][0]["alt_group_id"], &page["items"][0]["variants"]),
+        (&json!(group), &json!(3))
+    );
+    assert_eq!(page["items"][1]["variants"], 3);
+    api.post("/entities/trash", json!({ "ids": [c] })).await;
+    let page = api.get(&format!("/search?q=id%3D{a},{c}+sort%3Did&trashed=1")).await;
+    assert_eq!(page["items"][0]["variants"], 2);
+    api.post("/entities/restore", json!({ "ids": [c] })).await;
+
     // It is a field like another: set by hand, or cleared.
     api.edit(&[a], json!({ "set": { "alt_group_id": null } })).await;
     api.edit(&[b], json!({ "set": { "alt_group_id": " pair " } })).await;

@@ -65,6 +65,7 @@ A set is not an entity. It has no tags, score, date or rating, it is not in the 
 - A view lists every file of a set, each as a file. A setting has it list a set once instead, as one tile that looks like a stack: the first of the set's files that the search finds, in the order of the results, with how many the set holds. Double-clicking that tile goes into the set. Selecting it selects that one file, and acts on it alone: the rest of the set is reached by going in. A view of a set itself always lists all of it.
 - A file put in a set leaves the set it was in. A set left with no file is gone, and so is one taken apart on purpose, whose files stay in the library, in no set. Files in the trash still count as in their set.
 - Variants are grouped from a selection, which gives them a group ID made for them, or the one some of them already have. The field can also be written or cleared by hand, like any other.
+- A file that has variants shows how many there are of it, itself included, and they are opened from there as a set is: on its tile (a second badge, in another colour), in the side panel and in the viewer. The tab then shows the variants, and can be gone back out of.
 - Broad piles that a file can be in several of are not sets: they are `bucket` tags.
 
 Sidecar files are how metadata leaves the library and comes back into it: see Export and import.
@@ -105,11 +106,11 @@ A row can be saved under a name, to be used again: the + then offers the saved q
 
 The saved queries are a setting. The settings list them, to write, rename, delete and drag into the order they are offered in.
 
-## Going into a set
+## Going into a set, or a file's variants
 
-Pressing the set badge on a file's tile goes into its set, in the same tab: the view becomes the set's files, and a bar above it shows the way back. So does clicking the set in the side panel or in the viewer.
+Pressing the set badge on a file's tile goes into its set, in the same tab: the view becomes the set's files, and a bar above it shows the way back. So does clicking the set in the side panel or in the viewer. A file's variants are gone into the same way, from the variants badge, and the view becomes the files of its group.
 
-- The bar has a back arrow and a button that opens the set in a tab of its own. Backspace goes back.
+- The bar has a back arrow, what was gone through to get here, and a button that opens the set in a tab of its own; for variants, that tab is a search for the group. From a file's variants the tab can go on into the set of one of them, and from a set into a file's variants: any earlier point of the way in can be gone back to directly. Backspace goes back one.
 - Coming back out, the view outside is as it was left: the same results, order and page, scrolled as far, with the same selection.
 - Inside, the search box filters the set, as it does in a set's own tab. The tab's query is untouched and is there again on coming out.
 - A set is shown in its order, and a new order dragged into can be saved from here.

@@ -2,7 +2,15 @@ import { createEffect, createSignal, For, Index, onCleanup, onMount, Show } from
 import { errorMessage } from "../format";
 import { queryLabel, savedQueries, saveQuery } from "../savedQueries";
 import { refresh, search } from "../search";
-import { activeTab, filterInside, inside, setQuery, setShowsTrashed, showsTrashed } from "../tabs";
+import {
+  activeTab,
+  filterInside,
+  inside,
+  setQuery,
+  setShowsTrashed,
+  shownVariants,
+  showsTrashed,
+} from "../tabs";
 import Icon from "./Icon";
 
 /** Writes a term into the search box on show, if there is one. */
@@ -129,8 +137,10 @@ export default function QueryBar() {
   onCleanup(() => document.removeEventListener("keydown", onKeyDown));
 
   const placeholder = () =>
-    inside() || activeTab()?.kind === "set"
-      ? "Filter this set"
+    shownVariants() !== undefined
+      ? "Filter these variants"
+      : inside() || activeTab()?.kind === "set"
+        ? "Filter this set"
       : activeTab()?.kind === "upload"
         ? "Filter these uploads"
         : activeTab()?.kind === "selection"

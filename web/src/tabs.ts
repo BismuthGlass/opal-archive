@@ -56,11 +56,22 @@ export function setShowsTrashed(tab: number, show: boolean) {
   }
 }
 
-/** A set a tab has gone into, and the filter typed while in it. */
-export type Step = api.SetName & { query: string };
+/**
+ * A set a tab has gone into, or a group of variants, and the filter typed
+ * while in it.
+ */
+export type Step = (api.SetName | { variants: string }) & { query: string };
 
-// A tab can go into the set of one of its results, and back out: the way
-// in is its trail. It is kept while the page is open, and not with the tab.
+/** What a step is called. */
+export const stepName = (step: Step) =>
+  "variants" in step ? "Variants" : step.title || step.set_id;
+
+/** What tells a step from any other. */
+export const stepKey = (step: Step) => ("variants" in step ? `v${step.variants}` : `s${step.id}`);
+
+// A tab can go into the set of one of its results, or its variants, and
+// into the set of one of those, and back out: the way in is its trail. It
+// is kept while the page is open, and not with the tab.
 const [trails, setTrails] = createStore<Record<number, Step[]>>({});
 
 // Remembered per browser, like the active tab, so a reload keeps them.
@@ -74,9 +85,14 @@ function saveTrails() {
   }
 }
 
-/** A step into a set as it is now, if the set is still there. */
-async function stepInto(id: number, query: string): Promise<Step | null> {
-  const set = await api.getSet(id).catch(() => null);
+/** A step as it is now, if what it goes into is still there. */
+async function current(
+  step: { id: number } | { variants: string },
+  query: string,
+): Promise<Step | null> {
+  // A group is its ID and nothing more: there is nothing of it to read.
+  if ("variants" in step) return { variants: String(step.variants), query };
+  const set = await api.getSet(step.id).catch(() => null);
   return set && { id: set.id, set_id: set.set_id, title: set.title, query };
 }
 
@@ -94,7 +110,7 @@ async function loadTrails(list: Tab[]) {
   for (const tab of list) {
     const kept: Step[] = [];
     for (const step of stored[tab.id] ?? []) {
-      const now = await stepInto(step.id, String(step.query ?? ""));
+      const now = await current(step, String(step.query ?? ""));
       if (!now) break;
       kept.push(now);
     }
@@ -103,25 +119,36 @@ async function loadTrails(list: Tab[]) {
   saveTrails();
 }
 
-/** The sets the active tab has gone into, outermost first. */
+/** What the active tab has gone into, outermost first. */
 export const trail = (): Step[] => trails[activeId() ?? -1] ?? [];
 
-/** The set the active tab is inside, if it has gone into one. */
+/** The set or group the active tab is inside, if it has gone into one. */
 export const inside = (): Step | undefined => trail().at(-1);
 
 /**
  * The set the active tab shows the files of: the one it has gone into, or
  * failing that the one a set tab is tied to.
  */
-export const shownSet = (): api.SetName | undefined => inside() ?? activeTab()?.set ?? undefined;
+export const shownSet = (): api.SetName | undefined => {
+  const step = inside();
+  if (!step) return activeTab()?.set ?? undefined;
+  return "variants" in step ? undefined : step;
+};
 
-/** Goes into a set, in the active tab. */
-export async function enter(set: { id: number }) {
+/** The group of variants the active tab shows, if it has gone into one. */
+export const shownVariants = (): string | undefined => {
+  const step = inside();
+  return step && "variants" in step ? step.variants : undefined;
+};
+
+/** Goes into a set, or a group of variants, in the active tab. */
+export async function enter(into: { id: number } | { variants: string }) {
   const tab = activeId();
-  // The set on show is already gone into.
-  if (tab === null || shownSet()?.id === set.id) return;
+  // What is on show is already gone into.
+  const here = "variants" in into ? shownVariants() === into.variants : shownSet()?.id === into.id;
+  if (tab === null || here) return;
   await guard(async () => {
-    const step = await stepInto(set.id, "");
+    const step = await current(into, "");
     if (!step) throw new Error("That set is gone.");
     if (activeId() !== tab) return;
     setTrails(tab, [...(trails[tab] ?? []), step]);
@@ -130,8 +157,8 @@ export async function enter(set: { id: number }) {
 }
 
 /**
- * Goes back out: one set, or to where the trail was `depth` long.
- * Resolves to the set that was left for what is outside it.
+ * Goes back out: one step, or to where the trail was `depth` long.
+ * Resolves to what was left for what is outside it.
  */
 export function leave(depth = trail().length - 1): Step | undefined {
   const tab = activeId();
@@ -142,7 +169,7 @@ export function leave(depth = trail().length - 1): Step | undefined {
   return steps[depth];
 }
 
-/** Filters the set the active tab is inside. */
+/** Filters the set or group the active tab is inside. */
 export function filterInside(query: string) {
   const tab = activeId();
   const depth = trail().length - 1;
@@ -270,12 +297,12 @@ async function followTrail() {
   if (tab === null || steps.length === 0) return;
   const kept: Step[] = [];
   for (const step of steps) {
-    const now = await stepInto(step.id, step.query);
+    const now = await current(step, step.query);
     if (!now) break;
     kept.push(now);
   }
   if (activeId() === tab && trails[tab]?.length === steps.length) {
-    setTrails(tab, reconcile(kept, { key: "id" }));
+    setTrails(tab, reconcile(kept, { merge: true }));
     saveTrails();
   }
 }

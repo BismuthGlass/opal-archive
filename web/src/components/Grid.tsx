@@ -19,7 +19,7 @@ import {
   setScrollTo,
 } from "../search";
 import { stats } from "../stats";
-import { activeTab, enter, inside, shownSet } from "../tabs";
+import { activeTab, enter, inside, shownSet, shownVariants } from "../tabs";
 import { openContextMenu } from "./ContextMenu";
 import Icon from "./Icon";
 
@@ -64,6 +64,7 @@ const EMPTY: Record<string, string> = {
   inbox: "Nothing in the inbox.",
   selection: "Nothing of what this tab was opened on is left.",
   set: "This set is empty.",
+  variants: "None of these variants is left.",
 };
 
 export default function Grid(props: { onOpen: (index: number) => void }) {
@@ -243,7 +244,9 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
             : search.idle
               ? "Press Search to list the whole library, or type a query first."
               : inside() && search.query === ""
-                ? EMPTY.set
+                ? shownVariants() !== undefined
+                  ? EMPTY.variants
+                  : EMPTY.set
                 : search.scope !== null && search.query === ""
                   ? EMPTY[activeTab()?.kind ?? "upload"]
                   : "No results."}
@@ -352,6 +355,28 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                             >
                               <Icon name="photo-library-outline" />
                               {current().set_files}
+                            </button>
+                          </Show>
+                          {/* So does one that has variants, unless they are
+                              what is on show: pressed, the tab shows them. */}
+                          <Show
+                            when={
+                              (current().variants ?? 0) > 1 &&
+                              current().alt_group_id !== shownVariants()
+                            }
+                          >
+                            <button
+                              class="badge variants-badge"
+                              title={`One of ${current().variants} variants: show them`}
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onDblClick={(event) => event.stopPropagation()}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                enter({ variants: current().alt_group_id! });
+                              }}
+                            >
+                              <Icon name="content-copy-outline" />
+                              {current().variants}
                             </button>
                           </Show>
                           <Show when={badge(current())}>

@@ -3,7 +3,7 @@ import * as api from "../api";
 import type { Changes, FileSet, Metadata } from "../api";
 import { errorMessage, plural } from "../format";
 import { changed, dataVersion } from "../search";
-import { activeTab, inside, leave, openSet } from "../tabs";
+import { activeTab, inside, leave, openSet, shownSet } from "../tabs";
 import { showToast } from "../toast";
 import Detail from "./Detail";
 import Modal from "./Modal";
@@ -59,7 +59,7 @@ export default function SetPanel(props: { set: number }) {
       await api.deleteSet(set.id);
       showToast("Took the set apart");
       // Out of it, if the tab had gone into it; its own tab goes with it.
-      if (inside()?.id === set.id) leave();
+      if (inside() && shownSet()?.id === set.id) leave();
     } catch (err) {
       setError(errorMessage(err));
     }

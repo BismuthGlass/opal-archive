@@ -13,8 +13,8 @@ const [search, setSearch] = createStore({
   query: "",
   /** Upload tab the results are limited to, if any. */
   scope: null as number | null,
-  /** Set whose files the results are limited to instead, if any. */
-  set: null as number | null,
+  /** The set or group of variants the results are limited to instead, if any. */
+  within: null as api.Within | null,
   /**
    * Whether what is in the trash is listed along with the rest, without
    * the query having to say `@trashed`.
@@ -278,7 +278,7 @@ function calculate() {
     search.query,
     seed,
     search.scope,
-    search.set,
+    search.within,
     search.trashed,
     search.collapsed,
   );
@@ -307,8 +307,8 @@ export function runSearch(
   scope: number | null = null,
   key = "",
   tab: number | null = null,
-  /** A set to show the files of, in place of what `scope` holds. */
-  set: number | null = null,
+  /** A set or group of variants to show, in place of what `scope` holds. */
+  within: api.Within | null = null,
   /** Whether to wait to be asked, if the tab has no view of this query yet. */
   wait = false,
   /**
@@ -343,7 +343,7 @@ export function runSearch(
   setSearch({
     query,
     scope,
-    set,
+    within,
     trashed,
     collapsed,
     page: left?.page ?? 0,

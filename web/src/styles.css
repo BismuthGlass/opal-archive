@@ -686,7 +686,8 @@ button.primary {
 
 /* A file of a set: how many the set holds, on a badge in the colour sets
    have, that opens the set. */
-.tile .set-badge {
+.tile .set-badge,
+.tile .variants-badge {
   display: inline-flex;
   gap: 3px;
   align-items: center;
@@ -699,11 +700,20 @@ button.primary {
   border: 0;
 }
 
-.tile .set-badge:hover {
+/* A file with variants: how many there are of it, on a badge of the colour
+   the page's own actions have, that shows them. */
+.tile .variants-badge {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.tile .set-badge:hover,
+.tile .variants-badge:hover {
   filter: brightness(1.1);
 }
 
-.tile .set-badge svg {
+.tile .set-badge svg,
+.tile .variants-badge svg {
   width: 13px;
   height: 13px;
 }
