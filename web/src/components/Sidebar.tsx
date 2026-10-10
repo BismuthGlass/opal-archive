@@ -12,7 +12,7 @@ import {
 } from "../format";
 import { changed, dataVersion, selected } from "../search";
 import { aggregatedTypes, orderedTypes, prefixOf, tagType } from "../tagTypes";
-import { enter, shownSet, shownVariants } from "../tabs";
+import { enter, shownVariants } from "../tabs";
 import Detail, { isSet } from "./Detail";
 import Icon from "./Icon";
 import Modal from "./Modal";
@@ -371,11 +371,7 @@ function SetsRow(props: { data: Metadata; onAdd: () => void; onLeave: (set: numb
               <li>
                 <button
                   class="link link-text"
-                  title={
-                    set.id === shownSet()?.id
-                      ? `${setName(set)}: the set on show`
-                      : `${setName(set)} (${set.set_id}): open this set`
-                  }
+                  data-tip={setName(set)}
                   onClick={() => enter(set)}
                 >
                   {setName(set)}

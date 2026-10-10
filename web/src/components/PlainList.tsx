@@ -105,7 +105,7 @@ function Values(props: ListProps) {
                   // stay in front of what was opened.
                   when={!props.editing && "open" in props.list && props.list.open}
                   fallback={
-                    <span class="link-text" title={entry.value}>
+                    <span class="link-text" data-tip={entry.value}>
                       {entry.value}
                     </span>
                   }
@@ -113,7 +113,7 @@ function Values(props: ListProps) {
                   {(open) => (
                     <button
                       class="link link-text"
-                      title={`${entry.value}: show what is part of it`}
+                      data-tip={entry.value}
                       onClick={() => open()(entry.value)}
                     >
                       {entry.value}
@@ -127,7 +127,7 @@ function Values(props: ListProps) {
                 href={entry.value}
                 target="_blank"
                 rel="noopener noreferrer"
-                title={entry.value}
+                data-tip={entry.value}
               >
                 {entry.value}
               </a>

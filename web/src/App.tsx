@@ -15,6 +15,7 @@ import TabBar from "./components/TabBar";
 import { TagsModal } from "./components/Tags";
 import TagEditor from "./components/TagEditor";
 import Toolbar from "./components/Toolbar";
+import Tooltip from "./components/Tooltip";
 import { DropTarget, UploadBox } from "./components/Upload";
 import Viewer from "./components/Viewer";
 import * as api from "./api";
@@ -455,6 +456,7 @@ export default function App() {
         )}
       </Show>
       <ContextMenu onPreview={view} onGroup={setGrouping} />
+      <Tooltip />
       <Show when={toast()}>
         <div class="toast" role="status">
           {toast()}

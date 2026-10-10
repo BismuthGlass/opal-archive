@@ -2181,6 +2181,25 @@ kbd {
   pointer-events: none;
 }
 
+/* The page's own tooltip: what something says in full, under it. A
+   popover, which the browser would otherwise centre in the window. */
+.tooltip {
+  position: fixed;
+  inset: auto;
+  max-width: min(480px, calc(100vw - 8px));
+  margin: 0;
+  padding: 3px 8px;
+  overflow: visible;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #fff;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  background: rgb(20 20 20 / 0.92);
+  border: 0;
+  border-radius: 5px;
+}
+
 /* Tag editor. */
 
 .tag-editor-bar {
