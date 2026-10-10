@@ -54,7 +54,7 @@ pub fn write(conn: &Connection, id: i64) -> rusqlite::Result<Metadata> {
         }
         Value::Object(within)
     });
-    meta.insert("sets".into(), Value::Array(sets.collect()));
+    meta.insert("set".into(), Value::Array(sets.collect()));
     // What it is as a file; the flags that are the library's own business
     // stay out.
     if let Some(Value::Object(detail)) = entities::file_details(conn, id)? {
@@ -223,8 +223,8 @@ pub fn apply(
     Ok(())
 }
 
-/// A set ID a sidecar gives, as it is kept. `within` is the sidecar, or one
-/// of the sets a file's sidecar lists.
+/// A set ID a sidecar gives, as it is kept. `within` is a set's sidecar, or
+/// one of the sets a file's sidecar lists.
 fn set_id(within: &Metadata, problems: &mut Vec<String>) -> Option<String> {
     match within.get("set_id") {
         None | Some(Value::Null) => None,
@@ -236,42 +236,38 @@ fn set_id(within: &Metadata, problems: &mut Vec<String>) -> Option<String> {
     }
 }
 
-/// The sets a file's sidecar says it is in, and where in each: those it
-/// lists in `sets`, and the one it names itself with `set_id` and
-/// `set_index`, which is how a file in one set may say so.
+/// The sets a file's sidecar says it is in, under `set`, and where in
+/// each. A set is given by its ID alone, as a collection is by its name,
+/// or with the file's place in it.
 pub fn wanted_sets(meta: &Metadata, problems: &mut Vec<String>) -> Vec<(String, Option<i64>)> {
-    let listed = match meta.get("sets") {
+    let listed = match meta.get("set") {
         None | Some(Value::Null) => Vec::new(),
         Some(Value::Array(listed)) => listed.iter().collect(),
         Some(one) => vec![one],
     };
     let mut wanted: Vec<(String, Option<i64>)> = Vec::new();
-    let mut want = |within: &Metadata, required: bool, problems: &mut Vec<String>| {
-        let Some(set) = set_id(within, problems) else {
-            if required {
-                problems.push("each of `sets` must have a `set_id`".to_string());
-            }
-            return;
-        };
-        let index = match within.get("set_index") {
-            None | Some(Value::Null) => None,
-            Some(index) if index.is_i64() => index.as_i64(),
-            Some(_) => {
-                problems.push("`set_index` must be a whole number".to_string());
-                None
-            }
-        };
-        if !wanted.iter().any(|(had, _)| *had == set) {
-            wanted.push((set, index));
-        }
-    };
     for within in listed {
-        match within {
-            Value::Object(within) => want(within, true, problems),
-            _ => problems.push("each of `sets` must have a `set_id`".to_string()),
+        let (set, index) = match within {
+            Value::String(id) => (Some(id.trim().to_string()).filter(|id| !id.is_empty()), None),
+            Value::Object(within) => {
+                let index = match within.get("set_index") {
+                    None | Some(Value::Null) => None,
+                    Some(index) if index.is_i64() => index.as_i64(),
+                    Some(_) => {
+                        problems.push("`set_index` must be a whole number".to_string());
+                        None
+                    }
+                };
+                (set_id(within, problems), index)
+            }
+            _ => (None, None),
+        };
+        match set {
+            Some(set) if !wanted.iter().any(|(had, _)| *had == set) => wanted.push((set, index)),
+            Some(_) => {}
+            None => problems.push("each of `set` must have a `set_id`".to_string()),
         }
     }
-    want(meta, false, problems);
     wanted
 }
 

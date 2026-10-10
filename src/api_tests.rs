@@ -1929,7 +1929,7 @@ async fn an_export_carries_metadata_to_another_library() {
             "identifier": ["site:1"],
             "reference": ["see:also"],
             "collection": ["4chan:g:1"],
-            "sets": [
+            "set": [
                 { "set_id": "book:series", "set_index": 1 },
                 { "set_id": "pinterest:pin:1", "set_index": 1 },
             ],
@@ -1960,7 +1960,7 @@ async fn an_export_carries_metadata_to_another_library() {
         })
     );
     assert_eq!(
-        sidecar("c.pdf.json")["sets"],
+        sidecar("c.pdf.json")["set"],
         json!([{ "set_id": "pinterest:pin:1", "set_index": 0 }])
     );
     // The files can be named otherwise: by title where they have one, by
@@ -2072,8 +2072,7 @@ async fn an_export_carries_metadata_to_another_library() {
         "score": 9,
         "tags": ["fine", "@not"],
         "genre": "noir",
-        "sets": [{ "set_id": "group:1", "set_index": "first" }, { "index": 2 }],
-        "set_id": "book:1",
+        "set": [{ "set_id": "group:1", "set_index": "first" }, { "index": 2 }, " book:1 "],
         "alt_group_id": " pair:1 ",
         "anything_else": { "is": "ignored" },
     });
@@ -2106,7 +2105,7 @@ async fn an_export_carries_metadata_to_another_library() {
         reason.contains("`score`")
             && reason.contains("@not")
             && reason.contains("`set_index`")
-            && reason.contains("each of `sets`"),
+            && reason.contains("each of `set`"),
         "{reason}"
     );
     let loose = one("title=Loose").await;
@@ -2114,8 +2113,8 @@ async fn an_export_carries_metadata_to_another_library() {
     assert_eq!(entity["score"], Value::Null);
     assert_eq!(entity["tags"], json!({ "genre": ["noir"], "tags": ["fine"] }));
     assert_eq!(entity["file"]["alt_group_id"], "pair:1");
-    // It is in the set it lists, and in the one it names by itself, which
-    // is the folder's.
+    // It is in the sets it lists, by an ID with a place or by an ID alone:
+    // the second is the folder's.
     let named: Vec<_> = entity["sets"].as_array().unwrap().iter().map(|set| &set["set_id"]).collect();
     assert_eq!(named, ["book:1", "group:1"]);
     assert_eq!(entity["sets"][1]["title"], "Group");
