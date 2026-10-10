@@ -35,6 +35,7 @@ import {
   search,
   deleted,
   invertSelection,
+  removeFromView,
   selectAll,
   selected,
   toggleMark,
@@ -216,12 +217,31 @@ export default function App() {
   const remove = async (target: { ids: number[]; name: string }) => {
     if (!(await removeForGood(target.ids))) return;
     const index = viewing();
-    const only = viewingOnly();
     deleted(target.ids);
     showToast(`Deleted ${target.name} for good`);
+    stepOn(index);
+  };
+
+  /** Takes out of the view on show, and of nothing else. */
+  const hide = async (target: { ids: number[]; name: string }) => {
+    const index = viewing();
+    try {
+      await removeFromView(target.ids);
+      showToast(`Removed ${target.name} from this view`);
+      stepOn(index);
+    } catch (err) {
+      showToast(errorMessage(err));
+    }
+  };
+
+  /**
+   * After the file open in the viewer, at `index`, has left the view: the
+   * viewer goes on to what took its place, the next one, or the one before
+   * if it was the last. With nothing left it closes.
+   */
+  const stepOn = (index: number | null) => {
     if (index === null) return;
-    // The viewer goes on to what took the file's place: the next one, or
-    // the one before if it was the last. With nothing left it closes.
+    const only = viewingOnly();
     const left = only
       ? only.filter((at) => at !== index).map((at) => (at > index ? at - 1 : at))
       : null;
@@ -328,6 +348,8 @@ export default function App() {
           `Mark ${on.name}: press 1 to ${MARKS}, which the mark key then gives too, or 0 to take the mark off`,
           true,
         );
+      } else if (action === "hide") {
+        hide(on);
       } else if (action === "trash" || action === "restore") {
         trash(on, action === "restore");
       } else {

@@ -36,6 +36,12 @@ export const ACTIONS = [
     key: "ctrl+x",
   },
   {
+    id: "hide",
+    label: "Remove from view",
+    description: "Takes out of this view only. Nothing is trashed, and Refresh brings it back.",
+    key: "ctrl+h",
+  },
+  {
     id: "restore",
     label: "Restore",
     description: "Takes out of the trash.",

@@ -469,6 +469,12 @@ export function changed() {
  * after a file that is no longer there.
  */
 export function deleted(gone: number[]) {
+  drop(gone);
+  changed();
+}
+
+/** Takes results out of the view, and out of what of it is on show. */
+function drop(gone: number[]) {
   const going = new Set(gone);
   ids = ids.filter((id) => !going.has(id));
   for (const page of Object.keys(pages)) {
@@ -478,7 +484,6 @@ export function deleted(gone: number[]) {
   anchor = null;
   keepListed();
   remember();
-  changed();
 }
 
 /**
@@ -536,12 +541,8 @@ export async function moveItems(moved: number[], before: number) {
  * back.
  */
 export async function removeFromView(removed: number[]) {
-  const current = await resultIds();
-  const going = new Set(removed);
-  ids = current.filter((id) => !going.has(id));
-  anchor = null;
-  remember();
-  keepListed();
+  await resultIds();
+  drop(removed);
   reload();
 }
 
