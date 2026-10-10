@@ -157,6 +157,7 @@ export default function Sidebar() {
                 )}
               </For>
             </div>
+            <hr class="tags-rule" />
           </>
         )}
       </Show>

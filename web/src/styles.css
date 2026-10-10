@@ -1432,6 +1432,13 @@ button.primary {
   margin-top: 0;
 }
 
+/* The line between the tags and what is about the file itself. */
+.tags-rule {
+  margin: 0 0 12px;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
 /* The aggregated tags in the panel, under the score. */
 .aggregate {
   margin-bottom: 12px;
