@@ -13,11 +13,13 @@ an address, which goes into the inbox's queue (see `downloaders/README.md`).
   tick, or a cross. A download that goes wrong is also said in the bottom
   right corner of the page: pressing the notice opens it, with why and a
   way to try again. Pressing the button again sends the post again.
-- On Pinterest, the same button on the corner of each pin, in grids and
-  on the pin's own page, and on each board of a profile, where it sends
-  the whole board. On a pin's own page, if the pin's picture cannot
-  be found to put the button on, the button is in the bottom left corner
-  of the window instead.
+- On Pinterest, the same button in the bottom left corner of each pin's
+  picture in a grid, shown while the pointer is on the pin as Pinterest's
+  own buttons are, and for as long as it has something to say of what was
+  sent. On a pin's own page it is in the row of Pinterest's buttons over
+  the pin, after the last of them; if that row cannot be found it is on
+  the pin's picture, and failing that in the bottom left corner of the
+  window. On each board of a profile it sends the whole board.
 - On 4chan, the button at the end of the line that names each post's
   file, which sends that post, and one by the number of each thread's
   first post, which sends the whole thread. In a board's catalog each

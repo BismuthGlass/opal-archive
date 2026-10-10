@@ -39,6 +39,39 @@
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
 }
 
+/* On a picture only while the pointer is on what holds it, as the site's own
+   buttons are; and while it has something to say of what was sent. */
+.opalarchive-button.opalarchive-hover[data-state="idle"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.opalarchive-holder:hover > .opalarchive-button.opalarchive-hover,
+.opalarchive-button.opalarchive-hover:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* In a row of the site's own buttons, sized and coloured as they are. */
+.opalarchive-button.opalarchive-bar {
+  flex: none;
+  align-self: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 4px;
+  /* Pinterest's own colour for its icons, where it says what that is. */
+  color: var(--color-text-default, #111111);
+  border-radius: 16px;
+}
+
+/* The icon is drawn lighter than the site's: thickened to sit among them. */
+.opalarchive-button.opalarchive-bar svg {
+  width: 28px;
+  height: 28px;
+  stroke: currentColor;
+  stroke-width: 0.7;
+}
+
 /* In the corner of the window, where the post's picture was not found. */
 .opalarchive-button.opalarchive-over.opalarchive-float {
   position: fixed;
