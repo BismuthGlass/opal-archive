@@ -1653,3 +1653,232 @@ async fn a_zip_is_unpacked_into_files_and_collections() {
     let tags = json!({ "tags": { "tags": ["x"] } });
     assert_eq!(api.refused_with("PATCH", &format!("/tabs/{gallery}/upload"), tags).await, StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn an_export_carries_metadata_to_another_library() {
+    use std::io::{Read, Write};
+    use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
+
+    let from = Api::new();
+    // Books are told by their names, so nothing here needs another program.
+    let file = |name: &str| {
+        let id = from.file(name);
+        std::fs::write(from.stored(id), format!("what is in file {id}")).unwrap();
+        id
+    };
+    let (a, b, c, d) = (file("a.pdf"), file("b.pdf"), file("c.pdf"), file("a.pdf"));
+    from.edit(
+        &[a],
+        json!({
+            "set": { "title": "First", "score": 6, "date": "2021-05", "content_rating": "safe" },
+            "add": { "tags": ["metroid:samus"], "creator": ["Someone"] },
+            "add_source_url": ["https://example.com/a"],
+            "add_identifier": ["site:1"],
+            "add_reference": ["4chan:g:1"],
+        }),
+    )
+    .await;
+    from.state
+        .db
+        .lock()
+        .unwrap()
+        .execute("UPDATE entity SET date_added = '2020-01-02T03:04:05Z' WHERE id = ?1", [a])
+        .unwrap();
+    let new = async |body: Value| from.post("/collections", body).await["id"].as_i64().unwrap();
+    let series = new(json!({ "collection_type": "sequence", "title": "Series", "members": [b, a] })).await;
+    let pin = new(json!({ "collection_type": "set", "members": [c], "collection_id": "pinterest:pin:1" })).await;
+    let all = new(json!({ "collection_type": "usercollection", "title": "Everything", "members": [series] })).await;
+    from.edit(&[series], json!({ "add": { "genre": ["horror"] } })).await;
+
+    let zip_of = async |form: String| {
+        let request = Request::builder()
+            .method("POST")
+            .uri("/export")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(Body::from(form))
+            .unwrap();
+        let response = from.app.clone().oneshot(request).await.unwrap();
+        assert!(response.status().is_success());
+        to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec()
+    };
+    let names_in = |bytes: &[u8]| {
+        let archive = ZipArchive::new(std::io::Cursor::new(bytes.to_vec())).unwrap();
+        let mut names: Vec<String> = archive.file_names().map(str::to_string).collect();
+        names.sort();
+        names
+    };
+
+    // A download is the files alone.
+    let plain = zip_of(format!("ids={series},{c},{d}")).await;
+    assert_eq!(names_in(&plain), ["a (2).pdf", "a.pdf", "b.pdf", "c.pdf"]);
+
+    // An export has a sidecar beside each, and one for each collection:
+    // those selected, and those that what was selected is in.
+    let exported = zip_of(format!("ids={series},{c},{d}&sidecars=1")).await;
+    assert_eq!(
+        names_in(&exported),
+        [
+            "a (2).pdf".to_string(),
+            "a (2).pdf.json".to_string(),
+            "a.pdf".to_string(),
+            "a.pdf.json".to_string(),
+            "b.pdf".to_string(),
+            "b.pdf.json".to_string(),
+            "c.pdf".to_string(),
+            "c.pdf.json".to_string(),
+            format!("collection-{series}.json"),
+            format!("collection-{all}.json"),
+            "pinterest_pin_1.json".to_string(),
+        ]
+    );
+    let sidecar = |name: &str| {
+        let mut archive = ZipArchive::new(std::io::Cursor::new(exported.clone())).unwrap();
+        let mut text = String::new();
+        archive.by_name(name).unwrap().read_to_string(&mut text).unwrap();
+        serde_json::from_str::<Value>(&text).unwrap()
+    };
+    assert_eq!(
+        sidecar("a.pdf.json"),
+        json!({
+            "metadata_type": "file",
+            "date_added": "2020-01-02T03:04:05Z",
+            "title": "First",
+            "score": 6,
+            "date": "2021-05",
+            "content_rating": "safe",
+            "tags": ["metroid:samus"],
+            "creator": ["Someone"],
+            "source_url": ["https://example.com/a"],
+            "identifier": ["site:1"],
+            "reference": ["4chan:g:1"],
+            "collection": [
+                { "id": format!("collection-{series}"), "collection_type": "sequence", "index": 1 },
+            ],
+            "hash": format!("{a:064x}"),
+            "extension": "png",
+            "media_type": "image",
+            "size": 4,
+            "original_name": "a.pdf",
+        })
+    );
+    assert_eq!(sidecar("pinterest_pin_1.json")["collection_id"], "pinterest:pin:1");
+    assert_eq!(sidecar("c.pdf.json")["collection"][0]["id"], "pinterest:pin:1");
+    // A collection by itself can be exported, with nothing in it.
+    let empty = new(json!({ "collection_type": "variant" })).await;
+    let alone = zip_of(format!("ids={empty}&sidecars=1")).await;
+    assert_eq!(names_in(&alone), [format!("collection-{empty}.json")]);
+
+    // Uploaded to another library, the zip gives what it holds the same
+    // metadata there.
+    let to = Api::new();
+    let tab = to.post("/tabs", json!({ "kind": "upload" })).await["id"].as_i64().unwrap();
+    let send = async |bytes: Vec<u8>| {
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!("/files/archive?name=export.zip&tab={tab}"))
+            .body(Body::from(bytes))
+            .unwrap();
+        let response = to.app.clone().oneshot(request).await.unwrap();
+        assert!(response.status().is_success());
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice::<Value>(&body).unwrap()
+    };
+    let unpacked = send(exported.clone()).await;
+    assert_eq!(unpacked["failures"], json!([]));
+    assert_eq!(
+        (&unpacked["added"], &unpacked["duplicates"], &unpacked["collections"]),
+        (&json!(4), &json!(0), &json!(3))
+    );
+    let one = async |query: &str| {
+        let found = to.found(query).await;
+        assert_eq!(found.len(), 1, "{query}");
+        found[0]
+    };
+    let first = one("title=First").await;
+    let entity = to.get(&format!("/entities/{first}")).await;
+    assert_eq!(entity["date_added"], "2020-01-02T03:04:05Z");
+    assert_eq!((&entity["score"], &entity["date"]), (&json!(6), &json!("2021-05")));
+    assert_eq!(entity["content_rating"], "safe");
+    assert_eq!(entity["tags"], json!({ "creator": ["Someone"], "tags": ["metroid:samus"] }));
+    assert_eq!(entity["source_url"], json!(["https://example.com/a"]));
+    assert_eq!(entity["identifier"], json!(["site:1"]));
+    assert_eq!(entity["reference"], json!(["4chan:g:1"]));
+    // The two files of one name have it again, though the zip told them apart.
+    assert_eq!(to.found("name=a.pdf").await.len(), 2);
+
+    // The collections are as they were: the sequence in its order, inside
+    // the collection it was in, and the set with its collection ID.
+    let series = one("title=Series").await;
+    assert_eq!(to.found("kind=collection @ge:horror").await, [series]);
+    let details = to.get(&format!("/entities/{series}")).await["collection"].clone();
+    assert_eq!(
+        (&details["collection_type"], &details["ordered"], &details["collection_id"]),
+        (&json!("sequence"), &json!(true), &Value::Null)
+    );
+    let second = one("name=b.pdf").await;
+    assert_eq!(to.members(series), [(second, Some(0)), (first, Some(1))]);
+    let everything = one("title=Everything").await;
+    assert_eq!(to.members(everything), [(series, None)]);
+    let pin = one("collection_id=pinterest:pin:1").await;
+    assert_eq!(to.members(pin), [(one("name=c.pdf").await, None)]);
+    assert_eq!(to.get(&format!("/entities/{pin}")).await["title"], "Set");
+    // The tab lists what was at the top of the zip, and the collections.
+    assert_eq!(to.in_tab(tab, "file").await.len(), 4);
+    assert_eq!(to.in_tab(tab, "collection").await.len(), 3);
+
+    // Sent again, nothing the library has is replaced: what the user has
+    // written since stays, and the collection with the ID is not made twice.
+    to.edit(&[first], json!({ "set": { "title": "Mine", "score": null } })).await;
+    let again = send(exported).await;
+    assert_eq!((&again["added"], &again["duplicates"]), (&json!(0), &json!(4)));
+    let entity = to.get(&format!("/entities/{first}")).await;
+    assert_eq!((&entity["title"], &entity["score"]), (&json!("Mine"), &json!(6)));
+    assert_eq!(to.found("collection_id=pinterest:pin:1").await, [pin]);
+    assert_eq!(to.members(pin).len(), 1);
+
+    // Sidecars written by hand: what can be used of one is, and the rest
+    // is said. A folder's own describes the collection the folder becomes.
+    let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let x = json!({
+        "title": "Loose",
+        "score": 9,
+        "tags": ["fine", "@not"],
+        "genre": "noir",
+        "collection": [{ "id": "group:1", "collection_type": "variant" }],
+        "anything_else": { "is": "ignored" },
+    });
+    let folder = json!({ "collection_type": "sequence", "title": "Chapters", "collection_id": "book:1" });
+    for (name, content) in [
+        ("x.pdf", "the loose one".to_string()),
+        ("x.pdf.json", x.to_string()),
+        ("stray.json", json!({ "title": "of nothing" }).to_string()),
+        ("broken.pdf.json", "{".to_string()),
+        ("Book/1.pdf", "chapter one".to_string()),
+        ("Book/_collection.json", folder.to_string()),
+    ] {
+        zip.start_file(name, SimpleFileOptions::default()).unwrap();
+        zip.write_all(content.as_bytes()).unwrap();
+    }
+    let unpacked = send(zip.finish().unwrap().into_inner()).await;
+    assert_eq!((&unpacked["added"], &unpacked["collections"]), (&json!(2), &json!(2)));
+    let failed: Vec<&str> = unpacked["failures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|failure| failure["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(failed, ["broken.pdf.json", "stray.json", "x.pdf.json"]);
+    let reason = unpacked["failures"][2]["reason"].as_str().unwrap();
+    assert!(reason.contains("`score`") && reason.contains("@not"), "{reason}");
+    let loose = one("title=Loose").await;
+    let entity = to.get(&format!("/entities/{loose}")).await;
+    assert_eq!(entity["score"], Value::Null);
+    assert_eq!(entity["tags"], json!({ "genre": ["noir"], "tags": ["fine"] }));
+    let group = one("collection_id=group:1").await;
+    assert_eq!(to.get(&format!("/entities/{group}")).await["collection"]["collection_type"], "variant");
+    assert_eq!(to.members(group), [(loose, None)]);
+    let book = one("collection_id=book:1").await;
+    let entity = to.get(&format!("/entities/{book}")).await;
+    assert_eq!((&entity["title"], &entity["collection"]["collection_type"]), (&json!("Chapters"), &json!("sequence")));
+    assert_eq!(to.members(book).len(), 1);
+}

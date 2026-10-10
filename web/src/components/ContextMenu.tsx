@@ -414,6 +414,12 @@ function Menu(props: {
     }
   };
 
+  /** Always a zip: the files, and their metadata beside them. */
+  const exportAll = () => {
+    close();
+    api.exportZip(ids, true);
+  };
+
   /**
    * Opens the viewer on what was clicked: among all the results, or with
    * `chosen` among the selected ones alone, in the order they are listed.
@@ -484,6 +490,16 @@ function Menu(props: {
         <button role="menuitem" onClick={download}>
           <Icon name="download" />
           Download
+        </button>
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          title="Download as a zip with the metadata beside each file, to upload to a library again"
+          onClick={exportAll}
+        >
+          <Icon name="download" />
+          Export with metadata
         </button>
       </li>
       <li role="none">

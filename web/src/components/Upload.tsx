@@ -105,7 +105,8 @@ export function UploadBox() {
       </div>
       <p class="hint">
         Files can also be dropped anywhere on the window. A zip is unpacked: its files are added,
-        and its folders become collections.
+        its folders become collections, and a sidecar beside a file (<code>name.json</code>, as an
+        export writes) gives it its metadata.
       </p>
       {/* A downloader at work for this tab: how far it has got, and a way
           to stop it. Shown whoever started it, this page or one before. */}
@@ -258,7 +259,8 @@ function UploadStatus() {
         >
           <p class="hint">
             What was not taken into the library, and why. A file inside a zip is named with the
-            zip and where it is in it.
+            zip and where it is in it. A sidecar is listed for what in it could not be used; the
+            rest of it was.
           </p>
           <ul class="upload-failures">
             <For each={uploads.failures}>

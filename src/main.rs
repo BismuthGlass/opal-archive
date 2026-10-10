@@ -13,6 +13,7 @@ mod media;
 mod query;
 mod search;
 mod settings;
+mod sidecar;
 mod tabs;
 mod tags;
 

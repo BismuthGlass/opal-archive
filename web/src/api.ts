@@ -454,8 +454,11 @@ export const contentUrl = (fileId: number, download = false) =>
 /**
  * Downloads the files behind `ids` (collections included, at any depth) as
  * one zip. Submitted as a form so the browser handles it as a download.
+ * With `sidecars` it is an export: each file has its metadata beside it,
+ * as `<name>.json`, and each collection a sidecar of its own, for a zip
+ * that gives a library all of it back when it is uploaded.
  */
-export function exportZip(ids: number[]) {
+export function exportZip(ids: number[], sidecars = false) {
   const form = document.createElement("form");
   form.method = "POST";
   form.action = "/api/export";
@@ -464,6 +467,13 @@ export function exportZip(ids: number[]) {
   input.name = "ids";
   input.value = ids.join(",");
   form.append(input);
+  if (sidecars) {
+    const flag = document.createElement("input");
+    flag.type = "hidden";
+    flag.name = "sidecars";
+    flag.value = "1";
+    form.append(flag);
+  }
   document.body.append(form);
   form.submit();
   form.remove();
@@ -535,15 +545,19 @@ export type Unpacked = {
   /** Files that were new to the library, and ones it already had. */
   added: number;
   duplicates: number;
-  /** Collections made of its folders. */
+  /** Collections made of its folders, and for its sidecars. */
   collections: number;
-  /** The files in it that were not taken in, by where they are in it. */
+  /**
+   * The files in it that were not taken in, by where they are in it, and
+   * the sidecars some of which could not be used.
+   */
   failures: { name: string; reason: string }[];
 };
 
 /**
  * Uploads a zip to be unpacked: its files go into the library, its folders
- * become collections, and the archive itself is not kept.
+ * become collections, its sidecars give both their metadata, and the
+ * archive itself is not kept.
  */
 export const uploadArchive = (file: File, tab: number, onProgress: (fraction: number) => void) =>
   sendFile("/files/archive", file, tab, onProgress).then(({ answer }) => answer as Unpacked);

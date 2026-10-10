@@ -52,7 +52,27 @@ A collection has a title, like a file, which is for people and need not be uniqu
 
 Collections should behave as their own entities that may also be categorized and searched in the same way as files. The hierarchical directory concept of categories does not apply, as the system isn't directory based. Groups can still belong to other groups, however. A search can ask for what is directly in a collection (`in=`) or for everything inside it at any depth, through the collections it holds (`within=`).
 
-There is no need to support injesting existing sidecar files on file upload for now. We will also support exporting sidecar files, but that's in the future.
+Sidecar files are how metadata leaves the library and comes back into it: see Export and import.
+
+## Export and import
+
+A selection can be downloaded or exported. A download is the files alone. An export is a zip of the files with their metadata, as sidecars in the format of `schema.md`, for keeping outside the library or for taking to another one.
+
+- Beside each file is its sidecar, `<name>.json`. Two files of one name are told apart in the zip, as in a download (`a.png`, `a (2).png`); the sidecar of each still has the name it had.
+- A collection selected stands for the files inside it, at any depth, as in a download. Every collection among what was selected or inside it has a sidecar, and so has every collection that any of it is in, however far up: a file exported by itself still says what it belongs to.
+- A collection is called by its collection ID. One that has none is called by the name of its sidecar (`collection-12.json` is `collection-12`), which means something inside that zip only.
+- The zip is flat: there are no folders in it. What is in which collection is said by the sidecars.
+
+Uploading a zip reads the sidecars in it: this is the import. It works for any zip with sidecars in the format, not only an export.
+
+- A file with a sidecar beside it is given what the sidecar says. A file the library did not have gets all of it, the name it had and when it was added included.
+- A file the library already had keeps what it has. Tags, source URLs, identifiers and references are added to; a field that holds one value (title, date, score, description…) is only filled in where the file has none. What the user wrote is never replaced.
+- What the file itself says (its hash, size, dimensions, length) is always worked out from the file, never read from a sidecar.
+- A collection with a collection ID is the one the library has by that ID, if it has one: it is added to, and never made twice. Otherwise it is made. A collection with no collection ID is always made anew, so importing the same export twice makes those a second time.
+- Members are put in a collection in the order their sidecars give. In a collection the library already had, they follow what was there.
+- A folder still becomes a set named for it. A `_collection.json` in the folder describes that collection: its type, its collection ID, its title and the rest.
+- The collections a zip's sidecars speak of are listed in the upload tab, beside the files.
+- A sidecar is used as far as it can be. A value that is not allowed is left out, and said with the uploads that failed, by the sidecar's name; a field the library has no place for is ignored. A `.json` that is the sidecar of nothing in the zip is said too.
 
 ## Gallery views
 

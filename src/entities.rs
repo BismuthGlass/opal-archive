@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// Single-valued metadata columns of `entity`.
-const SCALARS: &[&str] = &[
+pub const SCALARS: &[&str] = &[
     "title",
     "date",
     "score",
@@ -83,7 +83,7 @@ pub fn router() -> Router<AppState> {
         .route("/entities/delete", post(delete))
 }
 
-fn to_json(value: SqlValue) -> Value {
+pub fn to_json(value: SqlValue) -> Value {
     match value {
         SqlValue::Integer(n) => json!(n),
         SqlValue::Real(n) => json!(n),
@@ -99,11 +99,11 @@ pub fn ids_json(ids: &[i64]) -> String {
 /// A table of plain values per entity, and the column the value is in.
 pub type List = (&'static str, &'static str);
 pub const SOURCE_URLS: List = ("source_url", "url");
-const IDENTIFIERS: List = ("identifier", "value");
+pub const IDENTIFIERS: List = ("identifier", "value");
 pub const REFERENCES: List = ("reference", "value");
 
 /// An entity's values in a list.
-fn list_of(conn: &Connection, list: List, id: i64) -> rusqlite::Result<Vec<String>> {
+pub fn list_of(conn: &Connection, list: List, id: i64) -> rusqlite::Result<Vec<String>> {
     let (table, column) = list;
     let mut stmt = conn.prepare(&format!(
         "SELECT {column} FROM {table} WHERE entity_id = ?1 ORDER BY {column}"
@@ -112,7 +112,7 @@ fn list_of(conn: &Connection, list: List, id: i64) -> rusqlite::Result<Vec<Strin
 }
 
 /// An entity's tags, by field.
-fn tags_of(conn: &Connection, id: i64) -> rusqlite::Result<BTreeMap<String, Vec<String>>> {
+pub fn tags_of(conn: &Connection, id: i64) -> rusqlite::Result<BTreeMap<String, Vec<String>>> {
     let mut tags: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut stmt = conn.prepare(
         "SELECT t.field, t.value FROM entity_tag et JOIN tag t ON t.id = et.tag_id
@@ -126,7 +126,7 @@ fn tags_of(conn: &Connection, id: i64) -> rusqlite::Result<BTreeMap<String, Vec<
 }
 
 /// What is known of an entity as a file, if it is one.
-fn file_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
+pub fn file_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
     conn.query_row(
         "SELECT hash, extension, media_type, size, original_name, width, height,
                 page_count, length, looping, has_thumbnail
@@ -152,7 +152,7 @@ fn file_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
 }
 
 /// What is known of an entity as a collection, if it is one.
-fn collection_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
+pub fn collection_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
     conn.query_row(
         "SELECT collection_type,
                 (SELECT count(*) FROM membership WHERE collection_id = ?1), ordered,
@@ -370,7 +370,7 @@ async fn metadata(
 
 /// Checks a new scalar value and converts it for storage. Empty strings and
 /// `null` both clear the field.
-fn scalar_value(field: &str, value: &Value) -> Result<SqlValue, ApiError> {
+pub fn scalar_value(field: &str, value: &Value) -> Result<SqlValue, ApiError> {
     let invalid = |expected: &str| {
         Err(ApiError::BadRequest(format!(
             "`{field}` must be {expected}"
