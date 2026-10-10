@@ -9,8 +9,9 @@ const isWebAddress = (url: string) => /^https?:\/\//i.test(url);
 
 /**
  * The lists a file has that are not tags: plain values with no
- * suggestions, namespaces or aliases. Source URLs are shown as links, one
- * to a line; identifiers and references as chips.
+ * suggestions, namespaces or aliases. Each is shown one value to a line,
+ * as text rather than as the chips tags are, so that they are not taken
+ * for tags; source URLs are links.
  */
 export const PLAIN_LISTS = [
   {
@@ -42,17 +43,10 @@ export const PLAIN_LISTS = [
   },
 ];
 
-export default function PlainList(props: FieldProps & ListMode & { list: (typeof PLAIN_LISTS)[number] }) {
-  const [text, setText] = createSignal("");
-  const values = () => props.list.values(props.data);
+type ListProps = FieldProps & ListMode & { list: (typeof PLAIN_LISTS)[number] };
 
-  const add = () => {
-    const value = text().trim();
-    if (!value) return;
-    setText("");
-    props.apply(props.list.add(value));
-  };
-
+/** A plain list's values, one to a line, with what can be done to each. */
+function Values(props: ListProps) {
   /** How many of the selection have a value, and the buttons acting on it. */
   const controls = (entry: { value: string; count: number }) => (
     <>
@@ -87,65 +81,85 @@ export default function PlainList(props: FieldProps & ListMode & { list: (typeof
   );
 
   return (
+    <ul class="links">
+      <For each={props.list.values(props.data)}>
+        {(entry) => (
+          <li>
+            <Show
+              when={props.list.links && isWebAddress(entry.value)}
+              fallback={
+                <span class="link-text" title={entry.value}>
+                  {entry.value}
+                </span>
+              }
+            >
+              <a
+                class="link-text"
+                href={entry.value}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={entry.value}
+              >
+                {entry.value}
+              </a>
+            </Show>
+            {controls(entry)}
+          </li>
+        )}
+      </For>
+    </ul>
+  );
+}
+
+/**
+ * A plain list as a row of the details list. A single value is beside the
+ * label, as any other detail is; several are under it, across the panel.
+ */
+export function PlainListRow(props: ListProps) {
+  const several = () => props.list.values(props.data).length > 1;
+  return (
+    <>
+      <dt classList={{ wide: several() }}>
+        <ListLabel label={props.list.label} onEdit={props.onEdit} />
+      </dt>
+      <dd classList={{ wide: several() }}>
+        <Values {...props} />
+      </dd>
+    </>
+  );
+}
+
+/** The editor of a plain list, for a modal: the box to add a value, over the values. */
+export default function PlainList(props: ListProps) {
+  const [text, setText] = createSignal("");
+
+  const add = () => {
+    const value = text().trim();
+    if (!value) return;
+    setText("");
+    props.apply(props.list.add(value));
+  };
+
+  return (
     <div class="field">
-      <Show when={props.editing} fallback={<ListLabel label={props.list.label} {...props} />}>
-        <input
-          type="text"
-          autofocus
-          aria-label={`Add to ${props.list.label}`}
-          placeholder={props.list.placeholder}
-          autocomplete="off"
-          spellcheck={false}
-          value={text()}
-          onInput={(event) => setText(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              add();
-            }
-          }}
-        />
-      </Show>
-      <Show when={values().length > 0}>
-        <Show
-          when={props.list.links}
-          fallback={
-            <div class="chips plain-chips">
-              <For each={values()}>
-                {(entry) => (
-                  <span class="chip" classList={{ partial: entry.count < props.data.count }}>
-                    <span class="chip-label">{entry.value}</span>
-                    {controls(entry)}
-                  </span>
-                )}
-              </For>
-            </div>
+      <input
+        type="text"
+        autofocus
+        aria-label={`Add to ${props.list.label}`}
+        placeholder={props.list.placeholder}
+        autocomplete="off"
+        spellcheck={false}
+        value={text()}
+        onInput={(event) => setText(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            add();
           }
-        >
-          <ul class="links">
-            <For each={values()}>
-              {(entry) => (
-                <li>
-                  <Show
-                    when={isWebAddress(entry.value)}
-                    fallback={<span class="link-text">{entry.value}</span>}
-                  >
-                    <a
-                      class="link-text"
-                      href={entry.value}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={entry.value}
-                    >
-                      {entry.value}
-                    </a>
-                  </Show>
-                  {controls(entry)}
-                </li>
-              )}
-            </For>
-          </ul>
-        </Show>
+        }}
+      />
+      <Show when={props.list.values(props.data).length > 0}>
+        <Values {...props} editing />
       </Show>
     </div>
   );

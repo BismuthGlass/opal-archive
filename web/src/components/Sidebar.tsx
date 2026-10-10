@@ -10,7 +10,7 @@ import Detail, { isSet } from "./Detail";
 import Icon from "./Icon";
 import Modal from "./Modal";
 import { createStoredFlag } from "./Panel";
-import PlainList, { PLAIN_LISTS } from "./PlainList";
+import PlainList, { PLAIN_LISTS, PlainListRow } from "./PlainList";
 import { AggregatedTags, filled, TagField, TagsModal } from "./Tags";
 
 const SCORES = [1, 2, 3, 4, 5, 6, 7];
@@ -296,19 +296,19 @@ export default function Sidebar(props: {
                   </>
                 )}
               </Show>
+              <For each={PLAIN_LISTS}>
+                {(list) => (
+                  <Show when={listed(list, data())}>
+                    <PlainListRow
+                      list={list}
+                      data={data()}
+                      apply={apply}
+                      onEdit={() => setEditingList(list.field)}
+                    />
+                  </Show>
+                )}
+              </For>
             </dl>
-            <For each={PLAIN_LISTS}>
-              {(list) => (
-                <Show when={listed(list, data())}>
-                  <PlainList
-                    list={list}
-                    data={data()}
-                    apply={apply}
-                    onEdit={() => setEditingList(list.field)}
-                  />
-                </Show>
-              )}
-            </For>
 
             <AddField
               groups={[
@@ -334,7 +334,7 @@ export default function Sidebar(props: {
                   onClose={() => setEditingList(null)}
                 >
                   <div class="field-editor">
-                    <PlainList list={list} data={data()} apply={apply} editing />
+                    <PlainList list={list} data={data()} apply={apply} />
                   </div>
                   <Show when={error()}>
                     <p class="form-error" role="alert">

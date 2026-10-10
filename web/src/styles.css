@@ -1110,7 +1110,8 @@ button.primary {
   margin-top: 4px;
 }
 
-/* Source URLs: one link per line. */
+/* The plain lists (identifiers, references, source URLs): one value per
+   line, as text. */
 
 .links {
   margin: 6px 0 0;
@@ -1148,8 +1149,32 @@ button.primary {
   border-left: none;
 }
 
-.plain-chips {
-  margin-top: 6px;
+/* In the details list they are rows like the rest. One with several
+   values has them under its label, across the panel. */
+.facts .wide {
+  grid-column: 1 / -1;
+}
+
+.facts .links {
+  margin: 0;
+}
+
+.facts .links li {
+  padding: 0;
+}
+
+.facts dd.wide .links li {
+  padding: 1px 0;
+}
+
+.facts .list-label {
+  margin: 0;
+  font-size: inherit;
+}
+
+.facts dt:hover .list-label .icon,
+.facts dt:has(+ dd:hover) .list-label .icon {
+  opacity: 1;
 }
 
 /* The tag editor: the box, then the tags beside the suggestions. It keeps
@@ -1550,7 +1575,6 @@ span.chip-label:hover {
   overflow-y: auto;
 }
 
-.field-editor .plain-chips,
 .field-editor .links {
   margin-top: 10px;
 }
