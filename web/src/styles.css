@@ -1596,14 +1596,17 @@ span.chip-label:hover {
 }
 
 /* Tags one to a line, each no wider than what it holds: its name, then
-   how many of the selection carry it and its buttons. */
+   how many of the selection carry it and its buttons. The lines are small
+   and close, so that many tags take little room. */
 .tag-lines {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 1px;
   align-items: flex-start;
   padding: 0;
   margin: 0;
+  font-size: 12px;
+  line-height: 16px;
   list-style: none;
 }
 
@@ -1615,19 +1618,35 @@ span.chip-label:hover {
 
 .tag-line .chip {
   min-width: 0;
+  border-radius: 2px;
+}
+
+.tag-line .chip-label {
+  padding: 0 4px;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .tag-line .chip-count {
-  padding-left: 5px;
+  padding-left: 4px;
+  font-size: 11px;
 }
 
 .tag-line .chip-actions {
-  margin-left: 0;
+  margin-left: 2px;
   border-left: none;
 }
 
 .tag-line .chip-actions button {
-  border-radius: 4px;
+  padding: 0 2px;
+  font-size: inherit;
+  border-radius: 2px;
+}
+
+.tag-line .chip-edit {
+  padding: 0 3px;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 /* The input sits above its chips, so it stays put as values come and go. */
@@ -1675,17 +1694,19 @@ span.chip-label:hover {
   border-radius: 0;
 }
 
-.dialog .chip .chip-label:not(.primary) {
-  padding: 1px 8px;
+/* The tagger's lines are as small as the panel's. */
+.dialog .tag-line .chip-label:not(.primary) {
+  padding: 0 4px;
+}
+
+.dialog .tag-line .chip-actions button:not(.primary) {
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 .dialog .chip-actions button:not(.primary),
 .dialog .links button:not(.primary) {
   padding: 1px 3px;
-}
-
-.dialog .tag-line .chip-actions button:not(.primary) {
-  border-radius: 4px;
 }
 
 .dialog .chip-add:hover:not(.primary) {
