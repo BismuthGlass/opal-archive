@@ -11,7 +11,9 @@ pub mod inbox;
 
 use std::{
     collections::{BTreeMap, HashMap},
+    future::Future,
     path::{Component, PathBuf},
+    pin::Pin,
     process::Stdio,
     sync::{
         Arc, Mutex,
@@ -51,6 +53,10 @@ type BaseTags = BTreeMap<String, Vec<String>>;
 
 /// How many of a download's problems are kept to show.
 const MAX_ERRORS: usize = 50;
+
+/// How many times over a downloader may hand what it found to another: a
+/// post that links to a post that links to a video, and no further.
+const MAX_HANDED_ON: u8 = 2;
 
 /// What a downloader says of itself, in its `manifest.json`.
 #[derive(Clone, Serialize, Deserialize)]
@@ -162,6 +168,10 @@ struct Item {
     /// Its files, in order, in the folder the script was given.
     #[serde(default)]
     files: Vec<PathBuf>,
+    /// Addresses of other sites that it shows, for their own downloaders
+    /// to fetch: what they bring in is this thing's too, after its files.
+    #[serde(default)]
+    delegate: Vec<String>,
     /// Given to the files if they have none of their own.
     title: Option<String>,
     description: Option<String>,
@@ -525,6 +535,37 @@ fn change(
     Ok(())
 }
 
+/// The sites every other downloader takes addresses of: what this one may
+/// hand over, when what it finds is shown from one of them.
+fn sites_besides(state: &AppState, manifest: &Manifest) -> Vec<String> {
+    let others = manifests(state)
+        .into_iter()
+        .filter(|other| other.name != manifest.name);
+    others.flat_map(|other| other.sites).collect()
+}
+
+/// What a downloader's script is asked: the address, as the downloader is
+/// set, with its login if one is saved, what to pass over as seen, and
+/// where to put the files.
+fn request_for(
+    state: &AppState,
+    manifest: &Manifest,
+    url: &str,
+    options: &Options,
+    seen: &[String],
+    out: &std::path::Path,
+) -> Value {
+    let cookies = Some(cookie_file(state, manifest)).filter(|file| file.exists());
+    json!({
+        "url": url,
+        "options": options,
+        "cookies": cookies,
+        "seen": seen,
+        "out": out,
+        "delegates": sites_besides(state, manifest),
+    })
+}
+
 /// A folder of its own for a download's files, under the server's
 /// temporary directory. It is not made yet.
 fn fresh_out(state: &AppState) -> PathBuf {
@@ -662,14 +703,7 @@ async fn start(
     };
 
     let out = fresh_out(&state);
-    let cookies = Some(cookie_file(&state, &manifest)).filter(|file| file.exists());
-    let request = json!({
-        "url": url,
-        "options": options,
-        "cookies": cookies,
-        "seen": seen,
-        "out": out,
-    });
+    let request = request_for(&state, &manifest, &url, &options, &seen, &out);
 
     let status = Arc::new(Mutex::new(Status {
         running: true,
@@ -697,14 +731,7 @@ async fn start(
     }
 
     let name = manifest.name.clone();
-    let download = Download {
-        state,
-        tab,
-        manifest,
-        base,
-        out,
-        status,
-    };
+    let download = Download::new(state, tab, manifest, base, out, status);
     tokio::spawn(async move {
         let outcome = match download.run(request, cancel).await {
             Ok(outcome) => outcome,
@@ -744,9 +771,37 @@ struct Download {
     /// directory.
     out: PathBuf,
     status: Arc<Mutex<Status>>,
+    /// Whether what it takes in is listed under the tab. Not when it runs
+    /// for another downloader's thing that is listed as a collection.
+    listed: bool,
+    /// How many downloaders handed this on before it came here.
+    handed_on: u8,
+    /// The files it has taken in, in order, for whoever handed it over.
+    taken: Mutex<Vec<i64>>,
 }
 
 impl Download {
+    fn new(
+        state: AppState,
+        tab: i64,
+        manifest: Manifest,
+        base: BaseTags,
+        out: PathBuf,
+        status: Arc<Mutex<Status>>,
+    ) -> Self {
+        Download {
+            state,
+            tab,
+            manifest,
+            base,
+            out,
+            status,
+            listed: true,
+            handed_on: 0,
+            taken: Mutex::new(Vec::new()),
+        }
+    }
+
     /// Runs the script to its end, taking in what it fetches as it goes.
     /// Returns how it ended, as `Status::outcome` has it.
     async fn run(&self, request: Value, cancel: Arc<Notify>) -> Result<String, String> {
@@ -779,7 +834,7 @@ impl Download {
         loop {
             tokio::select! {
                 line = lines.next_line() => match line.map_err(failed)? {
-                    Some(line) => self.handle(&line).await,
+                    Some(line) => self.handle(&line, &cancel).await,
                     None => break,
                 },
                 _ = cancel.notified() => {
@@ -797,7 +852,7 @@ impl Download {
     }
 
     /// Acts on one line of the script's output.
-    async fn handle(&self, line: &str) {
+    async fn handle(&self, line: &str, cancel: &Arc<Notify>) {
         let event = match serde_json::from_str::<Event>(line) {
             Ok(event) => event,
             // Anything else the script prints is not for us.
@@ -808,7 +863,7 @@ impl Download {
             Event::Log { message } => self.status.lock().unwrap().message = message,
             Event::Skipped {} => self.status.lock().unwrap().skipped += 1,
             Event::Error { message } => self.problem(message),
-            Event::Item(item) => match self.take_in(&item).await {
+            Event::Item(item) => match self.take_in(&item, cancel).await {
                 Ok((added, existing)) => {
                     let mut status = self.status.lock().unwrap();
                     status.downloaded += 1;
@@ -828,13 +883,75 @@ impl Download {
         }
     }
 
+    /// Has the downloader for another site fetch an address that this one
+    /// found, into the same tab: what it brings in gets everything that
+    /// downloader gives, as if the address had been asked for by itself.
+    /// Returns the files it took in, and how many were new and old. Boxed,
+    /// since that download may hand something on in its turn.
+    fn hand_over<'a>(
+        &'a self,
+        url: &'a str,
+        listed: bool,
+        cancel: &'a Arc<Notify>,
+    ) -> Pin<Box<dyn Future<Output = Result<(Vec<i64>, u64, u64), ApiError>> + Send + 'a>> {
+        Box::pin(async move {
+            if self.handed_on >= MAX_HANDED_ON {
+                return Err(ApiError::bad_request("handed from one downloader to another too many times"));
+            }
+            let manifest = for_url(&self.state, url)?
+                .filter(|other| other.name != self.manifest.name)
+                .ok_or_else(|| ApiError::BadRequest(format!("no other downloader takes {url}")))?;
+            let (options, _) = settings(&self.state.db.lock().unwrap(), &manifest)?;
+            let out = fresh_out(&self.state);
+            // Nothing is passed over as seen: it is wanted as part of this.
+            let request = request_for(&self.state, &manifest, url, &options, &[], &out);
+            let title = manifest.title.clone();
+            let other = Download {
+                listed,
+                handed_on: self.handed_on + 1,
+                ..Download::new(
+                    self.state.clone(),
+                    self.tab,
+                    manifest,
+                    self.base.clone(),
+                    out,
+                    Arc::new(Mutex::new(Status::default())),
+                )
+            };
+            let outcome = other.run(request, cancel.clone()).await;
+            let _ = tokio::fs::remove_dir_all(&other.out).await;
+            let status = other.status.lock().unwrap().clone();
+            let taken = other.taken.lock().unwrap().clone();
+            match outcome {
+                Ok(how) if how == "cancelled" => {
+                    // The download that handed it over is to stop as well.
+                    cancel.notify_one();
+                    Err(ApiError::bad_request("cancelled"))
+                }
+                Err(why) => Err(ApiError::BadRequest(format!("{title}: {why}"))),
+                Ok(_) if taken.is_empty() => {
+                    let why = status.errors.into_iter().next();
+                    let why = why.unwrap_or_else(|| "there was nothing to download".to_string());
+                    Err(ApiError::BadRequest(format!("{title}: {why}")))
+                }
+                Ok(_) => Ok((taken, status.added, status.existing)),
+            }
+        })
+    }
+
     /// Takes one downloaded thing into the library: its files go in and get
     /// the source URL, the reference, the tags, and the title and
     /// description where they have none. They are listed under the tab,
     /// unless the thing asks for a collection: then they are put in it, and
-    /// it is listed in their place. Then the thing is remembered as seen.
-    /// Returns how many files were new, and how many the library had.
-    async fn take_in(&self, item: &Item) -> Result<(u64, u64), ApiError> {
+    /// it is listed in their place. What it hands over to other
+    /// downloaders is fetched by them, and is its files too. Then the
+    /// thing is remembered as seen. Returns how many files were new, and
+    /// how many the library had.
+    async fn take_in(
+        &self,
+        item: &Item,
+        cancel: &Arc<Notify>,
+    ) -> Result<(u64, u64), ApiError> {
         let source_url = item.source_url.as_deref();
         let text = |text: &Option<String>| {
             let text = text
@@ -848,7 +965,8 @@ impl Download {
         let whole = whole.filter(|whole| !whole.id.trim().is_empty());
         // Files that go in a collection are one thing, and the collection
         // is what the tab lists.
-        let tab = whole.is_none().then_some(self.tab);
+        let listed = self.listed && whole.is_none();
+        let tab = listed.then_some(self.tab);
         let mut ids = Vec::new();
         let (mut added, mut existing) = (0, 0);
         for path in &item.files {
@@ -872,6 +990,17 @@ impl Download {
                 ids.push(file.id);
             }
         }
+        for url in &item.delegate {
+            let (theirs, new, old) = self.hand_over(url.trim(), listed, cancel).await?;
+            added += new;
+            existing += old;
+            for id in theirs {
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+        }
+        self.taken.lock().unwrap().extend(&ids);
 
         let mut conn = self.state.db.lock().unwrap();
         let tx = conn.transaction()?;
@@ -900,11 +1029,13 @@ impl Download {
                 entities::add_to_list(&tx, &json, REFERENCES, &reference)?;
             }
             // It is listed under the tab, where its files are not.
-            tx.execute(
-                "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
-                 SELECT id, ?2 FROM tab WHERE id = ?1",
-                params![self.tab, id],
-            )?;
+            if self.listed {
+                tx.execute(
+                    "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
+                     SELECT id, ?2 FROM tab WHERE id = ?1",
+                    params![self.tab, id],
+                )?;
+            }
             wholes.push((json, text(&whole.description), &whole.tags));
             members = vec![id];
             next = whole.collection.as_deref();

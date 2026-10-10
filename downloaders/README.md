@@ -53,7 +53,8 @@ The request arrives on standard input as one JSON object:
   "options": { "recursive": true },
   "cookies": "/path/to/cookies.txt",
   "seen": ["https://…/pin/1/", "https://…/pin/2/"],
-  "out": "/path/to/a/folder"
+  "out": "/path/to/a/folder",
+  "delegates": ["redgifs.com", "pinterest.*"]
 }
 ```
 
@@ -61,6 +62,8 @@ The request arrives on standard input as one JSON object:
   `null` if no login is saved.
 - `seen` holds the keys of what this tab has downloaded before. The script
   should skip them without fetching anything.
+- `delegates` lists the `sites` of every other downloader: what this one
+  may hand over, as described under `delegate` below.
 - `out` is an empty folder to download into. Files must be put there and
   nowhere else; the server removes each once it has taken it in, and the
   folder at the end.
@@ -70,7 +73,7 @@ The script answers on standard output, one JSON object per line:
 | Event     | Fields                       | Meaning                                                   |
 | --------- | ---------------------------- | --------------------------------------------------------- |
 | `found`   | `total`                      | How many things there are to download, as far as is known |
-| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `tags`, `reference`, `collection` | One thing has been fetched, as these files, in order |
+| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `tags`, `reference`, `collection`, `delegate` | One thing has been fetched, as these files, in order |
 | `skipped` | `key`                        | One thing was passed over because its key is in `seen`    |
 | `error`   | `message`, optionally `key`  | Something failed; the download goes on                    |
 | `log`     | `message`                    | What the script is doing, shown while it runs             |
@@ -96,6 +99,17 @@ any the item brings itself in `tags`: an object of tag field to values,
 is left as it is, and a value that is not a valid tag is passed over.
 `title` and `description` are given to the files, and the set, that have
 none; one the user wrote is never replaced.
+
+An item may show something that is another site's: a Reddit post that
+links to a Redgifs video. If the address is of one of the `delegates` the
+request listed, the script need not fetch it. It names the address in
+`delegate`, a list, and the server has that site's downloader fetch it into
+the same tab. What comes of it is taken in as that downloader gives it,
+with its `source`, source URL and tags, and is then this item's as well:
+it gets this item's too, after any files of its own. So the file of that
+Reddit post has the source of both sites and the address on each. If no
+other downloader takes the address, or it brings nothing in, the item
+fails. An item with nothing but a `delegate` needs no `files`.
 
 Nothing is put in a collection unless the item asks. It asks with
 `collection`, which describes the collection its files go in:

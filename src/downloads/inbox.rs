@@ -379,16 +379,9 @@ async fn run(
         }
     }
     let out = fresh_out(state);
-    let cookies = Some(cookie_file(state, &manifest)).filter(|file| file.exists());
     // Nothing is passed over as seen before: what is asked for one thing at
     // a time is wanted, and a file the library has is only listed again.
-    let request = json!({
-        "url": url,
-        "options": options,
-        "cookies": cookies,
-        "seen": [],
-        "out": out,
-    });
+    let request = request_for(state, &manifest, url, &options, &[], &out);
     let status = Arc::new(Mutex::new(Status {
         running: true,
         url: url.to_string(),
@@ -402,14 +395,7 @@ async fn run(
             cancel: stop.clone(),
         },
     );
-    let download = Download {
-        state: state.clone(),
-        tab,
-        manifest,
-        base,
-        out,
-        status,
-    };
+    let download = Download::new(state.clone(), tab, manifest, base, out, status);
     let outcome = download.run(request, stop).await;
     let _ = tokio::fs::remove_dir_all(&download.out).await;
     let mut status = download.status.lock().unwrap();

@@ -889,7 +889,8 @@ impl Api {
         std::fs::write(folder.join("fake.sh"), script).unwrap();
         let manifest = json!({
             "title": "Fake",
-            "source": "fakesite",
+            // Each gives a source of its own, too.
+            "source": if name == "fake" { "fakesite" } else { name },
             "command": ["sh", "fake.sh"],
             // Each is found by a site of its own: the fake one's, or one
             // named for it.
@@ -1226,6 +1227,76 @@ async fn a_download_can_be_cancelled_and_can_fail() {
         .await;
     assert_eq!(ended(broken).await["outcome"], "the site said no");
     assert_eq!(std::fs::read_dir(&api.state.tmp).unwrap().count(), 0);
+}
+
+#[tokio::test]
+async fn a_downloader_hands_an_address_to_another() {
+    let api = Api::new();
+    // One site's post shows a video that is another site's: the first
+    // downloader knows the post, and hands the video's address over.
+    api.downloader(
+        "inner",
+        r#"
+input=$(cat)
+out=$(printf '%s' "$input" | sed 's/.*"out":"\([^"]*\)".*/\1/')
+printf 'the video' > "$out/v.txt"
+echo "{\"event\":\"item\",\"key\":\"https://inner.test/v\",\"source_url\":\"https://inner.test/v\",\"files\":[\"$out/v.txt\"],\"tags\":{\"creator\":[\"Its Poster\"]}}"
+"#,
+    );
+    // It is told which sites the other downloaders take.
+    api.downloader(
+        "outer",
+        r#"
+input=$(cat)
+case "$input" in
+  *'"delegates":["inner.test"]'*) ;;
+  *) echo 'not told whom to hand things to' >&2; exit 4 ;;
+esac
+case "$input" in
+  *lost*) to="https://nowhere.test/x" ;;
+  *) to="https://www.inner.test/v" ;;
+esac
+echo "{\"event\":\"item\",\"key\":\"https://outer.test/post\",\"source_url\":\"https://outer.test/post\",\"title\":\"A post\",\"tags\":{\"genre\":[\"Linked\"]},\"delegate\":[\"$to\"]}"
+"#,
+    );
+    let tab = api.post("/tabs", json!({ "kind": "upload" })).await["id"]
+        .as_i64()
+        .unwrap();
+    let tags = json!({ "tags": { "tags": ["kept"] } });
+    api.ok("PATCH", &format!("/tabs/{tab}/upload"), Some(tags))
+        .await;
+
+    let job = api.download(tab, "https://outer.test/post").await;
+    assert_eq!(job["outcome"], "done");
+    assert_eq!(job["errors"], json!([]));
+    assert_eq!(
+        (&job["downloaded"], &job["added"], &job["failed"]),
+        (&json!(1), &json!(1), &json!(0))
+    );
+    // The one file has what each downloader gives: the source of both,
+    // the address on both sites, the tags of both, and the tab's.
+    let files = api.in_tab(tab, "file").await;
+    assert_eq!(files.len(), 1);
+    let file = api.metadata(&files).await;
+    assert_eq!(carried(&file, "source"), [tag("inner", 1), tag("outer", 1)]);
+    assert_eq!(
+        carried(&file, "source_url"),
+        [
+            tag("https://inner.test/v", 1),
+            tag("https://outer.test/post", 1)
+        ]
+    );
+    assert_eq!(carried(&file, "creator"), [tag("Its Poster", 1)]);
+    assert_eq!(carried(&file, "genre"), [tag("Linked", 1)]);
+    assert_eq!(carried(&file, "tags"), [tag("kept", 1)]);
+    assert_eq!(file["scalars"]["title"]["value"], "A post");
+    assert_eq!(std::fs::read_dir(&api.state.tmp).unwrap().count(), 0);
+
+    // An address no other downloader takes fails the thing that showed it.
+    let job = api.download(tab, "https://outer.test/lost").await;
+    assert_eq!((&job["downloaded"], &job["failed"]), (&json!(0), &json!(1)));
+    let said = job["errors"][0].as_str().unwrap();
+    assert!(said.contains("no other downloader takes"), "{said}");
 }
 
 /// A website of three addresses: a picture served without an extension,

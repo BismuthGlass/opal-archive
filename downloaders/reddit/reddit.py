@@ -13,6 +13,10 @@ It takes a post URL and downloads the post's image, video or gallery. A post
 of several files becomes a set. Each file is tagged with its poster, as the
 source `reddit:<username>`. A crosspost is downloaded as the post it points
 to. Public posts need no login; private and quarantined subreddits do.
+
+A post that links to a site another downloader takes, as Redgifs, is not
+fetched here: the address is handed over to that downloader, whose files
+then have what it gives them as well as what this one does.
 """
 from __future__ import annotations
 
@@ -135,8 +139,25 @@ def read_post(id: str) -> dict:
 
 # --- media extraction --------------------------------------------------------
 #
-# A medium is a pair: how to get it, "file" for a plain download or "video"
-# for one yt-dlp has to put together, and its address.
+# A medium is a pair: how to get it, "file" for a plain download, "video"
+# for one yt-dlp has to put together, or "delegate" for one that another
+# downloader is to fetch, and its address.
+
+
+def taken_by(host: str, sites: list[str]) -> bool:
+    """Whether a host is of one of the sites other downloaders take.
+
+    A site is a domain, standing for its subdomains too, or a name and
+    `.*` for that name under any ending.
+    """
+    for site in sites:
+        site = site.lower()
+        if site.endswith(".*"):
+            if site[:-2] in host.split("."):
+                return True
+        elif host == site or host.endswith(f".{site}"):
+            return True
+    return False
 
 
 def extension(url: str) -> str:
@@ -157,7 +178,7 @@ def uploaded(media_id: str, meta: dict) -> tuple[str, str]:
     return "file", ORIGINAL.format(name=f"{media_id}{ext}")
 
 
-def media_of(post: dict, want_external: bool) -> list[tuple[str, str]]:
+def media_of(post: dict, want_external: bool, delegates: list[str]) -> list[tuple[str, str]]:
     """Everything a post shows, in display order."""
     metadata = post.get("media_metadata") or {}
     if post.get("gallery_data"):
@@ -177,6 +198,10 @@ def media_of(post: dict, want_external: bool) -> list[tuple[str, str]]:
         return [uploaded(i, meta) for i, meta in metadata.items()]
     if not want_external:
         return []
+    # A site with a downloader of its own is that downloader's to fetch:
+    # it knows what the site says of it, which is then kept too.
+    if taken_by(host, delegates):
+        return [("delegate", url)]
     if extension(url) in IMAGE | VIDEO:
         return [("file", url)]
     # Imgur's .gifv is a page around a video.
@@ -290,11 +315,12 @@ def download() -> int:
         if key in seen:
             emit("skipped", key=key)
             return 0
-    media = media_of(post, options.get("external", True))
+    media = media_of(post, options.get("external", True), request.get("delegates") or [])
     if not media:
         raise RuntimeError("the post has nothing to download, with the options as they are")
     emit("log", message="Downloading")
-    files = fetch_post(post, media, out)
+    handed = [url for how, url in media if how == "delegate"]
+    files = fetch_post(post, [medium for medium in media if medium[0] != "delegate"], out)
 
     address = SITE + post["permalink"]
     title = (post.get("title") or "").strip()
@@ -318,6 +344,7 @@ def download() -> int:
         key=key,
         source_url=address,
         files=files,
+        delegate=handed,
         title=title,
         description=description,
         tags=tags,
