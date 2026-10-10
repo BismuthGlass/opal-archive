@@ -21,8 +21,9 @@ function storedHeight(): number | null {
 /**
  * A drawer at the bottom of the side panel that shows the selected file,
  * or of several the one selected last, bigger than its tile and without
- * opening the viewer. Closed, it is only its heading; open, it comes up
- * over the lower part of the panel, as far as its top edge is dragged.
+ * opening the viewer. Closed, it is only its heading; open, it takes the
+ * lower part of the panel, as far as its top edge is dragged, and the
+ * modules scroll in the rest.
  */
 export default function Preview() {
   const [open, setOpen] = createStoredFlag("opalarchive.preview", false);
