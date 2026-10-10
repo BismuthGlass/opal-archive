@@ -61,6 +61,7 @@ A selection can be downloaded or exported. A download is the files alone. An exp
 - Beside each file is its sidecar, `<name>.json`. Two files of one name are told apart in the zip, as in a download (`a.png`, `a (2).png`); the sidecar of each still has the name it had.
 - A collection selected stands for the files inside it, at any depth, as in a download. Every collection among what was selected or inside it has a sidecar, and so has every collection that any of it is in, however far up: a file exported by itself still says what it belongs to.
 - A collection is called by its collection ID. One that has none is called by the name of its sidecar (`collection-12.json` is `collection-12`), which means something inside that zip only.
+- What the files are called, downloaded or exported, one or many, is a setting: the name each was uploaded under (the default), its title (its name, where it has no title), its hash, or random letters and digits that say nothing of it. Whichever it is, an export's sidecars have the name each file had, and an import gives it back.
 - The zip is flat: there are no folders in it. What is in which collection is said by the sidecars.
 
 Uploading a zip reads the sidecars in it: this is the import. It works for any zip with sidecars in the format, not only an export.

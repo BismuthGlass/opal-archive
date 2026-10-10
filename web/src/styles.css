@@ -2130,6 +2130,15 @@ span.chip-label:hover {
   font-weight: 500;
 }
 
+/* One of several to pick from: the whole row picks it. */
+.setting-choice {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+}
+
 .dialog button.keycap,
 kbd {
   font: inherit;

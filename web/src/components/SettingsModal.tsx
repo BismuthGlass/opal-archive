@@ -3,7 +3,9 @@ import { ACTIONS, bind, isDefault, keyFor, keyLabel, keyOf } from "../hotkeys";
 import type { Action } from "../hotkeys";
 import { errorMessage, fieldLabel } from "../format";
 import { savedQueries, setSavedQueries } from "../savedQueries";
+import { downloadNames, saveSetting } from "../settings";
 import type { SavedQuery } from "../settings";
+import type { Naming } from "../api";
 import {
   isCustom,
   isCustomOrder,
@@ -23,7 +25,73 @@ const SECTIONS = [
   { id: "tagTypes", label: "Tag types" },
   { id: "savedQueries", label: "Saved queries" },
   { id: "hotkeys", label: "Hotkeys" },
+  { id: "downloads", label: "Downloads" },
 ] as const;
+
+/** What a downloaded file can be called, as the setting offers them. */
+const NAMINGS: { id: Naming; label: string; description: string }[] = [
+  {
+    id: "original",
+    label: "Original name",
+    description: "The name the file was uploaded under.",
+  },
+  {
+    id: "title",
+    label: "Title",
+    description: "The file's title, or its original name where it has no title.",
+  },
+  { id: "hash", label: "Hash", description: "The file's SHA-256, as the library stores it." },
+  {
+    id: "random",
+    label: "Random",
+    description: "Letters and digits that say nothing of the file, new for every download.",
+  },
+];
+
+function Downloads() {
+  const [error, setError] = createSignal("");
+  const choose = (naming: Naming) => {
+    setError("");
+    saveSetting("downloadNames", naming === "original" ? null : naming).catch((err) =>
+      setError(errorMessage(err)),
+    );
+  };
+  return (
+    <>
+      <h3>Downloads</h3>
+      <p class="hint">
+        What files are called when they are downloaded or exported. Two that come out alike in one
+        zip are told apart with a number. An export's sidecars keep the original name whichever is
+        chosen, and uploading it gives the files that name back.
+      </p>
+      <ul class="setting-rows" role="radiogroup" aria-label="File names">
+        <For each={NAMINGS}>
+          {(naming) => (
+            <li>
+              <label class="setting-choice">
+                <input
+                  type="radio"
+                  name="download-names"
+                  checked={downloadNames() === naming.id}
+                  onChange={() => choose(naming.id)}
+                />
+                <div class="setting-text">
+                  <span class="setting-label">{naming.label}</span>
+                  <span class="hint">{naming.description}</span>
+                </div>
+              </label>
+            </li>
+          )}
+        </For>
+      </ul>
+      <Show when={error()}>
+        <p class="form-error" role="alert">
+          {error()}
+        </p>
+      </Show>
+    </>
+  );
+}
 
 /**
  * Rows of a list dragged by their handles into another order. A row moves
@@ -372,6 +440,9 @@ export default function SettingsModal(props: { onClose: () => void }) {
             </Match>
             <Match when={section() === "hotkeys"}>
               <Hotkeys />
+            </Match>
+            <Match when={section() === "downloads"}>
+              <Downloads />
             </Match>
           </Switch>
         </section>

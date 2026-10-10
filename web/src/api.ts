@@ -448,17 +448,26 @@ export const changeMembers = (id: number, changes: { add?: number[]; remove?: nu
  */
 export const thumbnailUrl = (fileId: number, version: string | null) =>
   `/api/files/${fileId}/thumbnail${version ? `?v=${version}` : ""}`;
-export const contentUrl = (fileId: number, download = false) =>
-  `/api/files/${fileId}/content${download ? "?download=1" : ""}`;
+/**
+ * What a file is called when it leaves the library: the name it was
+ * uploaded under, its title where it has one, its hash, or letters and
+ * digits that say nothing of it.
+ */
+export type Naming = "original" | "title" | "hash" | "random";
+
+/** The file, to show; or with `names`, to save under a name of that sort. */
+export const contentUrl = (fileId: number, names?: Naming) =>
+  `/api/files/${fileId}/content${names ? `?download=1&names=${names}` : ""}`;
 
 /**
  * Downloads the files behind `ids` (collections included, at any depth) as
  * one zip. Submitted as a form so the browser handles it as a download.
  * With `sidecars` it is an export: each file has its metadata beside it,
  * as `<name>.json`, and each collection a sidecar of its own, for a zip
- * that gives a library all of it back when it is uploaded.
+ * that gives a library all of it back when it is uploaded. `names` is what
+ * the files are called in it.
  */
-export function exportZip(ids: number[], sidecars = false) {
+export function exportZip(ids: number[], names: Naming, sidecars = false) {
   const form = document.createElement("form");
   form.method = "POST";
   form.action = "/api/export";
@@ -467,12 +476,13 @@ export function exportZip(ids: number[], sidecars = false) {
   input.name = "ids";
   input.value = ids.join(",");
   form.append(input);
-  if (sidecars) {
-    const flag = document.createElement("input");
-    flag.type = "hidden";
-    flag.name = "sidecars";
-    flag.value = "1";
-    form.append(flag);
+  const fields = { names, ...(sidecars ? { sidecars: "1" } : {}) };
+  for (const [name, value] of Object.entries(fields)) {
+    const field = document.createElement("input");
+    field.type = "hidden";
+    field.name = name;
+    field.value = value;
+    form.append(field);
   }
   document.body.append(form);
   form.submit();

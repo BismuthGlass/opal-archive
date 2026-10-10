@@ -1686,7 +1686,7 @@ async fn an_export_carries_metadata_to_another_library() {
         .unwrap();
     let new = async |body: Value| from.post("/collections", body).await["id"].as_i64().unwrap();
     let series = new(json!({ "collection_type": "sequence", "title": "Series", "members": [b, a] })).await;
-    let pin = new(json!({ "collection_type": "set", "members": [c], "collection_id": "pinterest:pin:1" })).await;
+    new(json!({ "collection_type": "set", "members": [c], "collection_id": "pinterest:pin:1" })).await;
     let all = new(json!({ "collection_type": "usercollection", "title": "Everything", "members": [series] })).await;
     from.edit(&[series], json!({ "add": { "genre": ["horror"] } })).await;
 
@@ -1763,6 +1763,26 @@ async fn an_export_carries_metadata_to_another_library() {
     );
     assert_eq!(sidecar("pinterest_pin_1.json")["collection_id"], "pinterest:pin:1");
     assert_eq!(sidecar("c.pdf.json")["collection"][0]["id"], "pinterest:pin:1");
+    // The files can be named otherwise: by title where they have one, by
+    // hash, or by nothing at all. The sidecar still has the name each had.
+    assert_eq!(
+        names_in(&zip_of(format!("ids={a},{b}&names=title")).await),
+        ["First.png", "b.pdf"]
+    );
+    let hashed = zip_of(format!("ids={d}&names=hash&sidecars=1")).await;
+    let name = format!("{d:064x}.png");
+    assert_eq!(names_in(&hashed), [name.clone(), format!("{name}.json")]);
+    let random = names_in(&zip_of(format!("ids={a},{b}&names=random")).await);
+    assert!(random.iter().all(|name| name.len() == 20 && name.ends_with(".png")), "{random:?}");
+    assert_ne!(random[0], random[1]);
+    let request = Request::builder()
+        .uri(format!("/files/{d}/content?download=1&names=hash"))
+        .body(Body::empty())
+        .unwrap();
+    let response = from.app.clone().oneshot(request).await.unwrap();
+    let disposition = response.headers()["content-disposition"].to_str().unwrap();
+    assert_eq!(disposition, format!("attachment; filename*=UTF-8''{name}"));
+
     // A collection by itself can be exported, with nothing in it.
     let empty = new(json!({ "collection_type": "variant" })).await;
     let alone = zip_of(format!("ids={empty}&sidecars=1")).await;

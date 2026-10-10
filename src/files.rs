@@ -77,6 +77,74 @@ struct ThumbnailParams {
 struct ContentParams {
     /// Present to have the browser save the file instead of showing it.
     download: Option<String>,
+    /// What the saved file is called.
+    #[serde(default)]
+    names: Naming,
+}
+
+/// What a file is called when it leaves the library, downloaded or
+/// exported.
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Naming {
+    /// The name it was uploaded under.
+    #[default]
+    Original,
+    /// Its title, where it has one.
+    Title,
+    /// Its hash, as it is stored.
+    Hash,
+    /// Letters and digits that say nothing of it, new each time.
+    Random,
+}
+
+/// Text as the name of a file: without what a filesystem would refuse or
+/// take for a folder, and no longer than one allows.
+pub fn safe_name(text: &str) -> String {
+    let name: String = text
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            c if c.is_control() => '_',
+            c => c,
+        })
+        .take(150)
+        .collect();
+    name.trim_matches(['.', ' ']).to_string()
+}
+
+/// The name a file leaves the library under. One with no title, or no
+/// name of its own, falls back on what it has: its name, then its hash.
+pub fn download_name(
+    naming: Naming,
+    original_name: Option<&str>,
+    title: Option<&str>,
+    hash: &str,
+    extension: &str,
+) -> String {
+    let titled = || {
+        let title = safe_name(title?);
+        (!title.is_empty()).then(|| stored_name(&title, extension))
+    };
+    let original = || {
+        original_name
+            .map(str::to_string)
+            .unwrap_or_else(|| stored_name(hash, extension))
+    };
+    match naming {
+        Naming::Original => original(),
+        Naming::Title => titled().unwrap_or_else(original),
+        Naming::Hash => stored_name(hash, extension),
+        Naming::Random => {
+            // The standard library's source of randomness, seeded anew for
+            // each hasher it builds.
+            use std::hash::{BuildHasher, Hasher};
+            let random = std::collections::hash_map::RandomState::new()
+                .build_hasher()
+                .finish();
+            stored_name(&format!("{random:016x}"), extension)
+        }
+    }
 }
 
 pub fn router() -> Router<AppState> {
@@ -602,7 +670,21 @@ async fn content(
     } else {
         "inline"
     };
-    let name = encode_filename(file.original_name.as_deref().unwrap_or(&stored));
+    let title: Option<String> = match params.names {
+        Naming::Title => state.db.lock().unwrap().query_row(
+            "SELECT title FROM entity WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )?,
+        _ => None,
+    };
+    let name = encode_filename(&download_name(
+        params.names,
+        file.original_name.as_deref(),
+        title.as_deref(),
+        &file.hash,
+        &file.extension,
+    ));
     if let Ok(value) = HeaderValue::from_str(&format!("{disposition}; filename*=UTF-8''{name}")) {
         headers.insert(header::CONTENT_DISPOSITION, value);
     }

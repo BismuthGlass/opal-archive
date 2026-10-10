@@ -2,6 +2,7 @@ import { createResource, createSignal, onCleanup, onMount, Show } from "solid-js
 import type { JSX } from "solid-js";
 import * as api from "../api";
 import type { Item } from "../api";
+import { downloadNames } from "../settings";
 import { errorMessage, plural } from "../format";
 import {
   changed,
@@ -408,16 +409,16 @@ function Menu(props: {
     close();
     // One file downloads as itself; anything else as a zip.
     if (ids.length === 1 && clicked.kind === "file") {
-      location.href = api.contentUrl(ids[0], true);
+      location.href = api.contentUrl(ids[0], downloadNames());
     } else {
-      api.exportZip(ids);
+      api.exportZip(ids, downloadNames());
     }
   };
 
   /** Always a zip: the files, and their metadata beside them. */
   const exportAll = () => {
     close();
-    api.exportZip(ids, true);
+    api.exportZip(ids, downloadNames(), true);
   };
 
   /**

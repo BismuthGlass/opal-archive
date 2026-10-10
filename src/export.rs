@@ -31,7 +31,13 @@ use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 use rusqlite::Connection;
 
-use crate::{AppState, entities::ids_json, error::ApiError, files::stored_name, sidecar};
+use crate::{
+    AppState,
+    entities::ids_json,
+    error::ApiError,
+    files::{Naming, download_name, safe_name, stored_name},
+    sidecar,
+};
 
 /// Bytes gathered before a chunk is handed to the response.
 const CHUNK: usize = 256 * 1024;
@@ -44,6 +50,9 @@ struct ExportInput {
     /// Present to export: to put a sidecar with its metadata beside each
     /// file, and one in for each collection.
     sidecars: Option<String>,
+    /// What the files are called in the zip.
+    #[serde(default)]
+    names: Naming,
 }
 
 /// One thing to put in the zip, under a name.
@@ -133,23 +142,6 @@ fn unique_name(name: &str, sidecar: bool, taken: &mut HashSet<String>) -> String
     candidate
 }
 
-/// A collection ID as the name of a file: without what a filesystem would
-/// refuse or take for a folder.
-fn file_name(collection_id: &str) -> String {
-    let name: String = collection_id
-        .chars()
-        .map(|c| match c {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
-            c if c.is_control() => '_',
-            c => c,
-        })
-        .collect();
-    match name.trim_matches(['.', ' ']) {
-        "" => "collection".to_string(),
-        name => name.to_string(),
-    }
-}
-
 fn write_zip(
     entries: Vec<(String, Entry)>,
     sidecars: Option<Sidecars>,
@@ -223,7 +215,11 @@ fn name_collections(
     // where it can.
     for (collection, id) in &collections {
         if let Some(id) = id {
-            let name = unique_name(&format!("{}.json", file_name(id)), false, taken);
+            let name = match safe_name(id).as_str() {
+                "" => "collection".to_string(),
+                name => name.to_string(),
+            };
+            let name = unique_name(&format!("{name}.json"), false, taken);
             entries.push((name, Entry::Sidecar(*collection)));
             names.insert(*collection, id.clone());
         }
@@ -264,14 +260,15 @@ async fn export(
                  UNION
                  SELECT m.member_id FROM membership m JOIN selected s ON m.collection_id = s.id
              )
-             SELECT f.entity_id, f.hash, f.extension, f.original_name
-             FROM file f JOIN selected s ON s.id = f.entity_id ORDER BY f.entity_id",
+             SELECT f.entity_id, f.hash, f.extension, f.original_name, e.title
+             FROM file f JOIN selected s ON s.id = f.entity_id
+             JOIN entity e ON e.id = f.entity_id ORDER BY f.entity_id",
         )?;
         let files = stmt
             .query_map([&ids], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
             })?
-            .collect::<rusqlite::Result<Vec<(i64, String, String, Option<String>)>>>()?;
+            .collect::<rusqlite::Result<Vec<(i64, String, String, Option<String>, Option<String>)>>>()?;
         let collections = if with_sidecars {
             collections(&conn, &ids)?
         } else {
@@ -286,13 +283,16 @@ async fn export(
 
     let mut taken = HashSet::new();
     let mut entries = Vec::new();
-    for (id, hash, extension, original_name) in files {
+    for (id, hash, extension, original_name, title) in files {
         let stored = stored_name(&hash, &extension);
-        let name = unique_name(
-            original_name.as_deref().unwrap_or(&stored),
-            with_sidecars,
-            &mut taken,
+        let name = download_name(
+            input.names,
+            original_name.as_deref(),
+            title.as_deref(),
+            &hash,
+            &extension,
         );
+        let name = unique_name(&name, with_sidecars, &mut taken);
         if with_sidecars {
             entries.push((format!("{name}.json"), Entry::Sidecar(id)));
         }

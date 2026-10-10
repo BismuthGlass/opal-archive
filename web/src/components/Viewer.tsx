@@ -13,7 +13,7 @@ import {
 import { contentUrl, getMetadata } from "../api";
 import { collectionName } from "../format";
 import { ensureRange, itemAt, marks, search } from "../search";
-import { saveSetting, settings } from "../settings";
+import { downloadNames, saveSetting, settings } from "../settings";
 import { enter, shownCollection } from "../tabs";
 import Icon from "./Icon";
 import { modalOpen } from "./Modal";
@@ -224,7 +224,7 @@ export default function Viewer(props: {
           </button>
         </div>
         <Show when={item()?.kind === "file"}>
-          <a href={contentUrl(item()!.id, true)}>Download</a>
+          <a href={contentUrl(item()!.id, downloadNames())}>Download</a>
         </Show>
         <button aria-label="Close" onClick={() => props.onMove(null)}>
           <Icon name="close" />
@@ -237,7 +237,7 @@ export default function Viewer(props: {
             <Switch
               fallback={
                 <p class="viewer-note">
-                  No preview for this file. <a href={contentUrl(current.id, true)}>Download it</a>
+                  No preview for this file. <a href={contentUrl(current.id, downloadNames())}>Download it</a>
                 </p>
               }
             >

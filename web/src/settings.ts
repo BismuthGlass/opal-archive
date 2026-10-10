@@ -13,7 +13,11 @@ export type Settings = {
   player?: { seconds?: number; random?: boolean };
   /** Queries kept to be used again, in the order they are offered. */
   savedQueries?: SavedQuery[];
+  /** What files are called when they are downloaded or exported. */
+  downloadNames?: api.Naming;
 };
+
+export const downloadNames = (): api.Naming => settings.downloadNames ?? "original";
 
 /** A query kept under a name. One line: a single row of a stack. */
 export type SavedQuery = { name: string; query: string };
