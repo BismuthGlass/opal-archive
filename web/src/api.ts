@@ -412,13 +412,18 @@ export type Suggestion = {
   description?: string;
 };
 
-/** A tag in the tag manager, with the aliases that defer to it. */
+/**
+ * A tag in the tag manager, with the aliases that defer to it. An alias is
+ * a tag there too: `alias_of` is the tag it defers to, and its `count` the
+ * items still carrying the alias itself.
+ */
 export type TagEntry = {
   value: string;
   count: number;
   description: string | null;
   /** `count` is the items still carrying the alias itself. */
   aliases: { value: string; count: number }[];
+  alias_of: string | null;
 };
 
 export const suggestTags = (field: string, q: string) =>

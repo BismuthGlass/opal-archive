@@ -2479,7 +2479,7 @@ kbd {
   color: var(--muted);
 }
 
-/* The alias a tag was found by, struck out, in front of the tag. */
+/* An alias's name, struck out, in front of the tag it stands for. */
 .tag-alias-found {
   flex: 0 1 auto;
   min-width: 0;
@@ -2629,6 +2629,23 @@ kbd {
 
 .tag-alias-name .tag-note {
   margin-left: 8px;
+}
+
+/* An alias's name leads to its own details. */
+.dialog .tag-alias-name button:not(.primary) {
+  padding: 0;
+  color: var(--text);
+  background: none;
+  border: none;
+}
+
+.tag-alias-name button:hover {
+  text-decoration: underline;
+}
+
+/* In the details of an alias, what being one means. */
+.tag-details .tag-alias-says {
+  margin: 20px 0 0;
 }
 
 @media (max-width: 720px) {

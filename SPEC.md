@@ -255,6 +255,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - Aliases don't chain. Making a tag an alias of something that is itself an alias points it at the final tag, and a tag that gains an alias target takes its own aliases along.
 - Making an existing tag an alias does not rewrite the files that carry it. They keep the old tag until "Update aliases" is pressed, which replaces every alias still on a file with the tag it defers to. Until then those files are not found by searching for either name.
 - Removing an alias makes it an ordinary name again; nothing is changed back on files.
+- An alias is still a tag: files may carry it until the aliases are updated, and it can have a description of its own.
 
 ### Tag manager
 
@@ -265,6 +266,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - A tag that no file carries can be deleted.
 - A tag can be renamed. Giving it the name of another tag merges the two.
 - Aliases are listed in the details of the tag they defer to, and can be added and removed there.
+- An alias is also in the list of tags, as its name struck out, an arrow, and the tag it defers to. Its details show its own description and how many files still carry it, with a button to go to the tag it defers to and one to stop it being an alias. It cannot be renamed or given aliases while it is one.
 - The "Update aliases" button lives here and shows how many uses are waiting.
 
 ### Decisions

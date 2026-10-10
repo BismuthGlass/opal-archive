@@ -157,13 +157,15 @@ impl Api {
         ids
     }
 
-    /// The tags of a field as the tag manager lists them: value and count.
+    /// The tags of a field as the tag manager lists them, aliases apart:
+    /// value and count.
     async fn tags(&self, field: &str) -> Vec<(String, i64)> {
         let answer = self.get(&format!("/tags/all?field={field}")).await;
         answer["tags"]
             .as_array()
             .unwrap()
             .iter()
+            .filter(|tag| tag["alias_of"].is_null())
             .map(|tag| {
                 (
                     tag["value"].as_str().unwrap().to_string(),
@@ -922,7 +924,10 @@ async fn aliases_wait_to_be_applied() {
         listed["tags"],
         json!([{
             "value": "cat", "count": 1, "description": null,
-            "aliases": [{ "value": "kitty", "count": 1 }],
+            "aliases": [{ "value": "kitty", "count": 1 }], "alias_of": null,
+        }, {
+            "value": "kitty", "count": 1, "description": null,
+            "aliases": [], "alias_of": "cat",
         }])
     );
     assert_eq!(
@@ -944,6 +949,20 @@ async fn aliases_wait_to_be_applied() {
     assert_eq!(api.tags("tags").await, [tag("cat", 2)]);
     assert_eq!(api.get("/tags/all?field=tags").await["pending"], 0);
     assert_eq!(api.found("kitty").await, [a, b]);
+
+    // An alias is still a tag to describe, though nothing carries it now.
+    api.post(
+        "/tags/describe",
+        json!({ "field": "tags", "value": "kitty", "description": "A small cat." }),
+    )
+    .await;
+    assert_eq!(
+        api.get("/tags/all?field=tags").await["tags"][1],
+        json!({
+            "value": "kitty", "count": 0, "description": "A small cat.",
+            "aliases": [], "alias_of": "cat",
+        })
+    );
 
     // Aliases never chain, and follow a renamed tag.
     api.post("/tags/alias", alias("puss", "kitty")).await;

@@ -418,9 +418,10 @@ async fn rename(
 }
 
 /// Every tag of a field with the aliases that defer to it, for the tag
-/// editor. An alias's count is the entities still carrying it, which
-/// `apply_aliases` moves to the target. `pending` totals that over all
-/// fields.
+/// manager. An alias is listed under its target and as a tag of its own,
+/// with `alias_of` naming the target: its count is the entities still
+/// carrying it, which `apply_aliases` moves to the target. `pending`
+/// totals that over all fields.
 async fn list(
     State(state): State<AppState>,
     Query(params): Query<ListParams>,
@@ -458,18 +459,20 @@ async fn list(
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut aliases: HashMap<String, Vec<Value>> = HashMap::new();
+    let mut alias_of: HashMap<String, String> = HashMap::new();
     for (alias, target) in alias_rows {
-        // An alias some entity still carries is listed under its target,
-        // not as a tag of its own.
+        // An alias nothing carries has no tag of its own to be listed by.
         let count = uses
-            .remove(&alias.to_lowercase())
-            .map_or(0, |(_, count)| count);
+            .entry(alias.to_lowercase())
+            .or_insert((alias.clone(), 0))
+            .1;
         uses.entry(target.to_lowercase())
             .or_insert((target.clone(), 0));
         aliases
             .entry(target.to_lowercase())
             .or_default()
             .push(json!({ "value": alias, "count": count }));
+        alias_of.insert(alias.to_lowercase(), target);
     }
 
     let tags: Vec<Value> = uses
@@ -481,6 +484,7 @@ async fn list(
                 "count": count,
                 "description": descriptions.get(&key),
                 "aliases": aliases,
+                "alias_of": alias_of.get(&key),
             })
         })
         .collect();
@@ -622,13 +626,16 @@ async fn create(
 }
 
 /// Sets a tag's description; an empty one clears it. Describing a tag also
-/// keeps it when nothing carries it.
+/// keeps it when nothing carries it. An alias can be described too: it is
+/// still a tag, on the entities that carry it and again if it stops being
+/// an alias.
 async fn describe(
     State(state): State<AppState>,
     Json(input): Json<TagInput>,
 ) -> Result<Json<Value>, ApiError> {
+    check_field(&input.field)?;
+    let value = normalize(&input.field, &input.value)?;
     let conn = state.db.lock().unwrap();
-    let value = definable(&conn, &input.field, &input.value)?;
     let description = input
         .description
         .as_deref()

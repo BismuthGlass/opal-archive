@@ -52,7 +52,9 @@ const normalized = (name: string) =>
 /**
  * Every tag of one type, as a list beside the details of the one selected:
  * its description, its aliases, and the buttons to rename, merge and
- * delete it. The box filters the plain tags, or those of the type written
+ * delete it. An alias is in the list too, struck out in front of the tag
+ * it stands for: it has a description of its own, and its details lead to
+ * that tag. The box filters the plain tags, or those of the type written
  * in front (`@cr:`), as it would a namespace; a name typed there that does
  * not exist yet can be created. While only `@…` is typed the list is of the
  * types.
@@ -99,19 +101,9 @@ export default function TagManager(props: {
   const matching = createMemo(() => {
     const text = typed().toLowerCase();
     const has = (value: string | null) => value !== null && value.toLowerCase().includes(text);
-    return tags().filter(
-      (tag) => has(tag.value) || has(tag.description) || tag.aliases.some((a) => has(a.value)),
-    );
+    // An alias is a row of its own, so its tag need not be found by it.
+    return tags().filter((tag) => has(tag.value) || has(tag.description));
   });
-  /**
-   * The alias that brought a tag into the list: one that has what is typed
-   * when the tag's own name does not.
-   */
-  const aliasFound = (tag: TagEntry) => {
-    const text = typed().toLowerCase();
-    if (!text || tag.value.toLowerCase().includes(text)) return undefined;
-    return tag.aliases.find((alias) => alias.value.toLowerCase().includes(text));
-  };
   /** Whether what is typed names no tag or alias yet, and so could be one. */
   const creatable = () => {
     const name = normalized(typed());
@@ -123,8 +115,10 @@ export default function TagManager(props: {
     );
   };
 
-  const select = (tag: TagEntry | null) => {
-    setChosen(tag?.value.toLowerCase() ?? null);
+  /** Shows the details of a tag, given whole or by its name. */
+  const select = (tag: TagEntry | string | null) => {
+    const name = typeof tag === "string" ? tag : tag?.value;
+    setChosen(name?.toLowerCase() ?? null);
     setRenaming(false);
   };
 
@@ -267,18 +261,23 @@ export default function TagManager(props: {
                       aria-selected={selected() === tag}
                       onClick={() => select(tag)}
                     >
-                      {/* Found by an alias: the alias, struck out, then
-                          the tag it stands for. */}
-                      <Show when={aliasFound(tag)}>
-                        {(alias) => (
-                          <span class="tag-alias-found">
-                            <s>{alias().value}</s> →
+                      {/* An alias: its name, struck out, then the tag it
+                          stands for. */}
+                      <Show
+                        when={tag.alias_of}
+                        fallback={
+                          <span class="tag-name" style={tagTextStyle(field())}>
+                            {tag.value}
                           </span>
-                        )}
+                        }
+                      >
+                        <span class="tag-alias-found">
+                          <s>{tag.value}</s> →
+                        </span>
+                        <span class="tag-name" style={tagTextStyle(field())}>
+                          {tag.alias_of}
+                        </span>
                       </Show>
-                      <span class="tag-name" style={tagTextStyle(field())}>
-                        {tag.value}
-                      </span>
                       <Show when={tag.description}>
                         <span class="tag-preview">{tag.description}</span>
                       </Show>
@@ -355,24 +354,53 @@ export default function TagManager(props: {
                       />
                     </Show>
                     <span class="tag-note">
-                      {fieldLabel(field())}, on {plural(tag().count, "item")}
+                      {fieldLabel(field())},{" "}
+                      <Show when={tag().alias_of} fallback={`on ${plural(tag().count, "item")}`}>
+                        an alias of {tag().alias_of}
+                        {tag().count > 0 && `, still on ${plural(tag().count, "item")}`}
+                      </Show>
                     </span>
                   </div>
                   <div class="tag-actions">
-                    <button
-                      title="Rename this tag; giving it the name of another tag merges them"
-                      onClick={() => setRenaming(true)}
+                    <Show
+                      when={tag().alias_of}
+                      fallback={
+                        <>
+                          <button
+                            title="Rename this tag; giving it the name of another tag merges them"
+                            onClick={() => setRenaming(true)}
+                          >
+                            Rename or merge
+                          </button>
+                          <Show when={tag().count === 0 && tag().aliases.length === 0}>
+                            <button
+                              class="danger"
+                              title="Delete this tag, which nothing carries"
+                              onClick={() => remove(tag())}
+                            >
+                              Delete
+                            </button>
+                          </Show>
+                        </>
+                      }
                     >
-                      Rename or merge
-                    </button>
-                    <Show when={tag().count === 0 && tag().aliases.length === 0}>
-                      <button
-                        class="danger"
-                        title="Delete this tag, which nothing carries"
-                        onClick={() => remove(tag())}
-                      >
-                        Delete
-                      </button>
+                      {(target) => (
+                        <>
+                          <button
+                            class="primary"
+                            title={`Show ${target()}, the tag this one stands for`}
+                            onClick={() => select(target())}
+                          >
+                            Go to {target()}
+                          </button>
+                          <button
+                            title="Stop this being an alias: it is a tag of its own again"
+                            onClick={() => run(() => api.setAlias(field(), tag().value, ""))}
+                          >
+                            Remove alias
+                          </button>
+                        </>
+                      )}
                     </Show>
                   </div>
                 </header>
@@ -398,41 +426,58 @@ export default function TagManager(props: {
                   }}
                 />
 
-                <h3>Aliases</h3>
-                <ul class="tag-aliases">
-                  <For each={tag().aliases}>
-                    {(alias) => (
-                      <li>
-                        <Icon name="subdirectory-arrow-right" />
-                        <span class="tag-alias-name">
-                          {alias.value}
-                          <Show when={alias.count > 0}>
-                            <span class="tag-note">
-                              still on {plural(alias.count, "item")}, not updated yet
-                            </span>
-                          </Show>
-                        </span>
-                        <button
-                          class="plain"
-                          aria-label={`Remove the alias ${alias.value}`}
-                          title="Stop this being an alias"
-                          onClick={() => run(() => api.setAlias(field(), alias.value, ""))}
-                        >
-                          <Icon name="close" />
-                        </button>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-                <input
-                  type="text"
-                  aria-label={`New alias of ${tag().value}`}
-                  placeholder="Add an alias: another name that stands for this tag"
-                  autocomplete="off"
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") addAlias(tag(), event.currentTarget);
-                  }}
-                />
+                <Show
+                  when={!tag().alias_of}
+                  fallback={
+                    <p class="hint tag-alias-says">
+                      Wherever {tag().value} is added or searched for, {tag().alias_of} is used
+                      instead.
+                      {tag().count > 0 &&
+                        " The items still carrying it keep it until Update aliases is pressed."}
+                    </p>
+                  }
+                >
+                  <h3>Aliases</h3>
+                  <ul class="tag-aliases">
+                    <For each={tag().aliases}>
+                      {(alias) => (
+                        <li>
+                          <Icon name="subdirectory-arrow-right" />
+                          <span class="tag-alias-name">
+                            <button
+                              title={`Show ${alias.value}, to describe it`}
+                              onClick={() => select(alias.value)}
+                            >
+                              {alias.value}
+                            </button>
+                            <Show when={alias.count > 0}>
+                              <span class="tag-note">
+                                still on {plural(alias.count, "item")}, not updated yet
+                              </span>
+                            </Show>
+                          </span>
+                          <button
+                            class="plain"
+                            aria-label={`Remove the alias ${alias.value}`}
+                            title="Stop this being an alias"
+                            onClick={() => run(() => api.setAlias(field(), alias.value, ""))}
+                          >
+                            <Icon name="close" />
+                          </button>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                  <input
+                    type="text"
+                    aria-label={`New alias of ${tag().value}`}
+                    placeholder="Add an alias: another name that stands for this tag"
+                    autocomplete="off"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") addAlias(tag(), event.currentTarget);
+                    }}
+                  />
+                </Show>
               </>
             )}
           </Show>
