@@ -6,7 +6,6 @@ import { changed, dataVersion } from "../search";
 import {
   aggregatedTypes,
   orderedTypes,
-  pillStyle,
   tagTextStyle,
   prefixOf,
   readTag,
@@ -253,7 +252,7 @@ function createTagBox(props: FieldProps & { initial?: string }) {
                 when={option.kind === "tag" && option}
                 fallback={
                   <>
-                    <span class="chip tinted type-sample" style={pillStyle(option.field)}>
+                    <span class="tag-name" style={tagTextStyle(option.field)}>
                       {fieldLabel(option.field)}
                     </span>
                     <span class="suggestion-count">@{prefixOf(option.field)}:</span>

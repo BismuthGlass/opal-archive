@@ -1,11 +1,14 @@
 import { TAG_FIELDS } from "./api";
 import { saveSetting, settings } from "./settings";
 
-/** How a tag type is shown: its pill's colours, and where its tags go. */
+/** How a tag type is shown: the colour of its tags, and where they go. */
 export type TagType = {
-  /** Background and text colour of the type's pills. */
-  bg: string;
-  fg: string;
+  /**
+   * The colour its tags are written in, on a light theme and on a dark
+   * one. Null is the theme's own text colour.
+   */
+  light: string | null;
+  dark: string | null;
   /**
    * Whether its tags are shown with those of the other aggregated types,
    * in one list told apart by colour, or in a section of their own.
@@ -18,20 +21,20 @@ export type TagType = {
 // (flaws, language, where it came from, what it is for) apart, as they do
 // the bucket a file is kept in.
 const DEFAULTS: Record<(typeof TAG_FIELDS)[number], TagType> = {
-  tags: { bg: "#e3e6ea", fg: "#22262b", aggregate: true }, // slate: the neutral ones
-  creator: { bg: "#ffd8a8", fg: "#5c2a00", aggregate: true }, // amber: a signature
-  character: { bg: "#c5efcf", fg: "#0b4a1e", aggregate: true }, // green: the living
-  source_work: { bg: "#d5dbff", fg: "#1b236e", aggregate: true }, // indigo: a book spine
-  person: { bg: "#ffd2df", fg: "#6b0f2c", aggregate: true }, // rose: real people
-  genre: { bg: "#e5d3ff", fg: "#3e1378", aggregate: true }, // violet: mood
-  style: { bg: "#c6f0f1", fg: "#06484c", aggregate: true }, // teal: the brush
-  medium: { bg: "#f2e2c2", fg: "#513a06", aggregate: true }, // canvas
-  flaws: { bg: "#ffd0cb", fg: "#7a1410", aggregate: false }, // red: a warning
-  language: { bg: "#d1ebff", fg: "#0a3c65", aggregate: false }, // sky
-  source: { bg: "#e2e8c6", fg: "#374209", aggregate: false }, // olive: provenance
-  usage_tags: { bg: "#ffe8a3", fg: "#594200", aggregate: false }, // sticky note
-  ai_usage_tags: { bg: "#d8d5e8", fg: "#2e2949", aggregate: false }, // machine grey
-  bucket: { bg: "#3b4252", fg: "#f1f3f7", aggregate: false }, // dark: a label on a box
+  tags: { light: null, dark: null, aggregate: true }, // the neutral ones: as the text is
+  creator: { light: "#a85400", dark: "#ffd8a8", aggregate: true }, // amber: a signature
+  character: { light: "#1a7a35", dark: "#c5efcf", aggregate: true }, // green: the living
+  source_work: { light: "#3040b0", dark: "#d5dbff", aggregate: true }, // indigo: a book spine
+  person: { light: "#b0204f", dark: "#ffd2df", aggregate: true }, // rose: real people
+  genre: { light: "#6a2bc0", dark: "#e5d3ff", aggregate: true }, // violet: mood
+  style: { light: "#0a777d", dark: "#c6f0f1", aggregate: true }, // teal: the brush
+  medium: { light: "#7d5a0a", dark: "#f2e2c2", aggregate: true }, // canvas
+  flaws: { light: "#b3261e", dark: "#ffd0cb", aggregate: false }, // red: a warning
+  language: { light: "#1565a8", dark: "#d1ebff", aggregate: false }, // sky
+  source: { light: "#556b0f", dark: "#e2e8c6", aggregate: false }, // olive: provenance
+  usage_tags: { light: "#8a6500", dark: "#ffe8a3", aggregate: false }, // sticky note
+  ai_usage_tags: { light: "#54497f", dark: "#d8d5e8", aggregate: false }, // machine grey
+  bucket: { light: "#3b4252", dark: "#f1f3f7", aggregate: false }, // a label on a box
 };
 
 /**
@@ -110,19 +113,6 @@ export const tagText = (field: string, value: string) =>
 export const defaultTagType = (field: string): TagType =>
   DEFAULTS[field as keyof typeof DEFAULTS] ?? DEFAULTS.tags;
 
-export const tagType = (field: string): TagType => ({
-  ...defaultTagType(field),
-  ...settings.tagTypes?.[field],
-});
-
-export const isCustom = (field: string) => settings.tagTypes?.[field] !== undefined;
-
-/** Inline style that gives a pill its type's colours. */
-export const pillStyle = (field: string) => {
-  const type = tagType(field);
-  return { background: type.bg, color: type.fg };
-};
-
 /** How light a `#rrggbb` colour is, from 0 to 1. */
 const lightness = (colour: string) => {
   const part = (at: number) => parseInt(colour.slice(at, at + 2), 16) / 255;
@@ -130,14 +120,34 @@ const lightness = (colour: string) => {
 };
 
 /**
- * Inline style for a tag written with no background, in its type's
- * colour: the two colours of the type, for the stylesheet to take the
- * darker on a light theme and the lighter on a dark one.
+ * What is stored for a type, as it is read now. A type stored when tags
+ * were pills has a background and a text colour instead: of the two, the
+ * darker is what shows on a light theme and the lighter on a dark one.
+ */
+function stored(field: string): Partial<TagType> {
+  const { bg, fg, ...rest } = settings.tagTypes?.[field] ?? {};
+  const old: Partial<TagType> = {};
+  if (bg && fg) [old.light, old.dark] = lightness(bg) < lightness(fg) ? [bg, fg] : [fg, bg];
+  else if (bg) old.dark = bg;
+  else if (fg) old.light = fg;
+  return { ...old, ...rest };
+}
+
+export const tagType = (field: string): TagType => ({
+  ...defaultTagType(field),
+  ...stored(field),
+});
+
+export const isCustom = (field: string) => settings.tagTypes?.[field] !== undefined;
+
+/**
+ * Inline style for a tag's name, which is written in its type's colour:
+ * the type's two colours, for the stylesheet to take the one for the
+ * theme. A type with no colour of its own leaves the text as it is.
  */
 export const tagTextStyle = (field: string) => {
-  const { bg, fg } = tagType(field);
-  const [dark, light] = lightness(bg) < lightness(fg) ? [bg, fg] : [fg, bg];
-  return { "--tag-dark": dark, "--tag-light": light };
+  const { light, dark } = tagType(field);
+  return { "--tag-on-light": light ?? "initial", "--tag-on-dark": dark ?? "initial" };
 };
 
 /**
@@ -183,6 +193,6 @@ export const aggregatedTypes = (): string[] =>
 export async function setTagType(field: string, changes: Partial<TagType> | null) {
   const all = { ...settings.tagTypes };
   if (changes === null) delete all[field];
-  else all[field] = { ...all[field], ...changes };
+  else all[field] = { ...stored(field), ...changes };
   await saveSetting("tagTypes", Object.keys(all).length > 0 ? all : null);
 }

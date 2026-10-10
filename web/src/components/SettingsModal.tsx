@@ -10,10 +10,10 @@ import {
   isCustom,
   isCustomOrder,
   orderedTypes,
-  pillStyle,
   prefixOf,
   setTagType,
   setTagTypeOrder,
+  tagTextStyle,
   tagType,
 } from "../tagTypes";
 import Icon from "./Icon";
@@ -208,10 +208,12 @@ function TagTypes() {
       <h3>Tag types</h3>
       <p class="hint">
         A tag is of a type, written in front of it wherever tags are typed: <code>@cr:name</code>{" "}
-        is a creator, and a tag with no @ is a plain one. Tags are shown as pills in the colours of
-        their type. The types ticked as aggregated share one list in the side panel; the others
-        each get a section of their own. Drag a row by its
-        handle to change the order the types are listed in.
+        is a creator, and a tag with no @ is a plain one. A tag is written in the colour of its
+        type, which has one for the light theme and one for the dark: each row shows its type as
+        it looks on both, whichever theme is on. A type with no colour is written as the rest of
+        the text is. The types ticked as aggregated share one list in the side panel; the others
+        each get a section of their own. Drag a row by its handle to change the order the types
+        are listed in.
         <Show when={isCustomOrder()}>
           {" "}
           <button
@@ -222,7 +224,11 @@ function TagTypes() {
           </button>
         </Show>
       </p>
-      <ul class="setting-rows" ref={list}>
+      <div class="theme-heads" aria-hidden="true">
+        <span>On the light theme</span>
+        <span>On the dark theme</span>
+      </div>
+      <ul class="setting-rows tag-type-rows" ref={list}>
         <For each={drag.order()}>
           {(field) => (
             <li classList={{ dragging: drag.dragging() === field }}>
@@ -233,37 +239,16 @@ function TagTypes() {
               >
                 <Icon name="drag-indicator" />
               </span>
-              <div class="setting-text">
-                <span>
-                  <span class="chip tinted type-sample" style={pillStyle(field)}>
-                    {fieldLabel(field)}
-                  </span>{" "}
-                  <code class="hint">@{prefixOf(field)}:</code>
-                </span>
-              </div>
-              <Show when={isCustom(field)}>
-                <button class="link" title="Back to the defaults" onClick={() => change(field, null)}>
-                  Reset
-                </button>
-              </Show>
-              <label class="swatch" title="Background colour">
-                <span class="hint">Background</span>
-                <input
-                  type="color"
-                  aria-label={`Background colour of ${fieldLabel(field)}`}
-                  value={tagType(field).bg}
-                  onChange={(event) => change(field, { bg: event.currentTarget.value })}
-                />
-              </label>
-              <label class="swatch" title="Text colour">
-                <span class="hint">Text</span>
-                <input
-                  type="color"
-                  aria-label={`Text colour of ${fieldLabel(field)}`}
-                  value={tagType(field).fg}
-                  onChange={(event) => change(field, { fg: event.currentTarget.value })}
-                />
-              </label>
+              <For each={THEMES}>
+                {(theme) => (
+                  <ThemeColour
+                    field={field}
+                    theme={theme}
+                    onChange={(colour) => change(field, { [theme]: colour })}
+                  />
+                )}
+              </For>
+              <code class="hint type-prefix">@{prefixOf(field)}:</code>
               <label class="check" title="Show with the other aggregated types in one list">
                 <input
                   type="checkbox"
@@ -273,6 +258,15 @@ function TagTypes() {
                 />
                 Aggregate
               </label>
+              <button
+                class="link"
+                title="Back to the defaults"
+                // Kept in its place when there is nothing to reset, so the rows line up.
+                style={{ visibility: isCustom(field) ? "visible" : "hidden" }}
+                onClick={() => change(field, null)}
+              >
+                Reset
+              </button>
             </li>
           )}
         </For>
@@ -283,6 +277,48 @@ function TagTypes() {
         </p>
       </Show>
     </>
+  );
+}
+
+const THEMES = ["light", "dark"] as const;
+/** The text colour of each theme, which a type with no colour is written in. */
+const THEME_TEXT = { light: "#1b1b1f", dark: "#e8e8ec" };
+
+/**
+ * A type's colour on one theme: the type's name as it looks there, on
+ * that theme's own background whichever theme is on, with the colour to
+ * pick and a button to go without one.
+ */
+function ThemeColour(props: {
+  field: string;
+  theme: (typeof THEMES)[number];
+  onChange: (colour: string | null) => void;
+}) {
+  const colour = () => tagType(props.field)[props.theme];
+  const what = () => `${fieldLabel(props.field)} on the ${props.theme} theme`;
+  return (
+    <div class="theme-sample" classList={{ [props.theme]: true }}>
+      <span class="tag-name" style={tagTextStyle(props.field)}>
+        {fieldLabel(props.field)}
+      </span>
+      <input
+        type="color"
+        aria-label={`Colour of ${what()}`}
+        title={`Colour of ${what()}`}
+        value={colour() ?? THEME_TEXT[props.theme]}
+        onChange={(event) => props.onChange(event.currentTarget.value)}
+      />
+      <button
+        class="plain"
+        aria-label={`No colour for ${what()}`}
+        title="No colour: write it as the rest of the text is"
+        // Kept in its place when there is no colour to drop, so the boxes line up.
+        style={{ visibility: colour() === null ? "hidden" : "visible" }}
+        onClick={() => props.onChange(null)}
+      >
+        <Icon name="close" />
+      </button>
+    </div>
   );
 }
 

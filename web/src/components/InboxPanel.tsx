@@ -2,14 +2,14 @@ import { createSignal, For, onMount, Show } from "solid-js";
 import * as api from "../api";
 import type { InboxRequest } from "../api";
 import { errorMessage, fieldLabel, plural } from "../format";
-import { pillStyle } from "../tagTypes";
+import { tagTextStyle } from "../tagTypes";
 import { inbox, loadInbox } from "../inbox";
 import { BaseTags, Progress } from "./DownloadPanel";
 import DownloaderSettings from "./DownloaderSettings";
 import Icon from "./Icon";
 import { createStoredFlag } from "./Panel";
 
-/** The tags a request brought with it, as pills. */
+/** The tags a request brought with it, each in its type's colour. */
 function RequestTags(props: { request: InboxRequest }) {
   const entries = () =>
     Object.entries(props.request.tags).flatMap(([field, values]) =>
@@ -21,11 +21,11 @@ function RequestTags(props: { request: InboxRequest }) {
         <For each={entries()}>
           {(entry) => (
             <span
-              class="chip tinted"
-              style={pillStyle(entry.field)}
+              class="tag-name"
+              style={tagTextStyle(entry.field)}
               title={`${fieldLabel(entry.field)}: ${entry.value}`}
             >
-              <span class="chip-label">{entry.value}</span>
+              {entry.value}
             </span>
           )}
         </For>

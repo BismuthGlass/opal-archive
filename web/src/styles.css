@@ -1402,18 +1402,6 @@ button.primary {
   }
 }
 
-/* A tag in its type's colours, which come inline from the settings. */
-.chip.tinted {
-  border-color: transparent;
-}
-
-/* Its label takes the type's text colour, whether it is a button or, as
-   in the tagger, plain text. */
-.chip.tinted button,
-.chip.tinted .chip-label {
-  color: inherit;
-}
-
 /* In the tagger a tag's label is a disabled button; it should not fade. */
 .dialog .chip-label:disabled {
   opacity: 1;
@@ -1464,22 +1452,56 @@ button.primary {
   opacity: 0.6;
 }
 
-.suggestions .type-sample {
-  font-size: 13px;
-}
-
-.type-sample {
-  padding: 1px 9px;
-}
-
-.swatch {
+/* A type's colour on one theme, in the settings: a box that is that theme
+   whichever one is on, so the colour is seen as it will be. The theme's
+   colours are set again inside it, for what it holds to take. */
+.theme-sample {
   display: flex;
-  flex: none;
-  gap: 4px;
+  flex: 0 0 176px;
+  gap: 6px;
   align-items: center;
+  min-width: 0;
+  padding: 4px 4px 4px 10px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 
-.swatch input {
+.theme-sample.light {
+  --surface: #ffffff;
+  --bg: #f4f4f6;
+  --border: #d8d8de;
+  --text: #1b1b1f;
+  --muted: #6b6b76;
+}
+
+.theme-sample.dark {
+  --surface: #1c1c20;
+  --bg: #131315;
+  --border: #2f2f36;
+  --text: #e8e8ec;
+  --muted: #9a9aa6;
+}
+
+.theme-sample.light .tag-name {
+  color: var(--tag-on-light, inherit);
+}
+
+.theme-sample.dark .tag-name {
+  color: var(--tag-on-dark, inherit);
+}
+
+.theme-sample .tag-name {
+  display: block;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-sample input {
+  flex: none;
   width: 28px;
   height: 22px;
   padding: 0;
@@ -1487,6 +1509,29 @@ button.primary {
   border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
+}
+
+.theme-sample button {
+  flex: none;
+}
+
+/* Over the rows of types, what each of the two boxes is. */
+.theme-heads {
+  display: flex;
+  gap: 12px;
+  /* As far in as the boxes: past the row's edge and its handle. */
+  padding: 0 0 0 45px;
+  margin: 12px 0 -8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.theme-heads span {
+  flex: 0 0 176px;
+}
+
+.tag-type-rows .type-prefix {
+  flex: 1;
 }
 
 .setting-rows .check {
@@ -1598,6 +1643,12 @@ span.chip-label:hover {
   align-items: center;
 }
 
+/* Tags in a row, in a tab's panel: names only, so set further apart. */
+.inbox-tags,
+.download-tags {
+  gap: 2px 12px;
+}
+
 /* Tags one to a line: its name, then how many of the selection carry it
    and its buttons. The lines are close, so that many tags take little room. */
 .tag-lines {
@@ -1621,17 +1672,18 @@ span.chip-label:hover {
   align-items: center;
 }
 
-/* A tag's name, with no background, in its type's colour: of the type's
-   two, which come inline from the settings, the one that shows on the theme. */
+/* A tag's name in its type's colour: of the type's two, which come inline
+   from the settings, the one for the theme. A type with none leaves the
+   name as the text around it. */
 .tag-name {
   display: inline-flex;
   min-width: 0;
-  color: var(--tag-dark);
+  color: var(--tag-on-light, inherit);
 }
 
 @media (prefers-color-scheme: dark) {
   .tag-name {
-    color: var(--tag-light);
+    color: var(--tag-on-dark, inherit);
   }
 }
 
@@ -3115,10 +3167,6 @@ kbd {
 
 .dialog .downloader-login select {
   width: auto;
-}
-
-.download-tags .chip.tinted .chip-label:hover {
-  text-decoration: none;
 }
 
 @media (max-width: 720px) {

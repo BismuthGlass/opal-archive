@@ -5,8 +5,15 @@ import * as api from "./api";
 export type Settings = {
   /** Action to key, for the actions whose key is not the default. */
   hotkeys?: Record<string, string>;
-  /** Tag type to what differs from its defaults: colours, aggregation. */
-  tagTypes?: Record<string, { bg?: string; fg?: string; aggregate?: boolean }>;
+  /**
+   * Tag type to what differs from its defaults: colours, aggregation. A
+   * colour of null is the theme's own text colour. `bg` and `fg` are from
+   * when a tag was a pill with a background, and are read as colours.
+   */
+  tagTypes?: Record<
+    string,
+    { light?: string | null; dark?: string | null; aggregate?: boolean; bg?: string; fg?: string }
+  >;
   /** The tag types in the order they are listed, if not the default one. */
   tagTypeOrder?: string[];
   /** How the viewer plays through results by itself. */

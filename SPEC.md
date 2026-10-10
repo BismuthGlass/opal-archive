@@ -232,8 +232,8 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 
 ### Showing tags
 
-- A tag is shown as a pill in the colours of its type. Each type has a background and a text colour, both configurable in the settings.
-- Clicking a tag's pill in the side panel adds the tag to the query in the search box, without searching. A right click on it offers to search for the tag in a new tab, or to open it in the tag manager. The heading of a namespace does the same for everything in the namespace, without the tag manager.
+- A tag is written in the colour of its type, with no background. Each type has two colours, one for the light theme and one for the dark, both configurable in the settings; either can be left out, and the type is then written as the rest of the text is. The settings show each type as it looks on both themes, whichever is on.
+- Clicking a tag in the side panel adds the tag to the query in the search box, without searching. A right click on it offers to search for the tag in a new tab, or to open it in the tag manager. The heading of a namespace does the same for everything in the namespace, without the tag manager.
 - The settings also say which types are aggregated. The aggregated types share one list on a file, told apart only by colour; each of the others has a section of its own.
 - By default the types that describe the work are aggregated (tags, creator, character, source work, person, genre, style, medium) and the rest are not (bucket, flaws, language, source, usage tags, AI usage tags).
 - The order the types are listed in is configurable too, by dragging them in the settings. By default plain tags come last among the aggregated types.
@@ -247,7 +247,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - The same goes for searching: `@us:wallpaper` finds that usage tag, `@us:*` everything with a usage tag. There is no other way to search tags by type.
 - No tag can start with `@`.
 - `@` is also how other things are told apart from plain tags. `@trashed` is the first: a state rather than a tag.
-- Tags are still shown without the `@`: as pills in their type's colours, in the aggregated list or in their type's section.
+- Tags are still shown without the `@`: in their type's colour, in the aggregated list or in their type's section.
 
 ### Aliases
 
@@ -272,7 +272,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - A modal listing every tag of a type, with how many files carry it. Its text box filters the plain tags, or with a type in front (`@us:`, `@us:*`, `@us:wall`) the tags of that type.
 - A tag can be created here before any file carries it, by typing a name that does not exist yet. It is then offered as a suggestion when tagging.
 - Selecting a tag in the list shows its details beside it: its description, its aliases, and the buttons to rename, merge and delete it.
-- A tag's description can be long, for instance a few paragraphs about an author. Its start is shown in the list and with the tag's suggestions, and the whole of it in the tooltip of the tag's pill.
+- A tag's description can be long, for instance a few paragraphs about an author. Its start is shown in the list and with the tag's suggestions, and the whole of it in the tag's tooltip.
 - A tag that no file carries can be deleted.
 - A tag can be renamed. Giving it the name of another tag merges the two.
 - Aliases are listed in the details of the tag they defer to, and can be added and removed there.

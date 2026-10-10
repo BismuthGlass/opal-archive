@@ -5,7 +5,7 @@ import { createResource, createSignal, For, Show } from "solid-js";
 import * as api from "../api";
 import type { Changes, DownloadJob, Downloader, Metadata } from "../api";
 import { dateTime, errorMessage, fieldLabel, plural } from "../format";
-import { pillStyle } from "../tagTypes";
+import { tagTextStyle } from "../tagTypes";
 import Icon from "./Icon";
 import Modal from "./Modal";
 import { Tagger } from "./Tags";
@@ -140,11 +140,11 @@ export function BaseTags(props: {
         <For each={entries()}>
           {(entry) => (
             <span
-              class="chip tinted"
-              style={pillStyle(entry.field)}
+              class="tag-name"
+              style={tagTextStyle(entry.field)}
               title={`${fieldLabel(entry.field)}: ${entry.value}`}
             >
-              <span class="chip-label">{entry.value}</span>
+              {entry.value}
             </span>
           )}
         </For>
