@@ -12,11 +12,6 @@
       "key": "recursive",
       "label": "Go into what is inside: a board's sections, a profile's boards",
       "default": true
-    },
-    {
-      "key": "video",
-      "label": "Download videos",
-      "default": true
     }
   ]
 }

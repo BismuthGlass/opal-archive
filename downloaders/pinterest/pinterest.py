@@ -201,19 +201,18 @@ def best_video(videos: dict | None) -> str | None:
     return max(pool, key=lambda v: (v.get("width") or 0) * (v.get("height") or 0))["url"]
 
 
-def media_urls(pin: dict, want_video: bool) -> list[str]:
+def media_urls(pin: dict) -> list[str]:
     """Every media URL of a pin, in display order."""
     video = best_video(pin.get("videos"))
     if video:
-        return [video] if want_video else []
+        return [video]
 
     urls = []
     for page in (pin.get("story_pin_data") or {}).get("pages") or []:
         for block in page.get("blocks") or []:
             v = best_video(block.get("video"))
             if v:
-                if want_video:
-                    urls.append(v)
+                urls.append(v)
             elif (block.get("image") or {}).get("images"):
                 urls.append(best_image(block["image"]["images"]))
     if not urls:
@@ -256,9 +255,9 @@ def fetch(url: str, dest: Path) -> None:
     part.rename(dest)
 
 
-def fetch_pin(pin: dict, out: Path, want_video: bool) -> list[str]:
+def fetch_pin(pin: dict, out: Path) -> list[str]:
     """Downloads a pin's files into `out`, and returns their paths in order."""
-    urls = media_urls(pin, want_video)
+    urls = media_urls(pin)
     files = []
     for i, url in enumerate(urls, 1):
         ext = Path(urlparse(url).path).suffix.lower()
@@ -339,7 +338,7 @@ def download() -> int:
 
     def work(pin: dict):
         try:
-            return pin, fetch_pin(pin, out, options.get("video", True)), None
+            return pin, fetch_pin(pin, out), None
         except Exception as e:  # keep going; the server is told
             return pin, [], str(e)
 

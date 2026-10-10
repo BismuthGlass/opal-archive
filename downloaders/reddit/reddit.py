@@ -143,13 +143,13 @@ def extension(url: str) -> str:
     return Path(urlparse(url).path).suffix.lower()
 
 
-def uploaded(media_id: str, meta: dict, want_video: bool) -> tuple[str, str] | None:
+def uploaded(media_id: str, meta: dict) -> tuple[str, str]:
     """One upload of a gallery, or of a text post that shows it inline."""
     if meta.get("status") != "valid":
         raise RuntimeError(f"Reddit has not kept one of the files ({meta.get('status')})")
     kind, full = meta.get("e"), meta.get("s") or {}
     if kind == "RedditVideo":
-        return ("video", meta["dashUrl"]) if want_video else None
+        return "video", meta["dashUrl"]
     if kind == "AnimatedImage":
         return "file", ORIGINAL.format(name=f"{media_id}.gif")
     # The address given is of a preview; the original has the same name.
@@ -157,37 +157,33 @@ def uploaded(media_id: str, meta: dict, want_video: bool) -> tuple[str, str] | N
     return "file", ORIGINAL.format(name=f"{media_id}{ext}")
 
 
-def media_of(post: dict, want_video: bool, want_external: bool) -> list[tuple[str, str]]:
+def media_of(post: dict, want_external: bool) -> list[tuple[str, str]]:
     """Everything a post shows, in display order."""
     metadata = post.get("media_metadata") or {}
     if post.get("gallery_data"):
         ids = [item["media_id"] for item in post["gallery_data"].get("items") or []]
-        found = [uploaded(i, metadata[i], want_video) for i in ids if i in metadata]
-        return [m for m in found if m]
+        return [uploaded(i, metadata[i]) for i in ids if i in metadata]
 
     url = post.get("url_overridden_by_dest") or post.get("url") or ""
     host = (urlparse(url).hostname or "").lower()
     video = ((post.get("secure_media") or post.get("media") or {}).get("reddit_video")) or {}
     if video or host == "v.redd.it":
         address = video.get("dash_url") or f"{url.rstrip('/')}/DASHPlaylist.mpd"
-        return [("video", address)] if want_video else []
+        return [("video", address)]
     if host in ("i.redd.it", "preview.redd.it"):
         return [("file", ORIGINAL.format(name=Path(urlparse(url).path).name))]
     if post.get("is_self") or host.endswith("reddit.com"):
         # A text post; any pictures are in among its words.
-        found = [uploaded(i, meta, want_video) for i, meta in metadata.items()]
-        return [m for m in found if m]
+        return [uploaded(i, meta) for i, meta in metadata.items()]
     if not want_external:
         return []
-    if extension(url) in IMAGE:
+    if extension(url) in IMAGE | VIDEO:
         return [("file", url)]
-    if extension(url) in VIDEO:
-        return [("file", url)] if want_video else []
     # Imgur's .gifv is a page around a video.
     if host.endswith("imgur.com") and extension(url) == ".gifv":
-        return [("file", url[: -len(".gifv")] + ".mp4")] if want_video else []
+        return [("file", url[: -len(".gifv")] + ".mp4")]
     # Anything else is another site's page: yt-dlp knows the video sites.
-    return [("video", url)] if want_video else []
+    return [("video", url)]
 
 
 # --- downloading -------------------------------------------------------------
@@ -294,7 +290,7 @@ def download() -> int:
         if key in seen:
             emit("skipped", key=key)
             return 0
-    media = media_of(post, options.get("video", True), options.get("external", True))
+    media = media_of(post, options.get("external", True))
     if not media:
         raise RuntimeError("the post has nothing to download, with the options as they are")
     emit("log", message="Downloading")

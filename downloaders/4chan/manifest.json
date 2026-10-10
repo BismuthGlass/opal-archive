@@ -6,11 +6,6 @@
   "sites": ["4chan.org", "4channel.org", "4cdn.org"],
   "options": [
     {
-      "key": "video",
-      "label": "Download videos",
-      "default": true
-    },
-    {
       "key": "comments",
       "label": "Describe each file with the text of its post",
       "default": false

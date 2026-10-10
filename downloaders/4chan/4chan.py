@@ -46,7 +46,6 @@ HEADERS = {
 HOSTS = ("4chan.org", "4channel.org")
 # Where the files themselves are served from.
 FILE_HOSTS = ("4cdn.org", "4chan.org")
-VIDEO = {".webm", ".mp4"}
 RETRY_STATUS = {429, 500, 502, 503, 504}
 # Files fetched at once. 4chan asks its readers to go easy.
 JOBS = 2
@@ -187,8 +186,6 @@ def download() -> int:
         emit("found", total=1)
         if file in seen:
             emit("skipped", key=file)
-        elif not options.get("video", True) and Path(file).suffix.lower() in VIDEO:
-            raise RuntimeError("that is a video, and videos are turned off")
         else:
             emit("log", message="Downloading")
             emit("item", key=file, source_url=file, files=[fetch_file(file, out)])
@@ -208,8 +205,6 @@ def download() -> int:
     ]
     if only is not None and not posts:
         raise RuntimeError("that post has no file")
-    if not options.get("video", True):
-        posts = [post for post in posts if post["ext"].lower() not in VIDEO]
     emit("found", total=len(posts))
     emit("log", message="Downloading")
 
