@@ -867,7 +867,7 @@ for n in 1 2; do
   fi
   whole='"id":"fake:board","type":"sourceset","url":"https://example.test/board","title":"Board"'
   if [ "$n" = 2 ]; then
-    part='"collection":{"id":"fake#2","url":"'$key'","description":" A pair ","tags":{"genre":["Twos"],"nonsense":["x"]},"collection":{'$whole'}}'
+    part='"collection":{"id":"fake#2","url":"'$key'","description":" A pair ","reference":"fake:board:part","tags":{"genre":["Twos"],"nonsense":["x"]},"collection":{'$whole'}}'
   else
     part='"reference":" fake:board "'
   fi
@@ -1049,6 +1049,9 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     assert_eq!(carried(&set, "source"), [tag("fakesite", 1)]);
     assert_eq!(carried(&set, "creator"), [tag("Someone", 1)]);
     assert_eq!(carried(&set, "genre"), [tag("Twos", 1)]);
+    // What it is part of is its own reference, and not its files'.
+    assert_eq!(carried(&set, "reference"), [tag("fake:board:part", 1)]);
+    assert_eq!(api.found("reference=fake:board:*").await, sets);
     assert_eq!(
         carried(&set, "source_url"),
         [tag("https://example.test/item/2", 1)]

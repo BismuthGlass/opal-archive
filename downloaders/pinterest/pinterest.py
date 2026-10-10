@@ -135,6 +135,11 @@ def board_pins(user: str, slug: str, only_section: str | None, recursive: bool) 
     """
     board = get_board(user, slug)
     emit("log", message=f"Listing {board['name']}")
+    # What its pins refer to: the board, or the section of it they are in.
+    # Named as Pinterest names them, not as was typed.
+    names = [unquote(p) for p in (board.get("url") or "").split("/") if p]
+    owner, name = names if len(names) == 2 else (user, slug)
+    in_board = f"pinterest:{owner}:{name}"
     sections = list_sections(board["id"]) if board.get("section_count") or only_section else []
     if only_section:
         sections = [s for s in sections if s["slug"] == only_section]
@@ -146,10 +151,10 @@ def board_pins(user: str, slug: str, only_section: str | None, recursive: bool) 
         found = list_pins("BoardSectionPins", {"section_id": section["id"]})
         in_sections.update(p["id"] for p in found)
         if recursive or only_section:
-            pins += found
+            pins += [{**p, "_in": f"{in_board}:{section['slug']}"} for p in found]
     if not only_section:
         feed = list_pins("BoardFeed", {"board_id": board["id"], "field_set_key": "react_grid_pin"})
-        pins += [p for p in feed if p["id"] not in in_sections]
+        pins += [{**p, "_in": in_board} for p in feed if p["id"] not in in_sections]
     return pins
 
 
@@ -316,7 +321,9 @@ def download() -> int:
                 continue
             description = (pin.get("description") or "").strip()
             # A pin of several files becomes a set, named for the pin. Nothing
-            # else is grouped: a board's pins are not put in a collection.
+            # else is grouped: a board's pins are not put in a collection, and
+            # refer to the board instead, the file of a pin or its set.
+            inside = pin.get("_in")
             whole = {}
             if len(files) > 1:
                 whole["collection"] = {
@@ -327,6 +334,10 @@ def download() -> int:
                     "title": pin_title(pin),
                     "description": description,
                 }
+                if inside:
+                    whole["collection"]["reference"] = inside
+            elif inside:
+                whole["reference"] = inside
             emit(
                 "item",
                 key=key,

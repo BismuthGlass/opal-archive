@@ -81,10 +81,13 @@ the tags, and remembers the key.
 
 `reference` says what the files are part of on the site, where that is not
 something to make a collection of: 4chan gives each file of a thread
-`4chan:<board>:<thread>`. It is kept as a reference of each file, by which
-the others are found (`reference=4chan:g:109956993`), and groups nothing.
-Start it with the downloader's name and namespace it with colons, as a
-collection's `id` below.
+`4chan:<board>:<thread>`, Pinterest each pin of a board
+`pinterest:<user>:<board>`, or `pinterest:<user>:<board>:<section>` if it
+is in a section. It is kept as a reference of each file, by which the
+others are found (`reference=4chan:g:109956993`, or
+`reference=pinterest:someone:a-board*` for a board with its sections), and
+groups nothing. Start it with the downloader's name and namespace it with
+colons, as a collection's `id` below.
 
 The tags are the manifest's `source`, the ones the user gave the tab, and
 any the item brings itself in `tags`: an object of tag field to values,
@@ -104,6 +107,7 @@ Nothing is put in a collection unless the item asks. It asks with
   "title": "…",
   "description": "…",
   "tags": { "creator": ["Someone"] },
+  "reference": "pinterest:someone:a-board",
   "ordered": true,
   "collection": { "id": "pinterest:someone:a-board", "type": "sourceset" }
 }
@@ -117,6 +121,7 @@ Nothing is put in a collection unless the item asks. It asks with
 | `title`       | What it is called. It has no title if this is left out or empty: the `id` is not shown in its place |
 | `description` | Given to it if it has none                                               |
 | `tags`        | Tags of its own, as an item's                                            |
+| `reference`   | What it is part of on the site, kept as a reference of its own, as an item's is of its files |
 | `ordered`     | Whether it keeps its members in the order they arrive. It does if left out |
 | `collection`  | The collection this one is itself to be put in, described the same way, and so on to any depth |
 
@@ -145,8 +150,9 @@ The downloaders here ask for one shape only: an item of several files asks
 for a `set` with an ID of its own, which makes one collection per post.
 Pinterest does this for a pin of several images, Reddit for a post of
 several. Items that all give the same `id` would gather in one collection,
-but a board or a thread is not grouped so: Pinterest groups nothing by
-board, and 4chan gives a `reference` instead.
+but a board or a thread is not grouped so: Pinterest and 4chan give a
+`reference` instead. Pinterest gives it to the file of a pin of one image,
+and to the set of a pin of several rather than to the files in it.
 
 Lines that are not one of these events are ignored. The script ends with
 status 0 when it is done. Any other status means the download failed, and

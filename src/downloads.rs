@@ -187,6 +187,8 @@ struct Whole {
     /// What it is called when it is made; it has no title if not said.
     title: Option<String>,
     description: Option<String>,
+    /// What it is part of on the site, kept as a reference of its own.
+    reference: Option<String>,
     /// Tags of its own, by field, besides the source and the tab's.
     #[serde(default)]
     tags: BaseTags,
@@ -853,6 +855,9 @@ impl Download {
             let json = entities::ids_json(&[id]);
             if let Some(url) = text(&whole.url) {
                 entities::add_to_list(&tx, &json, SOURCE_URLS, &url)?;
+            }
+            if let Some(reference) = text(&whole.reference) {
+                entities::add_to_list(&tx, &json, REFERENCES, &reference)?;
             }
             // It is listed under the tab, where its files are not.
             tx.execute(
