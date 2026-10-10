@@ -3,7 +3,7 @@ import GroupDialog from "./components/GroupDialog";
 import type { GroupKind } from "./components/GroupDialog";
 import SetPanel from "./components/SetPanel";
 import CollectionPanel from "./components/CollectionPanel";
-import ContextMenu, { contextMenuOpen } from "./components/ContextMenu";
+import ContextMenu, { contextMenuOpen, removeForGood } from "./components/ContextMenu";
 import Grid from "./components/Grid";
 import InboxPanel from "./components/InboxPanel";
 import { modalOpen } from "./components/Modal";
@@ -33,6 +33,8 @@ import {
   itemAt,
   runSearch,
   search,
+  deleted,
+  invertSelection,
   selectAll,
   selected,
   toggleMark,
@@ -210,9 +212,36 @@ export default function App() {
     }
   };
 
-  /** Moves to the trash, or with `restore` out of it. */
+  /** Deletes what is in the trash for good, once it has been agreed to. */
+  const remove = async (target: { ids: number[]; name: string }) => {
+    if (!(await removeForGood(target.ids))) return;
+    const index = viewing();
+    const only = viewingOnly();
+    deleted(target.ids);
+    showToast(`Deleted ${target.name} for good`);
+    if (index === null) return;
+    // The viewer goes on to what took the file's place: the next one, or
+    // the one before if it was the last. With nothing left it closes.
+    const left = only
+      ? only.filter((at) => at !== index).map((at) => (at > index ? at - 1 : at))
+      : null;
+    const count = left ? left.length : search.total;
+    if (count === 0) return view(null);
+    const place = Math.min(only ? only.indexOf(index) : index, count - 1);
+    view(left ? left[place] : place, left);
+  };
+
+  /**
+   * Moves to the trash, or with `restore` out of it. What is all in the
+   * trash already is deleted for good instead, once agreed to: the second
+   * of the two steps deleting takes.
+   */
   const trash = async (target: { ids: number[]; name: string }, restore: boolean) => {
     try {
+      const state = restore ? null : await api.getMetadata(target.ids);
+      if (state && state.count > 0 && state.trashed === state.count) {
+        return await remove(target);
+      }
       const { changed } = await (restore ? api.restoreEntities : api.trashEntities)(target.ids);
       showToast(
         changed === 0
@@ -316,6 +345,9 @@ export default function App() {
     } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
       event.preventDefault();
       selectAll();
+    } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "i") {
+      event.preventDefault();
+      invertSelection();
     } else if (event.key === "Escape") {
       clearSelection();
     }

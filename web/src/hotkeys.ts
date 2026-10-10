@@ -32,7 +32,7 @@ export const ACTIONS = [
   {
     id: "trash",
     label: "Trash",
-    description: "Moves to the trash.",
+    description: "Moves to the trash. What is all in the trash already is deleted for good, once agreed to.",
     key: "ctrl+x",
   },
   {

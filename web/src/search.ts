@@ -464,6 +464,24 @@ export function changed() {
 }
 
 /**
+ * Call after files are deleted for good. They leave the view at once,
+ * ahead of the results being fetched again, so that nothing on show asks
+ * after a file that is no longer there.
+ */
+export function deleted(gone: number[]) {
+  const going = new Set(gone);
+  ids = ids.filter((id) => !going.has(id));
+  for (const page of Object.keys(pages)) {
+    setPages(Number(page), (items) => items.filter((item) => !going.has(item.id)));
+  }
+  setSearch("total", ids.length);
+  anchor = null;
+  keepListed();
+  remember();
+  changed();
+}
+
+/**
  * Call after files are uploaded into an upload tab, or anything else is
  * put into what a tab holds from that tab: unlike other changes, these
  * are added to its view.
@@ -559,6 +577,14 @@ export async function clickSelect(
 /** Selects every result, on every page. */
 export async function selectAll() {
   setSelected(new Set(await resultIds()));
+}
+
+/** Selects every result that is not selected, in place of those that are. */
+export async function invertSelection() {
+  const all = await resultIds();
+  const had = selected();
+  anchor = null;
+  setSelected(new Set(all.filter((id) => !had.has(id))));
 }
 
 export function clearSelection() {

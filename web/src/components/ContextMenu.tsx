@@ -65,7 +65,7 @@ const close = () => setOpened(null);
  * Deletes trashed files for good, once it has been agreed to. What is not
  * in the trash is never deleted. Returns whether anything was.
  */
-async function removeForGood(ids: number[]): Promise<boolean> {
+export async function removeForGood(ids: number[]): Promise<boolean> {
   if (!confirm(`Delete ${plural(ids.length, "item")} for good? This cannot be undone.`)) {
     return false;
   }
@@ -202,13 +202,20 @@ function Shell(props: { at: Opened; label: string; children: JSX.Element }) {
       items[(next + items.length) % items.length]?.focus();
     }
   };
-  onMount(() => {
-    // Kept inside the window, opening leftwards or upwards near its edges.
+  // Kept inside the window, opening leftwards or upwards near its edges.
+  const place = () => {
     const box = menu.getBoundingClientRect();
     setPosition({
       left: Math.max(4, Math.min(props.at.x, window.innerWidth - box.width - 4)),
       top: Math.max(4, Math.min(props.at.y, window.innerHeight - box.height - 4)),
     });
+  };
+  // Placed again whenever its size changes: some items only show once
+  // what is known of the selection has arrived, and it grows by them.
+  const sized = new ResizeObserver(place);
+  onMount(() => {
+    place();
+    sized.observe(menu);
     // The menu takes the keyboard without lighting up any one item.
     menu.focus();
     window.addEventListener("pointerdown", onPointerDown, true);
@@ -218,6 +225,7 @@ function Shell(props: { at: Opened; label: string; children: JSX.Element }) {
     window.addEventListener("blur", close);
   });
   onCleanup(() => {
+    sized.disconnect();
     window.removeEventListener("pointerdown", onPointerDown, true);
     window.removeEventListener("keydown", onKeyDown, true);
     window.removeEventListener("wheel", close);

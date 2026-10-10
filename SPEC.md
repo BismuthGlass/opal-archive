@@ -160,7 +160,7 @@ A downloader fetches files from a website straight into the library. Each downlo
 
 ## Deleting
 
-Deleting is two steps. The first moves a file to the trash: it keeps its file and all its metadata, but no longer shows up in searches. From the trash it can be restored, or deleted for good, which removes the file from storage. Uploading a trashed file again restores it.
+Deleting is two steps. The first moves a file to the trash: it keeps its file and all its metadata, but no longer shows up in searches. From the trash it can be restored, or deleted for good, which removes the file from storage. Uploading a trashed file again restores it. The key that trashes does both steps: on files that are all in the trash already it deletes them for good, once that is agreed to. In the viewer, what took the deleted file's place is shown next.
 
 Being trashed is a state, not a tag. States are searched with an `@`: `@trashed` lists the trash. It is the only state for now.
 
