@@ -625,10 +625,16 @@ button.primary {
   bottom: 4px;
   left: 4px;
   padding: 1px;
+  font-size: 11px;
   line-height: 0;
-  color: var(--on-accent);
-  background: var(--accent);
+  color: #fff;
+  background: rgb(0 0 0 / 0.4);
   border-radius: 4px;
+  opacity: 0.8;
+}
+
+.tile:hover .new-mark {
+  opacity: 1;
 }
 
 .mark-flag {
@@ -1910,7 +1916,7 @@ span.chip-label:hover {
 
 .viewer-new {
   line-height: 0;
-  color: var(--accent);
+  color: var(--muted);
 }
 
 .viewer-trashed {
