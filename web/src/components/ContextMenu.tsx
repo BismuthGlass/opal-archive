@@ -123,7 +123,7 @@ function MarkMenu(props: { at: Opened; mark: number }) {
       <li role="none">
         <button
           role="menuitem"
-          title="Take this mark off everything that has it"
+          title="Take this mark off everything in this tab that has it, listed here or not"
           onClick={() => {
             close();
             clearMark(mark);

@@ -41,11 +41,52 @@ const [selected, setSelected] = createSignal<ReadonlySet<number>>(new Set());
 /** How many marks there are, numbered from 1. */
 export const MARKS = 5;
 /**
- * The results of the view on show that are marked, and with which mark.
- * Marks are the view's own, as its selection is: nothing in the library
- * is changed by them.
+ * What is marked in the tab on show, and with which mark. Marks are the
+ * tab's own, and the same in every view of it: what is marked in a search
+ * is marked in the set it is in, gone into from there, and the other way
+ * round. Nothing in the library is changed by them.
  */
 const [marks, setMarks] = createSignal<ReadonlyMap<number, number>>(new Map());
+/** Bumped when what the view lists changes: what of the marked is in it does too. */
+const [listing, setListing] = createSignal(0);
+
+// Marks are remembered per browser, like where each view was left.
+const MARKS_KEY = "opalarchive.marks";
+/** The marks of each tab that has any. */
+const tabMarks = new Map<number, ReadonlyMap<number, number>>(readMarks());
+
+function readMarks(): [number, Map<number, number>][] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(MARKS_KEY) ?? "[]");
+    return (stored as [number, [number, number][]][]).map(([tab, given]) => [tab, new Map(given)]);
+  } catch {
+    return [];
+  }
+}
+
+function writeMarks() {
+  try {
+    localStorage.setItem(
+      MARKS_KEY,
+      JSON.stringify([...tabMarks].map(([tab, given]) => [tab, [...given]])),
+    );
+  } catch {
+    // Storage unavailable or full; the marks just won't survive a reload.
+  }
+}
+
+/** The tab a view is of: its key starts with the tab's number. */
+const tabOf = (key: string) => (key === "" ? null : Number.parseInt(key, 10));
+
+/** Sets the marks of the tab on show. */
+function putMarks(next: ReadonlyMap<number, number>) {
+  setMarks(next);
+  const tab = tabOf(viewKey);
+  if (tab === null) return;
+  if (next.size > 0) tabMarks.set(tab, next);
+  else tabMarks.delete(tab);
+  writeMarks();
+}
 /**
  * A query as it is saved with a tab's view: marked, by characters that
  * cannot be typed, when the view was calculated with the trash on show or
@@ -99,12 +140,11 @@ let viewTab: number | null = null;
  */
 const views = new Map<string, { ids: number[]; custom: boolean }>();
 
-/** How a view was left: where it was, and what was selected and marked in it. */
+/** How a view was left: where it was, and what was selected in it. */
 type Left = {
   page: number;
   scroll: number;
   selected: ReadonlySet<number>;
-  marks: ReadonlyMap<number, number>;
   anchor: number | null;
 };
 /** A view as it is stored. */
@@ -112,6 +152,7 @@ type StoredLeft = {
   page: number;
   scroll: number;
   selected: number[];
+  /** Marks were once kept with each view; they are taken up as their tab's. */
   marks?: [number, number][];
   anchor: number | null;
 };
@@ -128,11 +169,18 @@ const lefts = new Map<string, Left>(readLefts());
 
 function readLefts(): [string, Left][] {
   try {
-    const stored = JSON.parse(localStorage.getItem(LEFT_KEY) ?? "[]");
-    return (stored as [string, StoredLeft][]).map(([key, left]) => [
-      key,
-      { ...left, selected: new Set(left.selected), marks: new Map(left.marks ?? []) },
-    ]);
+    const stored = JSON.parse(localStorage.getItem(LEFT_KEY) ?? "[]") as [string, StoredLeft][];
+    let moved = false;
+    const read = stored.map(([key, { marks: given, ...left }]): [string, Left] => {
+      const tab = tabOf(key);
+      if (given?.length && tab !== null) {
+        tabMarks.set(tab, new Map([...(tabMarks.get(tab) ?? []), ...given]));
+        moved = true;
+      }
+      return [key, { ...left, selected: new Set(left.selected) }];
+    });
+    if (moved) writeMarks();
+    return read;
   } catch {
     return [];
   }
@@ -144,7 +192,6 @@ function writeLefts() {
     {
       ...left,
       selected: left.selected.size > SELECTED_MOST ? [] : [...left.selected],
-      marks: [...left.marks],
     },
   ]);
   try {
@@ -163,7 +210,6 @@ function noteLeft() {
     page: search.page,
     scroll: scrolled,
     selected: selected(),
-    marks: marks(),
     anchor,
   });
   for (const key of lefts.keys()) {
@@ -239,15 +285,16 @@ export function goToPage(page: number) {
   setSearch("page", Math.max(0, Math.min(lastPage(), page)));
 }
 
-/** What the view no longer lists is no longer selected, nor marked. */
+/**
+ * What the view no longer lists is no longer selected. It keeps its mark:
+ * another view of the tab may list it.
+ */
 function keepListed() {
   const listed = new Set(ids);
   if ([...selected()].some((id) => !listed.has(id))) {
     setSelected(new Set([...selected()].filter((id) => listed.has(id))));
   }
-  if ([...marks().keys()].some((id) => !listed.has(id))) {
-    setMarks(new Map([...marks()].filter(([id]) => listed.has(id))));
-  }
+  setListing((n) => n + 1);
 }
 
 /** Makes sure the pages covering these result indices are loaded. */
@@ -354,7 +401,8 @@ export function runSearch(
     error: null,
   });
   setSelected(left?.selected ?? new Set<number>());
-  setMarks(left?.marks ?? new Map<number, number>());
+  setMarks(tabMarks.get(tabOf(key) ?? -1) ?? new Map<number, number>());
+  setListing((n) => n + 1);
   setSearchCount((n) => n + 1);
   // After the count: the grid goes to the top first, then to where it was.
   setScrollTo(left?.scroll || null);
@@ -389,7 +437,7 @@ export function runSearch(
       });
     calculated.catch(() => {});
   }
-  if (left && left.selected.size + left.marks.size > 0) {
+  {
     // The view may have changed since it was left.
     const current = generation;
     calculated
@@ -415,6 +463,7 @@ export function forgetViews(tab: number) {
   // The tab closed may be the one on show: nothing is noted of it later.
   if (viewKey.startsWith(`${tab}:`)) viewKey = "";
   writeLefts();
+  if (tabMarks.delete(tab)) writeMarks();
   if (viewTab === tab) {
     // Nothing more is saved for it either.
     clearTimeout(saving);
@@ -470,6 +519,16 @@ export function changed() {
  */
 export function deleted(gone: number[]) {
   drop(gone);
+  // No view of any tab lists them any more: their marks go with them.
+  const going = new Set(gone);
+  for (const [tab, given] of tabMarks) {
+    const kept = new Map([...given].filter(([id]) => !going.has(id)));
+    if (kept.size === given.size) continue;
+    if (kept.size > 0) tabMarks.set(tab, kept);
+    else tabMarks.delete(tab);
+    if (tab === tabOf(viewKey)) setMarks(kept);
+  }
+  writeMarks();
   changed();
 }
 
@@ -593,10 +652,22 @@ export function clearSelection() {
   setSelected(new Set<number>());
 }
 
+/**
+ * The marks of what the view on show lists. What is marked elsewhere in
+ * the tab, and not listed here, is neither counted nor selected from here.
+ */
+function listedMarks(): [number, number][] {
+  listing();
+  const given = marks();
+  if (given.size === 0) return [];
+  const listed = new Set(ids);
+  return [...given].filter(([id]) => listed.has(id));
+}
+
 /** How many results carry each mark; index 0 is not used. */
 export function markCounts(): number[] {
   const counts = Array<number>(MARKS + 1).fill(0);
-  for (const mark of marks().values()) counts[mark] += 1;
+  for (const [, mark] of listedMarks()) counts[mark] += 1;
   return counts;
 }
 
@@ -612,7 +683,7 @@ export function toggleMark(marked: number[], mark: number): boolean {
   }
   const next = new Map(marks());
   for (const id of marked) next.set(id, mark);
-  setMarks(next);
+  putMarks(next);
   return true;
 }
 
@@ -620,16 +691,16 @@ export function toggleMark(marked: number[], mark: number): boolean {
 export function unmark(marked: number[]) {
   const next = new Map(marks());
   for (const id of marked) next.delete(id);
-  setMarks(next);
+  putMarks(next);
 }
 
-/** Takes a mark off everything that has it. */
+/** Takes a mark off everything in the tab that has it, listed here or not. */
 export function clearMark(mark: number) {
-  setMarks(new Map([...marks()].filter(([, given]) => given !== mark)));
+  putMarks(new Map([...marks()].filter(([, given]) => given !== mark)));
 }
 
 /** Selects every result with a mark, on every page. */
 export function selectMarked(mark: number) {
   anchor = null;
-  setSelected(new Set([...marks()].filter(([, given]) => given === mark).map(([id]) => id)));
+  setSelected(new Set(listedMarks().filter(([, given]) => given === mark).map(([id]) => id)));
 }

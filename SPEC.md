@@ -103,6 +103,14 @@ What a view lists is decided when its search is calculated, and stays put after 
 
 The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab or downloaded into a download tab, files put into the set a tab shows).
 
+## Marks
+
+A file can be given one of five marks, numbered and coloured, to sort through what is on show. Marks change nothing in the library, and are remembered by the browser.
+
+Marks belong to the tab, not to one view of it. A file marked in a search is marked in its set too, once the tab goes into it, and in its variants and its collection; a file marked there is still marked after going back out. Another tab has marks of its own.
+
+The count of each mark above the grid, and selecting by mark, take in only what the view on show lists. Clearing a mark takes it off everything in the tab that has it.
+
 ## Stacked and saved queries
 
 A search is a stack of queries, shown as rows in the search box. Each row is a query of its own, and narrows down what the rows before it found. A + under the rows adds one; a row can be taken out again. Rows left empty count for nothing.
