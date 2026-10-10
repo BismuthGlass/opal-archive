@@ -7,6 +7,7 @@ import {
   aggregatedTypes,
   orderedTypes,
   pillStyle,
+  tagTextStyle,
   prefixOf,
   readTag,
   tagText,
@@ -361,7 +362,7 @@ function staged(base: Metadata, changes: Staged): Metadata {
 }
 
 /**
- * One tag as a line of a list, its name in its type's colours. In the
+ * One tag as a line of a list, its name in its type's colour. In the
  * panel a click adds the tag to the search, and a right click offers
  * more; in the tagger it has the buttons that take it off, or put it on
  * the rest of the selection.
@@ -381,7 +382,7 @@ function TagLine(
   return (
     <li class="tag-line">
       <span
-        class="chip tinted"
+        class="tag-name"
         classList={{ partial: partial(), added: props.tag.pending === "added", removed: removed() }}
         title={
           removed()
@@ -390,7 +391,7 @@ function TagLine(
               ? "Put on when the changes are saved"
               : undefined
         }
-        style={pillStyle(props.field)}
+        style={tagTextStyle(props.field)}
       >
         <button
           class="chip-label"

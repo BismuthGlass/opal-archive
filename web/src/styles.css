@@ -1407,10 +1407,6 @@ button.primary {
   border-color: transparent;
 }
 
-.chip.tinted.partial {
-  border-color: currentColor;
-}
-
 /* Its label takes the type's text colour, whether it is a button or, as
    in the tagger, plain text. */
 .chip.tinted button,
@@ -1595,18 +1591,15 @@ span.chip-label:hover {
   align-items: center;
 }
 
-/* Tags one to a line, each no wider than what it holds: its name, then
-   how many of the selection carry it and its buttons. The lines are small
-   and close, so that many tags take little room. */
+/* Tags one to a line: its name, then how many of the selection carry it
+   and its buttons. The lines are close, so that many tags take little room. */
 .tag-lines {
   display: flex;
   flex-direction: column;
-  gap: 1px;
   align-items: flex-start;
   padding: 0;
   margin: 0;
-  font-size: 12px;
-  line-height: 16px;
+  line-height: 1.35;
   list-style: none;
 }
 
@@ -1616,24 +1609,49 @@ span.chip-label:hover {
   max-width: 100%;
 }
 
-.tag-line .chip {
+/* A tag's name, with no background, in its type's colour: of the type's
+   two, which come inline from the settings, the one that shows on the theme. */
+.tag-name {
+  display: inline-flex;
   min-width: 0;
-  border-radius: 2px;
+  color: var(--tag-dark);
 }
 
-.tag-line .chip-label {
-  padding: 0 4px;
+@media (prefers-color-scheme: dark) {
+  .tag-name {
+    color: var(--tag-light);
+  }
+}
+
+.tag-name .chip-label {
+  padding: 0;
   font-size: inherit;
   line-height: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+}
+
+/* In the tagger, changes that wait to be saved: a tag to be put on
+   stands out, one to be taken off is struck through. */
+.tag-name.added {
+  font-weight: 600;
+}
+
+.tag-name.removed {
+  opacity: 0.55;
+}
+
+.tag-name.removed .chip-label {
+  text-decoration: line-through;
 }
 
 .tag-line .chip-count {
-  padding-left: 4px;
-  font-size: 11px;
+  padding-left: 5px;
 }
 
 .tag-line .chip-actions {
-  margin-left: 2px;
+  margin-left: 3px;
   border-left: none;
 }
 
@@ -1694,9 +1712,9 @@ span.chip-label:hover {
   border-radius: 0;
 }
 
-/* The tagger's lines are as small as the panel's. */
+/* The tagger's lines are as close as the panel's. */
 .dialog .tag-line .chip-label:not(.primary) {
-  padding: 0 4px;
+  padding: 0;
 }
 
 .dialog .tag-line .chip-actions button:not(.primary) {
@@ -1758,24 +1776,6 @@ span.chip-label:hover {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 3px;
-}
-
-.chip.partial {
-  border-style: dashed;
-}
-
-/* In the tagger, changes that wait to be saved: a tag to be put on
-   stands out, one to be taken off is struck through. */
-.chip.added {
-  box-shadow: 0 0 0 1px currentColor;
-}
-
-.chip.removed {
-  opacity: 0.55;
-}
-
-.chip.removed .chip-label {
-  text-decoration: line-through;
 }
 
 .dialog footer.tags-footer {

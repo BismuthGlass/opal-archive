@@ -123,6 +123,23 @@ export const pillStyle = (field: string) => {
   return { background: type.bg, color: type.fg };
 };
 
+/** How light a `#rrggbb` colour is, from 0 to 1. */
+const lightness = (colour: string) => {
+  const part = (at: number) => parseInt(colour.slice(at, at + 2), 16) / 255;
+  return 0.2126 * part(1) + 0.7152 * part(3) + 0.0722 * part(5);
+};
+
+/**
+ * Inline style for a tag written with no background, in its type's
+ * colour: the two colours of the type, for the stylesheet to take the
+ * darker on a light theme and the lighter on a dark one.
+ */
+export const tagTextStyle = (field: string) => {
+  const { bg, fg } = tagType(field);
+  const [dark, light] = lightness(bg) < lightness(fg) ? [bg, fg] : [fg, bg];
+  return { "--tag-dark": dark, "--tag-light": light };
+};
+
 /**
  * The order tags are listed in by default: who and what the work is, then
  * how it is made, with plain tags closing the aggregated list, then the
