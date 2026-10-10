@@ -5,6 +5,9 @@ import type { FieldProps, ListMode } from "./fields";
 import { enter } from "../tabs";
 import Icon from "./Icon";
 
+/** A value of a list, how many of the selection have it, and what it is shown as if not itself. */
+type Entry = { value: string; count: number; label?: string | null };
+
 /** Only web addresses are made into links; anything else is shown as text. */
 const isWebAddress = (url: string) => /^https?:\/\//i.test(url);
 
@@ -39,8 +42,10 @@ export const PLAIN_LISTS = [
     label: "Sets",
     placeholder: "Add by set ID…",
     links: false,
-    values: (data: Metadata) =>
-      data.set.map((set) => ({ value: set.set_id, count: set.count })),
+    // Called by its title where it has one, as a set is everywhere: the
+    // ID is still what is added and taken off.
+    values: (data: Metadata): Entry[] =>
+      data.set.map((set) => ({ value: set.set_id, count: set.count, label: set.title })),
     add: (value: string): Changes => ({ add_set: [value] }),
     remove: (value: string): Changes => ({ remove_set: [value] }),
     // A set is opened by its ID: the tab shows its files.
@@ -73,7 +78,7 @@ type ListProps = FieldProps & ListMode & { list: (typeof PLAIN_LISTS)[number] };
 /** A plain list's values, one to a line, with what can be done to each. */
 function Values(props: ListProps) {
   /** How many of the selection have a value, and the buttons acting on it. */
-  const controls = (entry: { value: string; count: number }) => (
+  const controls = (entry: Entry) => (
     <>
       <Show when={entry.count < props.data.count}>
         <span class="chip-count" title={`On ${entry.count} of ${props.data.count} selected`}>
@@ -107,7 +112,7 @@ function Values(props: ListProps) {
 
   return (
     <ul class="links">
-      <For each={props.list.values(props.data)}>
+      <For each={props.list.values(props.data) as Entry[]}>
         {(entry) => (
           <li>
             <Show
@@ -118,18 +123,18 @@ function Values(props: ListProps) {
                   // stay in front of what was opened.
                   when={!props.editing && "open" in props.list && props.list.open}
                   fallback={
-                    <span class="link-text" data-tip={entry.value}>
-                      {entry.value}
+                    <span class="link-text" data-tip={entry.label || entry.value}>
+                      {entry.label || entry.value}
                     </span>
                   }
                 >
                   {(open) => (
                     <button
                       class="link link-text"
-                      data-tip={entry.value}
+                      data-tip={entry.label || entry.value}
                       onClick={() => open()(entry.value)}
                     >
-                      {entry.value}
+                      {entry.label || entry.value}
                     </button>
                   )}
                 </Show>
