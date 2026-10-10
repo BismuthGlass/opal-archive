@@ -1610,10 +1610,15 @@ span.chip-label:hover {
   list-style: none;
 }
 
+/* A line is the tag in a row with what goes with it, and under that, set
+   in, the lines of the child tags it brings. */
 .tag-line {
+  max-width: 100%;
+}
+
+.tag-line-row {
   display: flex;
   align-items: center;
-  max-width: 100%;
 }
 
 /* A tag's name, with no background, in its type's colour: of the type's

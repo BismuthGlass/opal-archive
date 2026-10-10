@@ -25,7 +25,9 @@ const MAX_SUGGESTIONS = 8;
 /** How much of a tag has to be typed before tags are suggested for it. */
 const MIN_TYPED = 2;
 
-export const filled = (data: Metadata, field: string) => (data.tags[field]?.length ?? 0) > 0;
+/** Whether a type has tags to list in its own place. */
+export const filled = (data: Metadata, field: string) =>
+  (data.tags[field] ?? []).some((tag: Tag) => !tag.via);
 
 /** One row of the tagger's suggestions: a type, or a tag. */
 type Option =
@@ -290,10 +292,15 @@ function createTagBox(props: FieldProps & { initial?: string }) {
 /**
  * A tag of the selection. In the tagger, where changes wait to be saved,
  * `pending` says what is to become of it: put on everything selected, or
- * taken off. `via` names the tag that brought it, for a child tag put on
- * because its parent is.
+ * taken off. A child tag put on because its parent is has `via`, the name
+ * of that parent, and is listed under it rather than in its own place:
+ * the parent has it among what it `brings`.
  */
-type Tag = Metadata["tags"][string][number] & { pending?: "added" | "removed"; via?: string };
+type Tag = Metadata["tags"][string][number] & {
+  pending?: "added" | "removed";
+  via?: string;
+  brings?: { field: string; tag: Tag }[];
+};
 
 /** The tags of a type the selection carries, or will once the tagger is saved. */
 const carriedTags = (data: Metadata, field: string): Tag[] =>
@@ -372,13 +379,9 @@ function stage(staged: Staged, base: Metadata, changes: Changes): Staged {
 
 /**
  * The selection's metadata as it will be once the changes waiting are
- * saved, the child tags among them marked with what brings them.
+ * saved, the child tags among them handed to the tag that brings them.
  */
 function staged(base: Metadata, changes: Staged, brought: Brought): Metadata {
-  const via = (field: string, value: string) => {
-    const parent = brought[tagKey({ field, value })]?.parent;
-    return parent && tagText(parent.field, parent.value);
-  };
   const tags: Record<string, Tag[]> = {};
   for (const field of new Set([...Object.keys(base.tags), ...Object.keys(changes.add)])) {
     const adding = changes.add[field] ?? [];
@@ -387,19 +390,23 @@ function staged(base: Metadata, changes: Staged, brought: Brought): Metadata {
       removing.some(sameTag(tag.value))
         ? { ...tag, pending: "removed" }
         : adding.some(sameTag(tag.value))
-          ? { ...tag, count: base.count, pending: "added", via: via(field, tag.value) }
+          ? { ...tag, count: base.count, pending: "added" }
           : tag,
     );
     const fresh: Tag[] = adding
       .filter((value) => !had.some((tag) => sameTag(value)(tag.value)))
-      .map((value) => ({
-        value,
-        count: base.count,
-        description: null,
-        pending: "added",
-        via: via(field, value),
-      }));
+      .map((value) => ({ value, count: base.count, description: null, pending: "added" }));
     tags[field] = [...had, ...fresh];
+  }
+  // Both ends of a link wait to be put on, so both are new here, and can
+  // be written on.
+  const waiting = (tag: Named) =>
+    tags[tag.field]?.find((had) => had.pending === "added" && sameTag(tag.value)(had.value));
+  for (const { child, parent } of Object.values(brought)) {
+    const [from, to] = [waiting(parent), waiting(child)];
+    if (!from || !to) continue;
+    to.via = tagText(parent.field, parent.value);
+    (from.brings ??= []).push({ field: child.field, tag: to });
   }
   return { ...base, tags };
 }
@@ -408,7 +415,8 @@ function staged(base: Metadata, changes: Staged, brought: Brought): Metadata {
  * One tag as a line of a list, its name in its type's colour. In the
  * panel a click adds the tag to the search, and a right click offers
  * more; in the tagger it has the buttons that take it off, or put it on
- * the rest of the selection.
+ * the rest of the selection, and under it, set in, the child tags it
+ * brings.
  */
 function TagLine(
   props: FieldProps & {
@@ -424,85 +432,99 @@ function TagLine(
   const name = () => props.tag.value.slice(namespace().length);
   return (
     <li class="tag-line">
-      <span
-        class="tag-name"
-        classList={{ partial: partial(), added: props.tag.pending === "added", removed: removed() }}
-        title={
-          removed()
-            ? "Taken off when the changes are saved"
-            : props.tag.pending === "added"
-              ? props.tag.via
-                ? `Put on along with ${props.tag.via} when the changes are saved`
-                : "Put on when the changes are saved"
-              : undefined
-        }
-        style={tagTextStyle(props.field)}
-      >
-        <button
-          class="chip-label"
-          // In the tagger a tag is just a value; in the panel it searches.
-          disabled={props.editing}
+      <div class="tag-line-row">
+        <span
+          class="tag-name"
+          classList={{ partial: partial(), added: props.tag.pending === "added", removed: removed() }}
           title={
-            props.editing
-              ? undefined
-              : [
-                  `${fieldLabel(props.field)}: ${props.tag.value}`,
-                  ...(props.tag.description ? [props.tag.description] : []),
-                  "Click to add it to the search; right click for more",
-                ].join("\n")
+            removed()
+              ? "Taken off when the changes are saved"
+              : props.tag.pending === "added"
+                ? props.tag.via
+                  ? `Put on along with ${props.tag.via} when the changes are saved`
+                  : "Put on when the changes are saved"
+                : undefined
           }
-          onClick={() => addToQuery(tagQuery(props.field, props.tag.value))}
-          onContextMenu={(event) =>
-            props.editing || openTagMenu(event, { field: props.field, value: props.tag.value })
-          }
+          style={tagTextStyle(props.field)}
         >
-          <Show when={namespace()}>
-            <span class="chip-namespace">{namespace()}</span>
-          </Show>
-          {name()}
-        </button>
-      </span>
-      <Show when={partial()}>
-        <span class="chip-count" title={`On ${props.tag.count} of ${props.data.count} selected`}>
-          ({props.tag.count})
-        </span>
-      </Show>
-      <Show when={props.tag.pending === "added" && props.tag.via}>
-        <span class="chip-count">with {props.tag.via}</span>
-      </Show>
-      <Show when={props.editing && removed()}>
-        <span class="chip-actions">
           <button
-            class="chip-add"
-            aria-label={`Keep ${props.tag.value}`}
-            title="Keep it after all"
-            onClick={() => props.apply({ add: { [props.field]: [props.tag.value] } })}
+            class="chip-label"
+            // In the tagger a tag is just a value; in the panel it searches.
+            disabled={props.editing}
+            title={
+              props.editing
+                ? undefined
+                : [
+                    `${fieldLabel(props.field)}: ${props.tag.value}`,
+                    ...(props.tag.description ? [props.tag.description] : []),
+                    "Click to add it to the search; right click for more",
+                  ].join("\n")
+            }
+            onClick={() => addToQuery(tagQuery(props.field, props.tag.value))}
+            onContextMenu={(event) =>
+              props.editing || openTagMenu(event, { field: props.field, value: props.tag.value })
+            }
           >
-            <Icon name="undo" />
+            <Show when={namespace()}>
+              <span class="chip-namespace">{namespace()}</span>
+            </Show>
+            {name()}
           </button>
         </span>
-      </Show>
-      <Show when={props.editing && !removed()}>
-        <span class="chip-actions">
-          <Show when={partial()}>
+        <Show when={partial()}>
+          <span class="chip-count" title={`On ${props.tag.count} of ${props.data.count} selected`}>
+            ({props.tag.count})
+          </span>
+        </Show>
+        <Show when={props.editing && removed()}>
+          <span class="chip-actions">
             <button
               class="chip-add"
-              aria-label={`Add ${props.tag.value} to all selected`}
-              title="Add to all selected"
+              aria-label={`Keep ${props.tag.value}`}
+              title="Keep it after all"
               onClick={() => props.apply({ add: { [props.field]: [props.tag.value] } })}
             >
-              <Icon name="add" />
+              <Icon name="undo" />
             </button>
-          </Show>
-          <button
-            class="chip-remove"
-            aria-label={`Remove ${props.tag.value}`}
-            title="Remove"
-            onClick={() => props.apply({ remove: { [props.field]: [props.tag.value] } })}
-          >
-            <Icon name="close" />
-          </button>
-        </span>
+          </span>
+        </Show>
+        <Show when={props.editing && !removed()}>
+          <span class="chip-actions">
+            <Show when={partial()}>
+              <button
+                class="chip-add"
+                aria-label={`Add ${props.tag.value} to all selected`}
+                title="Add to all selected"
+                onClick={() => props.apply({ add: { [props.field]: [props.tag.value] } })}
+              >
+                <Icon name="add" />
+              </button>
+            </Show>
+            <button
+              class="chip-remove"
+              aria-label={`Remove ${props.tag.value}`}
+              title="Remove"
+              onClick={() => props.apply({ remove: { [props.field]: [props.tag.value] } })}
+            >
+              <Icon name="close" />
+            </button>
+          </span>
+        </Show>
+      </div>
+      <Show when={props.tag.brings}>
+        <ul class="tag-lines">
+          <For each={props.tag.brings}>
+            {(child) => (
+              <TagLine
+                field={child.field}
+                tag={child.tag}
+                data={props.data}
+                apply={props.apply}
+                editing={props.editing}
+              />
+            )}
+          </For>
+        </ul>
       </Show>
     </li>
   );
@@ -707,7 +729,7 @@ function TagsLabel(props: ListMode & { label: string }) {
  * In the panel the label opens the tagger.
  */
 export function TagField(props: FieldProps & ListMode & { field: string }) {
-  const values = () => props.data.tags[props.field] ?? [];
+  const values = (): Tag[] => (props.data.tags[props.field] ?? []).filter((tag: Tag) => !tag.via);
 
   /** Those without a namespace first, then by namespace. */
   const sorted = createMemo(() => {
@@ -746,7 +768,9 @@ export function TagField(props: FieldProps & ListMode & { field: string }) {
 export function AggregatedTags(props: FieldProps & ListMode) {
   const entries = () =>
     aggregatedTypes().flatMap((field) =>
-      (props.data.tags[field] ?? []).map((tag) => ({ field, tag })),
+      (props.data.tags[field] ?? [])
+        .filter((tag: Tag) => !tag.via)
+        .map((tag) => ({ field, tag })),
     );
   return (
     <div class="aggregate">

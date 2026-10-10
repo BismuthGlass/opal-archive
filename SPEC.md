@@ -263,7 +263,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - A child can be of any type, and a tag can have several. A child's own children are added as well.
 - It happens once, when the parent is added to a file that did not carry it. Taking the parent off leaves the children on, and a child taken off does not come back unless the parent is taken off and added again.
 - It happens wherever tags are added by hand or by a tab: in the tagger, and for the tags an upload, download or inbox tab gives. Importing a file's metadata from a sidecar adds only the tags written there.
-- In the tagger the children show as soon as their parent is put on, waiting with it and marked with the tag that brings them. Each can be called off before saving, and calling the parent off calls them off too. What is saved is what is shown, on every file selected.
+- In the tagger the children show as soon as their parent is put on, waiting with it and listed under it, set in, whatever their type, rather than in their own place. Each can be called off before saving, and calling the parent off calls them off too. What is saved is what is shown, on every file selected.
 - Giving a tag a child changes nothing on the files that already carry the tag.
 - Child tags follow a renamed tag, and go when either tag is deleted. An alias has no children: adding it adds the tag it defers to, and that tag's children.
 
