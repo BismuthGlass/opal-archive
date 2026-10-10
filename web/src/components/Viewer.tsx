@@ -188,7 +188,7 @@ export default function Viewer(props: {
         </Show>
         <Show when={item()?.inbox}>
           <span class="viewer-new" title="In the inbox: not yet archived">
-            Inbox
+            <Icon name="inbox-outline" />
           </span>
         </Show>
         <Show when={item()?.trashed}>
