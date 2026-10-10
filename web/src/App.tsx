@@ -57,6 +57,15 @@ import Trail, { goBack } from "./components/Trail";
 export default function App() {
   /** Result index shown in the viewer, if it is open. */
   const [viewing, setViewing] = createSignal<number | null>(null);
+  /** The result indexes the viewer keeps to, when it shows only some. */
+  const [viewingOnly, setViewingOnly] = createSignal<number[] | null>(null);
+  /** Opens the viewer on a result, or moves it, or with `null` closes it. */
+  const view = (index: number | null, only: number[] | null = viewingOnly()) => {
+    // The grid follows the viewer across pages.
+    if (index !== null) goToPage(Math.floor(index / PAGE));
+    setViewingOnly(index === null ? null : only);
+    setViewing(index);
+  };
   /** The entities being put into a collection, while that dialog is open. */
   const [grouping, setGrouping] = createSignal<number[] | null>(null);
   /**
@@ -110,7 +119,7 @@ export default function App() {
       },
       (key) => {
         if (key === undefined) return;
-        setViewing(null);
+        view(null);
         const tab = activeTab()!;
         const step = inside();
         // The query of the tab on show changed: the search was asked for.
@@ -397,7 +406,7 @@ export default function App() {
           </Show>
           <Trail />
           <Toolbar />
-          <Grid onOpen={setViewing} />
+          <Grid onOpen={(index) => view(index, null)} />
         </main>
       </div>
       <footer class="statusbar">
@@ -426,21 +435,14 @@ export default function App() {
       </footer>
       <DropTarget />
       <Show when={viewing() !== null}>
-        <Viewer
-          index={viewing()!}
-          onMove={(index) => {
-            // The grid follows the viewer across pages.
-            if (index !== null) goToPage(Math.floor(index / PAGE));
-            setViewing(index);
-          }}
-        />
+        <Viewer index={viewing()!} only={viewingOnly() ?? undefined} onMove={(index) => view(index)} />
       </Show>
       <Show when={tagging()} keyed>
         {(target) => (
           <TagsModal ids={target.ids} target={target.name} onClose={() => setTagging(null)} />
         )}
       </Show>
-      <ContextMenu />
+      <ContextMenu onPreview={view} />
       <Show when={toast()}>
         <div class="toast" role="status">
           {toast()}

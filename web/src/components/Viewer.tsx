@@ -26,10 +26,20 @@ const SKIP_SECONDS = 1;
 /**
  * Full-window view of one result. Left / right step through the results,
  * Escape closes. It can also play through them by itself: each stays up
- * for a set number of seconds, in order or at random.
+ * for a set number of seconds, in order or at random. Given `only`, the
+ * indexes of some of the results, it steps and plays through those alone.
  */
-export default function Viewer(props: { index: number; onMove: (index: number | null) => void }) {
+export default function Viewer(props: {
+  index: number;
+  only?: number[];
+  onMove: (index: number | null) => void;
+}) {
   const item = () => itemAt(props.index);
+  /** How many there are to step through, and which of them is on show. */
+  const count = () => props.only?.length ?? search.total;
+  const place = () => (props.only ? props.only.indexOf(props.index) : props.index);
+  /** The result at a place among them. */
+  const at = (place: number) => (props.only ? props.only[place] : place);
 
   createEffect(() => ensureRange(props.index, props.index));
 
@@ -53,8 +63,8 @@ export default function Viewer(props: { index: number; onMove: (index: number | 
   };
 
   const step = (delta: number) => {
-    const next = props.index + delta;
-    if (next >= 0 && next < search.total) props.onMove(next);
+    const next = place() + delta;
+    if (next >= 0 && next < count()) props.onMove(at(next));
   };
 
   const [playing, setPlaying] = createSignal(false);
@@ -65,18 +75,18 @@ export default function Viewer(props: { index: number; onMove: (index: number | 
   const setPlayer = (change: { seconds?: number; random?: boolean }) =>
     saveSetting("player", { seconds: seconds(), random: random(), ...change }).catch(() => {});
 
-  /** In random order: the results still to come, so none repeats before all were shown. */
+  /** In random order: the places still to come, so none repeats before all were shown. */
   let bag: number[] = [];
   const advance = () => {
-    if (search.total < 2) return setPlaying(false);
-    if (!random()) return props.onMove((props.index + 1) % search.total);
-    bag = bag.filter((index) => index < search.total && index !== props.index);
+    if (count() < 2) return setPlaying(false);
+    if (!random()) return props.onMove(at((place() + 1) % count()));
+    bag = bag.filter((index) => index < count() && index !== place());
     if (bag.length === 0) {
-      bag = Array.from({ length: search.total }, (_, index) => index).filter(
-        (index) => index !== props.index,
+      bag = Array.from({ length: count() }, (_, index) => index).filter(
+        (index) => index !== place(),
       );
     }
-    props.onMove(bag.splice(Math.floor(Math.random() * bag.length), 1)[0]);
+    props.onMove(at(bag.splice(Math.floor(Math.random() * bag.length), 1)[0]));
   };
 
   /** Video and audio play to their end instead of being cut off by the clock. */
@@ -158,8 +168,9 @@ export default function Viewer(props: { index: number; onMove: (index: number | 
             <Icon name="delete-outline" />
           </span>
         </Show>
-        <span class="viewer-count">
-          {props.index + 1} / {search.total}
+        <span class="viewer-count" title={props.only ? "Only what was selected is shown" : undefined}>
+          {place() + 1} / {count()}
+          {props.only ? " selected" : ""}
         </span>
         <div class="viewer-player">
           <button

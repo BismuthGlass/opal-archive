@@ -10,6 +10,7 @@ import {
   markCounts,
   moveItems,
   removeFromView,
+  resultIds,
   search,
   selectMarked,
   selected,
@@ -94,7 +95,10 @@ async function removeForGood(ids: number[], whole: boolean): Promise<boolean> {
  * selection. Deleting is two steps, so what it offers depends on whether
  * the selection is in the trash already.
  */
-export default function ContextMenu() {
+export default function ContextMenu(props: {
+  /** Opens the viewer on a result; with `only`, on those results alone. */
+  onPreview: (index: number, only: number[] | null) => void;
+}) {
   // Keyed, so the menu is given the value itself and can use it as it closes.
   return (
     <Show when={opened()} keyed>
@@ -106,7 +110,7 @@ export default function ContextMenu() {
         ) : at.tag ? (
           <TagMenu at={at} tag={at.tag} />
         ) : (
-          <Menu at={at} item={at.item!} />
+          <Menu at={at} item={at.item!} onPreview={props.onPreview} />
         )
       }
     </Show>
@@ -373,7 +377,11 @@ function Shell(props: { at: Opened; label: string; children: JSX.Element }) {
 }
 
 /** What a right click on the grid brings up. */
-function Menu(props: { at: Opened; item: Item }) {
+function Menu(props: {
+  at: Opened;
+  item: Item;
+  onPreview: (index: number, only: number[] | null) => void;
+}) {
   // Read once, here: after the menu closes, what it was opened with can no
   // longer be asked for.
   const ids = [...selected()];
@@ -406,6 +414,23 @@ function Menu(props: { at: Opened; item: Item }) {
     }
   };
 
+  /**
+   * Opens the viewer on what was clicked: among all the results, or with
+   * `chosen` among the selected ones alone, in the order they are listed.
+   */
+  const preview = async (chosen: boolean) => {
+    close();
+    const all = await resultIds();
+    const at = all.indexOf(clicked.id);
+    if (!chosen) {
+      if (at >= 0) props.onPreview(at, null);
+      return;
+    }
+    const picked = new Set(ids);
+    const only = all.flatMap((id, index) => (picked.has(id) ? [index] : []));
+    if (only.length > 0) props.onPreview(only.includes(at) ? at : only[0], only);
+  };
+
   /** Does something to the view only, not to the entities. */
   const arrange = (action: () => Promise<void>) => {
     close();
@@ -432,6 +457,29 @@ function Menu(props: { at: Opened; item: Item }) {
       <li class="context-menu-title" role="none">
         {plural(ids.length, "item")}
       </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          title="Open this in the viewer, to step through all the results from it"
+          onClick={() => preview(false)}
+        >
+          <Icon name="visibility-outline" />
+          Preview
+        </button>
+      </li>
+      <Show when={ids.length > 1}>
+        <li role="none">
+          <button
+            role="menuitem"
+            title="Open the viewer on the selected items alone"
+            onClick={() => preview(true)}
+          >
+            <Icon name="visibility-outline" />
+            Preview selected
+          </button>
+        </li>
+      </Show>
+      <li class="menu-divider" role="separator" />
       <li role="none">
         <button role="menuitem" onClick={download}>
           <Icon name="download" />
