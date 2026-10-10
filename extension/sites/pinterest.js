@@ -30,6 +30,9 @@ const byTestId = (within, names) => {
 /** Pinterest's own buttons over a pin on its page: ours goes after the last. */
 const PIN_ACTIONS = ["more-actions-button", "ellipsis-button", "share-button", "react-button"];
 
+/** Icons further apart than this, in pixels, are not of the same row. */
+const PIN_GAP = 100;
+
 /**
  * The last two of Pinterest's own buttons over the pin, found by their
  * names; `null` if fewer than two are named as expected.
@@ -64,6 +67,10 @@ function pinterestIconRow(shown) {
     const icons = [...around.querySelectorAll('button, [role="button"], a[href]')].filter(
       (icon) =>
         icon.querySelector("svg") &&
+        // An icon and no words: a count, as of likes, is not words. What
+        // has a name written on it, as the board to save to, is something
+        // else that happens to be on the same line.
+        /^[\d.,\s]*[kKmM]?$/.test(icon.textContent.trim()) &&
         // One with a button inside it is not the button.
         !icon.querySelector('button, [role="button"]') &&
         !over(icon) &&
@@ -82,7 +89,19 @@ function pinterestIconRow(shown) {
       const line = icons
         .filter((icon) => Math.abs(middle(icon) - middle(first)) < 8)
         .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-      if (line.length >= 3) return [line[line.length - 1], line[line.length - 2]];
+      // Only those that stand together: the line is cut where there is a
+      // wide gap, and the run this one is in is what counts.
+      const runs = [[]];
+      for (const icon of line) {
+        const run = runs[runs.length - 1];
+        const gap = run.length
+          ? icon.getBoundingClientRect().left - run[run.length - 1].getBoundingClientRect().right
+          : 0;
+        if (gap > PIN_GAP) runs.push([icon]);
+        else run.push(icon);
+      }
+      const run = runs.find((run) => run.includes(first));
+      if (run.length >= 3) return [run[run.length - 1], run[run.length - 2]];
     }
   }
   return null;

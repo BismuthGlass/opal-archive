@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "OpalArchive",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "Sends posts to OpalArchive to be downloaded, from a button on Reddit, Pinterest and 4chan or from the right-click menu.",
   "permissions": [
     "storage",
