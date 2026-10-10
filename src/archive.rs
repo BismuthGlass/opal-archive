@@ -1,19 +1,22 @@
 //! Unpacking an uploaded zip: each file in it is taken into the library as
 //! if it had been uploaded by itself, and the archive is not kept.
 //!
-//! Its folders become collections: a folder is a set named for it, holding
-//! its files in the order of their names, and a folder inside it is a set
-//! inside that one. Files at the top of the archive go in no collection.
-//! Only what the library can show is taken in, images, video, audio and
-//! books; the rest is passed over, and the answer says of each what it was
-//! and why.
+//! Its folders become sets: a folder is a set named for it, holding the
+//! files directly in it in the order of their names. Files at the top of
+//! the archive go in no set. Only what the library can show is taken in,
+//! images, video, audio and books; the rest is passed over, and the answer
+//! says of each what it was and why.
 //!
 //! A sidecar in it, `<name>.json` beside a file, gives that file its
-//! metadata, as `schema.md` describes and an export writes. A
-//! `_collection.json` in a folder does so for the folder's collection, and
-//! a sidecar that says it is of a collection, wherever it is, for that
-//! collection: the one in the library that has its collection ID, or a new
-//! one. The sidecars are not kept either.
+//! metadata, as `schema.md` describes and an export writes: the set it
+//! names is the file's set, whatever folder the file is in. A `_set.json`
+//! in a folder says which set the folder is and what is known of it, and
+//! a sidecar that says it is of a set, wherever it is, does so for that
+//! set: the one in the library that has its set ID, or a new one. The
+//! sidecars are not kept either.
+//!
+//! A file the library already had, and that is in a set there, stays in
+//! that set.
 
 use std::{
     cmp::Ordering,
@@ -29,18 +32,18 @@ use axum::{
     extract::{Query, State},
     routing::post,
 };
-use rusqlite::{Connection, params};
+use rusqlite::params;
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use zip::ZipArchive;
 
 use crate::{
-    AppState, collections,
+    AppState,
     error::ApiError,
     files::{self, TempFile, UploadParams},
-    media,
-    sidecar::{self, Metadata, Wanted},
+    media, sets,
+    sidecar::{self, Metadata},
 };
 
 /// Most that one archive is unpacked to, so that a hostile one, a few bytes
@@ -53,8 +56,8 @@ const MOST_FILES: usize = 200_000;
 /// they are held in memory until the files they are of have been unpacked.
 const MOST_SIDECAR: u64 = 4 << 20;
 const MOST_SIDECARS: u64 = 512 << 20;
-/// The sidecar of the collection its folder becomes.
-const FOLDER_SIDECAR: &str = "_collection.json";
+/// The sidecar of the set its folder becomes.
+const FOLDER_SIDECAR: &str = "_set.json";
 
 /// What other systems leave in archives, which nobody put there on purpose.
 const CLUTTER: &[&str] = &[".ds_store", "thumbs.db", "desktop.ini"];
@@ -78,8 +81,8 @@ struct Unpacked {
     /// Files that were new to the library, and ones it already had.
     added: u64,
     duplicates: u64,
-    /// Collections made of its folders, and for its sidecars.
-    collections: u64,
+    /// Sets made of its folders, and for its sidecars.
+    sets: u64,
     failures: Vec<Failure>,
 }
 
@@ -102,20 +105,21 @@ struct Sidecars {
     files: HashMap<String, Metadata>,
     /// Those of folders, by the folder.
     folders: HashMap<String, Metadata>,
-    /// Those of collections, with where each is.
-    collections: Vec<(String, Metadata)>,
-    /// The collections that what has been taken in is to be put in, and
-    /// the sidecar that asks for each.
-    wanted: Vec<(String, Wanted)>,
+    /// Those of sets, with where each is.
+    sets: Vec<(String, Metadata)>,
 }
 
-impl Sidecars {
-    /// Notes the collections a sidecar says its entity is in.
-    fn want(&mut self, from: &str, meta: &Metadata, member: i64, problems: &mut Vec<String>) {
-        let wanted = sidecar::memberships(meta, member, problems);
-        self.wanted
-            .extend(wanted.into_iter().map(|wanted| (from.to_string(), wanted)));
-    }
+/// Where the files taken in are to go, once they all are.
+#[derive(Default)]
+struct Placing {
+    /// The set of each folder that has been met.
+    folders: HashMap<String, i64>,
+    /// Files to put in the set with a set ID, at an index if they say one.
+    wanted: Vec<(String, Option<i64>, i64)>,
+    /// Files to put in a set the library has.
+    placed: Vec<(i64, Option<i64>, i64)>,
+    /// The sets made for this archive.
+    made: Vec<i64>,
 }
 
 /// One file in the archive: which, and the folders it is in, then its name.
@@ -270,8 +274,8 @@ fn read_sidecars(
             }
         } else if paths.contains(of) {
             sidecars.files.insert(of.to_string(), meta);
-        } else if meta.get("metadata_type").and_then(Value::as_str) == Some("collection") {
-            sidecars.collections.push((path, meta));
+        } else if meta.get("metadata_type").and_then(Value::as_str) == Some("set") {
+            sidecars.sets.push((path, meta));
         } else {
             fail("a sidecar of no file in the archive");
         }
@@ -324,183 +328,100 @@ pub fn reason(err: ApiError) -> String {
     }
 }
 
-/// Lists a collection under an upload tab, if there is one to list it under.
-fn list_in_tab(conn: &Connection, tab: Option<i64>, collection: i64) -> rusqlite::Result<()> {
-    if let Some(tab) = tab {
-        conn.execute(
-            "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
-             SELECT id, ?2 FROM tab
-             WHERE id = ?1 AND kind IN ('upload', 'download') AND picked = 0",
-            params![tab, collection],
-        )?;
-    }
-    Ok(())
-}
-
-/// The collection for a folder of the archive, made if this is the first
-/// file to need it, along with the folders it is in. The outermost is
-/// listed under the tab; each other is put in the one around it. A folder
-/// with a sidecar is what that says it is: the collection the library has
-/// by its collection ID, if it has one.
+/// The set for a folder of the archive, made if this is the first file to
+/// need it. A folder with a sidecar is the set that says it is: the one
+/// the library has by its set ID, if it has one.
 fn folder(
     state: &AppState,
-    made: &mut HashMap<String, i64>,
+    placing: &mut Placing,
     sidecars: &mut Sidecars,
     unpacked: &mut Unpacked,
     folders: &[String],
-    tab: Option<i64>,
 ) -> Result<i64, ApiError> {
-    let conn = state.db.lock().unwrap();
-    let mut around = None;
-    for depth in 1..=folders.len() {
-        let key = folders[..depth].join("/");
-        let collection = match made.get(&key) {
-            Some(collection) => *collection,
-            None => {
-                let from = format!("{key}/{FOLDER_SIDECAR}");
-                let meta = sidecars.folders.remove(&key);
-                let mut problems = Vec::new();
-                let said = meta
-                    .as_ref()
-                    .map(|meta| sidecar::described(meta, &mut problems))
-                    .unwrap_or_default();
-                // Ordered unless it says not: its files are put in by name,
-                // and stay so.
-                let (collection, new) = sidecar::find_or_make(
-                    &conn,
-                    said.collection_id.as_deref(),
-                    said.collection_type.as_deref().unwrap_or("set"),
-                    said.ordered.unwrap_or(true),
-                )?;
-                if let Some(meta) = &meta {
-                    sidecar::apply(&conn, collection, meta, new, &mut problems)?;
-                    sidecars.want(&from, meta, collection, &mut problems);
-                }
-                if new {
-                    // Named for the folder, unless its sidecar had a title.
-                    conn.execute(
-                        "UPDATE entity SET title = ?2 WHERE id = ?1 AND title IS NULL",
-                        params![collection, folders[depth - 1]],
-                    )?;
-                    unpacked.collections += 1;
-                }
-                match around {
-                    Some(around) => {
-                        // One the library had may not be able to go there.
-                        match collections::add_members(&conn, around, &[collection]) {
-                            Err(ApiError::BadRequest(why)) => problems.push(why),
-                            other => other?,
-                        }
-                    }
-                    None => list_in_tab(&conn, tab, collection)?,
-                }
-                // The tab's tags are for the folder as for its files.
-                files::give_tab_tags(&conn, tab, &[collection])?;
-                unpacked.report(&from, problems);
-                made.insert(key, collection);
-                collection
-            }
-        };
-        around = Some(collection);
+    let key = folders.join("/");
+    if let Some(set) = placing.folders.get(&key) {
+        return Ok(*set);
     }
-    around.ok_or_else(|| ApiError::Internal("a file in no folder has no collection".to_string()))
+    let conn = state.db.lock().unwrap();
+    let meta = sidecars.folders.remove(&key);
+    let mut problems = Vec::new();
+    let fresh = sets::new_id(&conn)?;
+    let (set, new) = match &meta {
+        Some(meta) => sidecar::set_of(&conn, meta, &fresh, &mut problems)?,
+        None => sets::find_or_make(&conn, &fresh)?,
+    };
+    if let Some(meta) = &meta {
+        sidecar::apply_set(&conn, set, meta, &mut problems)?;
+    }
+    if new {
+        // Named for the folder, unless its sidecar had a title.
+        conn.execute(
+            "UPDATE file_set SET title = ?2 WHERE id = ?1 AND title IS NULL",
+            params![set, folders.last()],
+        )?;
+        placing.made.push(set);
+    }
+    unpacked.report(&format!("{key}/{FOLDER_SIDECAR}"), problems);
+    placing.folders.insert(key, set);
+    Ok(set)
 }
 
-/// What is left to do once the files are in: the collections that have
-/// sidecars of their own are found or made, and everything is put in the
-/// collections its sidecar says it is in, in the order the sidecars give.
-/// All of them are listed under the tab.
+/// What is left to do once the files are in: the sets that have sidecars
+/// of their own are found or made, and every file is put in its set, in
+/// the order the sidecars give. One that is in a set already stays there.
 fn gather(
     state: &AppState,
     sidecars: Sidecars,
+    mut placing: Placing,
     unpacked: &mut Unpacked,
-    tab: Option<i64>,
 ) -> Result<(), ApiError> {
-    let Sidecars {
-        collections,
-        mut wanted,
-        ..
-    } = sidecars;
-    // What the files call each collection says what type it is, for a
-    // sidecar that does not.
-    let types: HashMap<String, String> = wanted
-        .iter()
-        .rev()
-        .filter_map(|(_, wanted)| Some((wanted.id.clone(), wanted.collection_type.clone()?)))
-        .collect();
-
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
-    // The collections of the archive: by collection ID, and those that
-    // have none by the names of their sidecars.
-    let (mut by_id, mut by_name) = (HashMap::new(), HashMap::new());
-    for (path, meta) in collections {
+    for (path, meta) in sidecars.sets {
         let mut problems = Vec::new();
-        let said = sidecar::described(&meta, &mut problems);
+        // One that does not say which set it is of is of the one named as
+        // it is.
         let name = path.rsplit('/').next().unwrap_or(&path);
         let name = name.strip_suffix(".json").unwrap_or(name);
-        let called = said.collection_id.as_deref().unwrap_or(name);
-        let collection_type = said
-            .collection_type
-            .as_deref()
-            .or(types.get(called).map(String::as_str))
-            .unwrap_or("set");
-        let (collection, new) = sidecar::find_or_make(
-            &tx,
-            said.collection_id.as_deref(),
-            collection_type,
-            said.ordered.unwrap_or(collection_type == "sequence"),
-        )?;
-        sidecar::apply(&tx, collection, &meta, new, &mut problems)?;
-        for wanted_of in sidecar::memberships(&meta, collection, &mut problems) {
-            wanted.push((path.clone(), wanted_of));
-        }
+        let (set, new) = sidecar::set_of(&tx, &meta, name, &mut problems)?;
+        sidecar::apply_set(&tx, set, &meta, &mut problems)?;
         if new {
-            unpacked.collections += 1;
-            files::give_tab_tags(&tx, tab, &[collection])?;
+            placing.made.push(set);
         }
-        list_in_tab(&tx, tab, collection)?;
-        match said.collection_id {
-            Some(id) => by_id.insert(id, collection),
-            None => by_name.insert(name.to_string(), collection),
-        };
         unpacked.report(&path, problems);
     }
-
-    let mut placed = Vec::new();
-    for (from, wanted) in wanted {
-        let known = by_id.get(&wanted.id).or_else(|| by_name.get(&wanted.id));
-        let collection = match known {
-            Some(collection) => *collection,
-            // One with no sidecar here is the collection that has the ID,
-            // in the library or from now on.
-            None => {
-                let collection_type = wanted.collection_type.as_deref().unwrap_or("set");
-                let (collection, new) = sidecar::find_or_make(
-                    &tx,
-                    Some(&wanted.id),
-                    collection_type,
-                    collection_type == "sequence",
-                )?;
-                if new {
-                    unpacked.collections += 1;
-                    files::give_tab_tags(&tx, tab, &[collection])?;
-                }
-                list_in_tab(&tx, tab, collection)?;
-                by_id.insert(wanted.id.clone(), collection);
-                collection
-            }
-        };
-        placed.push((collection, wanted.index, wanted.member, from));
+    for folder in sidecars.folders.into_keys() {
+        unpacked.report(
+            &format!("{folder}/{FOLDER_SIDECAR}"),
+            vec!["its folder holds no file that was taken in".to_string()],
+        );
     }
-    // Each collection's members in the order they say they come in; those
-    // that do not say follow, as the archive has them.
-    placed.sort_by_key(|(collection, index, ..)| (*collection, index.is_none(), *index));
-    for (collection, _, member, from) in placed {
-        match collections::add_members(&tx, collection, &[member]) {
-            Err(ApiError::BadRequest(why)) => unpacked.report(&from, vec![why]),
-            other => other?,
+    // A set with no sidecar here is the one that has the ID, in the
+    // library or from now on.
+    for (set_id, index, file) in placing.wanted {
+        let (set, new) = sets::find_or_make(&tx, &set_id)?;
+        if new {
+            placing.made.push(set);
         }
+        placing.placed.push((set, index, file));
+    }
+    // Each set's files in the order they say they come in; those that do
+    // not say follow, as the archive has them.
+    placing
+        .placed
+        .sort_by_key(|(set, index, _)| (*set, index.is_none(), *index));
+    for (set, _, file) in placing.placed {
+        sets::add_files(&tx, set, &[file], false)?;
+    }
+    // One that nothing could be put in is not kept.
+    sets::prune(&tx)?;
+    for set in placing.made {
+        let kept: bool = tx.query_row(
+            "SELECT EXISTS (SELECT 1 FROM file_set WHERE id = ?1)",
+            [set],
+            |row| row.get(0),
+        )?;
+        unpacked.sets += kept as u64;
     }
     tx.commit()?;
     Ok(())
@@ -538,7 +459,7 @@ async fn upload(
         failures,
         ..Unpacked::default()
     };
-    let mut made = HashMap::new();
+    let mut placing = Placing::default();
     let mut left = MOST_BYTES;
     for Entry { index, parts } in entries {
         let fail = |unpacked: &mut Unpacked, reason: String| {
@@ -581,11 +502,8 @@ async fn upload(
             fail(&mut unpacked, "not an image, a video, audio or a book".to_string());
             continue;
         }
-        // Only what is at the top of the archive is listed under the tab:
-        // the rest is in its folders' collections.
-        let listed = params.tab.filter(|_| folders.is_empty());
-        let (file, new) = match files::ingest(&state, &out.0, &hash, size, Some(name), listed).await
-        {
+        let ingested = files::ingest(&state, &out.0, &hash, size, Some(name), params.tab).await;
+        let (file, new) = match ingested {
             Ok(ingested) => ingested,
             Err(err) => {
                 fail(&mut unpacked, reason(err));
@@ -598,8 +516,9 @@ async fn upload(
             unpacked.duplicates += 1;
         }
         let path = parts.join("/");
+        // The set its sidecar names, or else its folder's.
+        let mut named = None;
         if let Some(meta) = sidecars.files.remove(&path) {
-            let from = format!("{path}.json");
             let mut problems = Vec::new();
             {
                 let mut conn = state.db.lock().unwrap();
@@ -607,16 +526,18 @@ async fn upload(
                 sidecar::apply(&tx, file.id, &meta, new, &mut problems)?;
                 tx.commit()?;
             }
-            sidecars.want(&from, &meta, file.id, &mut problems);
-            unpacked.report(&from, problems);
+            named = sidecar::wanted_set(&meta, &mut problems);
+            unpacked.report(&format!("{path}.json"), problems);
         }
-        if !folders.is_empty() {
-            // Not listed under the tab, it has not been given its tags.
-            files::give_tab_tags(&state.db.lock().unwrap(), params.tab, &[file.id])?;
-            let collection = folder(&state, &mut made, &mut sidecars, &mut unpacked, folders, params.tab)?;
-            collections::add_members(&state.db.lock().unwrap(), collection, &[file.id])?;
+        match named {
+            Some((set_id, index)) => placing.wanted.push((set_id, index, file.id)),
+            None if !folders.is_empty() => {
+                let set = folder(&state, &mut placing, &mut sidecars, &mut unpacked, folders)?;
+                placing.placed.push((set, None, file.id));
+            }
+            None => {}
         }
     }
-    gather(&state, sidecars, &mut unpacked, params.tab)?;
+    gather(&state, sidecars, placing, &mut unpacked)?;
     Ok(Json(unpacked))
 }

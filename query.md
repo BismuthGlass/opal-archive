@@ -1,6 +1,6 @@
 # Query grammar
 
-A query is a line of text that selects entities (files and collections). The
+A query is a line of text that selects files. The
 same string is used by the search box, persistent search tabs, mass edits,
 bulk downloads and the future CLI.
 
@@ -18,8 +18,8 @@ metroid:samus                         has the tag "metroid:samus"
 media=video -@cr:*                    videos with no creator
 @bu:reference                         what is kept in the bucket "reference"
 @trashed                              what is in the trash
-in=(type=sequence title~holiday)      members of matching collections
-within=12                             what is in collection 12, at any depth
+set_id=pinterest:pin:123              the files of that set
+alt_group_id=alt:3f9a1c2e             the variants of that group
 width>=1920 length<30s sort=-score    attribute filters and ordering
 ```
 
@@ -158,7 +158,7 @@ Trashed entities are left out of every search that does not mention
 Multi-valued: `identifier` `reference` `source_url`. These are plain lists, not tags.
 
 Single-valued: `title` `description` `ai_description` `version` `name` `ext`
-`hash` `collection_id`
+`hash` `set_id` `set_title` `alt_group_id`
 
 | Operator | Matches when                                               |
 | -------- | ---------------------------------------------------------- |
@@ -178,44 +178,40 @@ matches. Write `\*` for a literal asterisk.
 `name` is the filename the file was uploaded with, and `ext` its extension
 without the dot.
 
-`collection_id` is a collection's identifier, which no two collections
-share, so it finds one collection whatever it is titled. An ID may be
-namespaced with colons, as a tag is, and is searched the same way:
+`set_id` is the ID of the set a file is in, which no two sets share, and
+`set_title` that set's title. A set is not found by itself: these find its
+files. A set ID may be namespaced with colons, as a tag is, and is searched
+the same way:
 
 ```
-collection_id=pinterest:pin:924574998519073090   that one collection
-collection_id=pinterest:someone:women            the board, and not its sections
-collection_id=pinterest:someone:women:*          its sections, at any depth
-collection_id=pinterest:someone:*                everything of that user
-collection_id=4chan:g:*                          every thread of a board
-collection_id=*:celebs                           whatever ends in celebs
-has=collection_id                                collections that have an ID
+set_id=pinterest:pin:924574998519073090   the files of that one set
+set_id=pinterest:*                        the files of every Pinterest set
+set_id=*:celebs                           whatever ends in celebs
+set_title~holiday                         the files of sets titled so
+has=set_id                                files that are in a set
+-has=set_id                               files that are in none
 ```
 
-These find the collections themselves. What is in them is found with `in=`
-(their own members) or `within=` (those, and whatever is inside the
-collections among them):
+`alt_group_id` is what a file shares with the files it is a variant of:
+`alt_group_id=alt:3f9a1c2e` finds them all, and `has=alt_group_id` every file
+that is a variant of something.
 
-```
-in=(collection_id=4chan:g:*)                     the files of those threads
-within=(collection_id=pinterest:someone:women)   everything in the board, sections and all
-within=(collection_id=pinterest:someone:women) kind=file
-                                                 only the files of it
-```
+A set has plain lists of its own, of where it came from: `source_url`,
+`identifier` and `reference`. A file is found by its set's as by its own, so
+`source_url~pinterest.com/pin/123` finds every file of the set that has that
+address, and `has=source_url` a file whose set has one.
 
 ### Choice fields
 
 Only `=` and `!=`. A value outside the list is an error.
 
-| Field   | Meaning                             | Values                                                      |
-| ------- | ----------------------------------- | ----------------------------------------------------------- |
-| `kind`  | Entity kind                         | `file`, `collection`                                        |
-| `media` | Media type (`media_type`)           | `image`, `video`, `audio`, `book`, `other`                  |
-| `type`  | Collection type (`collection_type`) | `variant`, `set`, `sourceset`, `sequence`, `usercollection` |
+| Field   | Meaning                   | Values                                     |
+| ------- | ------------------------- | ------------------------------------------ |
+| `media` | Media type (`media_type`) | `image`, `video`, `audio`, `book`, `other` |
 
 ### Number fields
 
-`score` `width` `height` `pages` `length` `size`
+`score` `width` `height` `pages` `length` `size` `set_index`
 
 ```
 score=5        score>=5       score!=1
@@ -262,42 +258,24 @@ A work dated just `2024` therefore matches `date=2024` but not
 ### Presence
 
 `has=<field>` matches entities where the field is set (for multi-valued
-fields, has at least one value). Any field above except `kind`, `media`,
+fields, has at least one value). Any field above except `media`,
 `added`, `hash`, `ext` and `size` can be used. `-has=title` finds entities
 with no title. For tags, use the wildcard instead: `@cr:*` has a creator.
 
-### Relations
+### IDs
 
-| Term            | Matches                                                   |
-| --------------- | --------------------------------------------------------- |
-| `id=12`         | The entity with that ID. Takes a list: `id=12,15`.        |
-| `in=12`         | Direct members of collection 12                           |
-| `in=(…)`        | Direct members of any collection matching the subquery    |
-| `within=12`     | What is inside collection 12 at any depth: its members, their members, and so on |
-| `within=(…)`    | The same, for every collection matching the subquery      |
-| `contains=12`   | Collections that directly contain entity 12               |
-| `contains=(…)`  | Collections that directly contain a match of the subquery |
-| `has=in`        | Entities that belong to at least one collection           |
-| `has=contains`  | Collections with at least one member                      |
-
-Subqueries are full queries and can nest.
-
-`in` looks one level down and `within` every level: with a board that holds
-a section that holds a file, `in=<board>` finds the section, and
-`within=<board>` the section and the file. A trashed collection on the way
-does not hide what is inside it. `sort=position` goes with `in`, not
-`within`: only direct members have a position.
+`id=12` is the file with that ID. It takes a list: `id=12,15`.
 
 ## Sorting
 
 `sort=<key>` orders ascending, `sort=-<key>` descending. Several `sort=` terms
 apply in the order written. Sort terms are only allowed at the top level, not
-inside parentheses, negations or subqueries. They are not filters: `cat or dog
+inside parentheses or negations. They are not filters: `cat or dog
 sort=score` sorts the whole result.
 
 Keys: `added` `date` `score` `title` `name` `size` `width` `height` `length`
-`pages` `id` `random`, and `position` (order within the collection, valid
-only when the query has exactly one top-level `in=<id>` term).
+`pages` `id` `random`, and `set_id` and `set_index`: `sort=set_id,set_index`
+puts the files of each set together, in the set's order.
 
 Entities with no value for the key sort last in either direction. The default
 is `sort=-added`. Ties are broken by `id`, in the direction of the first key.
@@ -320,10 +298,8 @@ skipped.
 
 ## Semantics worth knowing
 
-- Results include both files and collections unless `kind=` says otherwise.
-- A file-only field (`width`, `ext`, `media`, …) never matches a collection,
-  and `type` never matches a file. Negating such a term therefore includes
-  the other kind: `-ext=png` returns collections too.
+- Results are files. A set is never a result: it is opened from one of its
+  files.
 - Negating a multi-valued term means "has no matching value": `-genre=horror`
   excludes anything with horror among its genres.
 - Errors are reported with the character position, and the line for a
@@ -333,7 +309,5 @@ skipped.
 ## Not in this draft
 
 - Relative dates (`added>7d`).
-- Transitive containment (`contains` through several levels); membership
-  has it, as `within`.
 - Counting values (`tags` has more than five entries).
 - Full-text ranking; `~` is a plain substring match.

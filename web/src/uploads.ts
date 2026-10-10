@@ -15,8 +15,8 @@ const idle = {
   duplicates: 0,
   /** Things a downloader passed over, having downloaded them into the tab before. */
   skipped: 0,
-  /** Collections made of the folders of archives. */
-  collections: 0,
+  /** Sets made of the folders of archives. */
+  sets: 0,
   failures: [] as Failure[],
   /** Fraction of the file currently uploading. */
   progress: 0,
@@ -112,7 +112,7 @@ async function run() {
         });
         setUploads("added", (n) => n + unpacked.added);
         setUploads("duplicates", (n) => n + unpacked.duplicates);
-        setUploads("collections", (n) => n + unpacked.collections);
+        setUploads("sets", (n) => n + unpacked.sets);
         // Each of its files that was passed over is a failure of its own.
         const inside = unpacked.failures.map((failure) => ({
           name: `${file.name} › ${failure.name}`,

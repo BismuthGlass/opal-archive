@@ -16,8 +16,8 @@ import {
   selectMarked,
   selected,
 } from "../search";
-import { openMarkMenu, openTrashMenu } from "./ContextMenu";
-import { shownCollection } from "../tabs";
+import { openMarkMenu } from "./ContextMenu";
+import { shownSet } from "../tabs";
 import Icon from "./Icon";
 
 /**
@@ -28,16 +28,11 @@ export default function Toolbar() {
   const from = () => search.page * PAGE + 1;
   const to = () => Math.min(search.total, (search.page + 1) * PAGE);
   const allSelected = () => search.total > 0 && selected().size >= search.total;
-  /** The ordered collection on show, whose order can be saved. */
-  const ordered = () => {
-    const collection = shownCollection();
-    return collection?.ordered ? collection : null;
-  };
   const filtered = () => search.query.trim() !== "";
 
   const saveOrder = async (id: number) => {
     await api.setOrder(id, await resultIds());
-    // The collection's own order is now the one on show.
+    // The set's own order is now the one on show.
     resetOrder();
   };
 
@@ -51,19 +46,6 @@ export default function Toolbar() {
         <Icon name="refresh" />
         Refresh
       </button>
-      <Show when={shownCollection()}>
-        {(collection) => (
-          <button
-            aria-label="Trash this collection"
-            aria-haspopup="menu"
-            title="Trash this collection, with or without what is inside it. Once trashed: restore or delete it."
-            onClick={(event) => openTrashMenu(event, collection())}
-          >
-            <Icon name="delete-outline" />
-            Trash collection
-          </button>
-        )}
-      </Show>
       <Show when={search.total > 0}>
         <button
           onClick={selectAll}
@@ -95,26 +77,26 @@ export default function Toolbar() {
             </Show>
           )}
         </For>
-        <Show when={ordered()}>
-          {(collection) => (
+        <Show when={shownSet()}>
+          {(set) => (
             <button
               class="primary"
               disabled={!search.custom || filtered()}
               title={
                 filtered()
-                  ? "Clear the filter to save the order of the whole collection"
+                  ? "Clear the filter to save the order of the whole set"
                   : search.custom
-                    ? "Save this order as the collection's order"
+                    ? "Save this order as the set's order"
                     : "Drag items to reorder them, then save the order here"
               }
-              onClick={() => saveOrder(collection().id)}
+              onClick={() => saveOrder(set().id)}
             >
               Update order
             </button>
           )}
         </Show>
         <Show when={search.custom}>
-          <span class="toolbar-note">{ordered() ? "Order not saved" : "Custom order"}</span>
+          <span class="toolbar-note">{shownSet() ? "Order not saved" : "Custom order"}</span>
           <button class="link" title="Go back to the order before dragging" onClick={resetOrder}>
             Reset
           </button>

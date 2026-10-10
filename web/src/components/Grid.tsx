@@ -19,7 +19,7 @@ import {
   setScrollTo,
 } from "../search";
 import { stats } from "../stats";
-import { activeTab, enter, inside } from "../tabs";
+import { activeTab, enter, inside, shownSet } from "../tabs";
 import { openContextMenu } from "./ContextMenu";
 import Icon from "./Icon";
 
@@ -38,14 +38,9 @@ const SCROLL_EDGE = 48;
 const PAGE_HOLD = 600;
 
 const placeholder = (item: Item) =>
-  item.kind === "collection"
-    ? "collection"
-    : item.extension
-      ? item.extension.toUpperCase()
-      : (item.media_type ?? "");
+  item.extension ? item.extension.toUpperCase() : item.media_type;
 
 function badge(item: Item): string | null {
-  if (item.kind === "collection") return plural(item.member_count ?? 0, "item");
   if (item.length !== null && item.media_type !== "image") return duration(item.length);
   return null;
 }
@@ -64,7 +59,7 @@ const EMPTY: Record<string, string> = {
   download: "Nothing downloaded in this tab yet.",
   inbox: "Nothing in the inbox.",
   selection: "Nothing of what this tab was opened on is left.",
-  collection: "This collection is empty.",
+  set: "This set is empty.",
 };
 
 export default function Grid(props: { onOpen: (index: number) => void }) {
@@ -126,12 +121,6 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
     setScrollTop(scroller.scrollTop);
     noteScroll(scroller.scrollTop);
   });
-
-  // A collection is gone into, in this tab; a file is opened in the viewer.
-  const activate = (index: number, item: Item) => {
-    if (item.kind === "collection") enter(item);
-    else props.onOpen(index);
-  };
 
   /** The IDs being dragged, and where the pointer is. */
   const [drag, setDrag] = createSignal<{ ids: number[]; x: number; y: number } | null>(null);
@@ -245,12 +234,12 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
     >
       <Show when={search.ready && search.total === 0 && !search.error}>
         <p class="empty">
-          {stats()?.files === 0 && stats()?.collections === 0
+          {stats()?.files === 0 && stats()?.trashed === 0
             ? "The library is empty. Open an upload tab with +, or drop files here."
             : search.idle
               ? "Press Search to list the whole library, or type a query first."
               : inside() && search.query === ""
-                ? EMPTY.collection
+                ? EMPTY.set
                 : search.scope !== null && search.query === ""
                   ? EMPTY[activeTab()?.kind ?? "upload"]
                   : "No results."}
@@ -268,7 +257,6 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                 class="tile"
                 classList={{
                   selected: item() !== undefined && selected().has(item()!.id),
-                  collection: item()?.kind === "collection",
                   trashed: item()?.trashed ?? false,
                   moving: item() !== undefined && (drag()?.ids.includes(item()!.id) ?? false),
                 }}
@@ -293,7 +281,7 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                     toggle: event.ctrlKey || event.metaKey,
                   });
                 }}
-                onDblClick={() => item() && activate(index, item()!)}
+                onDblClick={() => item() && props.onOpen(index)}
                 onContextMenu={(event) => {
                   const current = item();
                   if (!current) return;
@@ -310,11 +298,11 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                     {(current) => (
                       <>
                         <Show
-                          when={current().thumbnail !== null}
+                          when={current().has_thumbnail}
                           fallback={<span class="placeholder">{placeholder(current())}</span>}
                         >
                           <img
-                            src={thumbnailUrl(current().thumbnail!, current().thumbnail_version)}
+                            src={thumbnailUrl(current().id, current().thumbnail_version)}
                             alt=""
                             loading="lazy"
                             decoding="async"
@@ -333,16 +321,28 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                             </span>
                           )}
                         </Show>
-                        <Show when={badge(current())}>
-                          {(text) => (
-                            <span class="badge">
-                              <Show when={current().kind === "collection"}>
-                                <Icon name="photo-library-outline" />
-                              </Show>
-                              {text()}
-                            </span>
-                          )}
-                        </Show>
+                        <span class="badges">
+                          {/* A file of a set says so, unless the set is what
+                              is on show: pressed, the tab goes into the set. */}
+                          <Show when={current().set !== null && current().set !== shownSet()?.id}>
+                            <button
+                              class="badge set-badge"
+                              title={`In a set of ${plural(current().set_files ?? 0, "file")}: open it`}
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onDblClick={(event) => event.stopPropagation()}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                enter({ id: current().set! });
+                              }}
+                            >
+                              <Icon name="photo-library-outline" />
+                              {current().set_files}
+                            </button>
+                          </Show>
+                          <Show when={badge(current())}>
+                            {(text) => <span class="badge">{text()}</span>}
+                          </Show>
+                        </span>
                         {/* Only titled entries get a label, over the image. */}
                         <Show when={current().title}>
                           {(title) => (

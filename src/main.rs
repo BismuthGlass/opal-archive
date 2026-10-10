@@ -2,7 +2,6 @@
 mod api_tests;
 mod archive;
 mod book;
-mod collections;
 mod db;
 mod downloads;
 mod entities;
@@ -12,6 +11,7 @@ mod files;
 mod media;
 mod query;
 mod search;
+mod sets;
 mod settings;
 mod sidecar;
 mod tabs;
@@ -71,7 +71,7 @@ fn api() -> Router<AppState> {
         .merge(archive::router())
         .merge(search::router())
         .merge(entities::router())
-        .merge(collections::router())
+        .merge(sets::router())
         .merge(export::router())
         .fallback(|| async { ApiError::NotFound })
 }
@@ -142,16 +142,12 @@ async fn health(State(state): State<AppState>) -> Result<Json<Value>, ApiError> 
 
 async fn stats(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let conn = state.db.lock().unwrap();
-    let count = |condition: &str| {
+    let count = |trashed: bool| {
         conn.query_row(
-            &format!("SELECT count(*) FROM entity WHERE {condition}"),
-            [],
+            "SELECT count(*) FROM entity WHERE trashed = ?1",
+            [trashed],
             |row| row.get::<_, i64>(0),
         )
     };
-    Ok(Json(json!({
-        "files": count("kind = 'file' AND trashed = 0")?,
-        "collections": count("kind = 'collection' AND trashed = 0")?,
-        "trashed": count("trashed = 1")?,
-    })))
+    Ok(Json(json!({ "files": count(false)?, "trashed": count(true)? })))
 }

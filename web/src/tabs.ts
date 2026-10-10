@@ -56,19 +56,11 @@ export function setShowsTrashed(tab: number, show: boolean) {
   }
 }
 
-/** A collection a tab has gone into, and the filter typed while in it. */
-export type Step = {
-  id: number;
-  title: string | null;
-  /** Its identifier, which it is called by when it has no title. */
-  collection_id: string | null;
-  ordered: boolean;
-  query: string;
-};
+/** A set a tab has gone into, and the filter typed while in it. */
+export type Step = api.SetName & { query: string };
 
-// A tab can go into a collection among its results, and into one inside
-// that, and back out: the way in is its trail. It is kept while the page
-// is open, and not with the tab.
+// A tab can go into the set of one of its results, and back out: the way
+// in is its trail. It is kept while the page is open, and not with the tab.
 const [trails, setTrails] = createStore<Record<number, Step[]>>({});
 
 // Remembered per browser, like the active tab, so a reload keeps them.
@@ -82,9 +74,15 @@ function saveTrails() {
   }
 }
 
+/** A step into a set as it is now, if the set is still there. */
+async function stepInto(id: number, query: string): Promise<Step | null> {
+  const set = await api.getSet(id).catch(() => null);
+  return set && { id: set.id, set_id: set.set_id, title: set.title, query };
+}
+
 /**
  * Takes up the trails remembered for the tabs there still are, as far as
- * their collections still exist.
+ * their sets still exist.
  */
 async function loadTrails(list: Tab[]) {
   let stored: Record<string, Step[]> = {};
@@ -96,56 +94,44 @@ async function loadTrails(list: Tab[]) {
   for (const tab of list) {
     const kept: Step[] = [];
     for (const step of stored[tab.id] ?? []) {
-      const entity = await api.getEntity(step.id).catch(() => null);
-      if (!entity?.collection) break;
-      kept.push({
-        id: step.id,
-        title: entity.title,
-        collection_id: entity.collection.collection_id,
-        ordered: entity.collection.ordered,
-        query: String(step.query ?? ""),
-      });
+      const now = await stepInto(step.id, String(step.query ?? ""));
+      if (!now) break;
+      kept.push(now);
     }
     if (kept.length > 0) setTrails(tab.id, kept);
   }
   saveTrails();
 }
 
-/** The collections the active tab has gone into, outermost first. */
+/** The sets the active tab has gone into, outermost first. */
 export const trail = (): Step[] => trails[activeId() ?? -1] ?? [];
 
-/** The collection the active tab is inside, if it has gone into one. */
+/** The set the active tab is inside, if it has gone into one. */
 export const inside = (): Step | undefined => trail().at(-1);
 
 /**
- * The collection the active tab shows the members of: the one it has gone
- * into, or failing that the one a collection tab is tied to.
+ * The set the active tab shows the files of: the one it has gone into, or
+ * failing that the one a set tab is tied to.
  */
-export const shownCollection = () => inside() ?? activeTab()?.collection ?? undefined;
+export const shownSet = (): api.SetName | undefined => inside() ?? activeTab()?.set ?? undefined;
 
-/** Goes into a collection, in the active tab. */
-export async function enter(collection: { id: number; title: string | null }) {
+/** Goes into a set, in the active tab. */
+export async function enter(set: { id: number }) {
   const tab = activeId();
-  // The collection on show is already gone into.
-  if (tab === null || shownCollection()?.id === collection.id) return;
+  // The set on show is already gone into.
+  if (tab === null || shownSet()?.id === set.id) return;
   await guard(async () => {
-    const entity = await api.getEntity(collection.id);
+    const step = await stepInto(set.id, "");
+    if (!step) throw new Error("That set is gone.");
     if (activeId() !== tab) return;
-    const step = {
-      id: entity.id,
-      title: entity.title,
-      collection_id: entity.collection?.collection_id ?? null,
-      ordered: entity.collection?.ordered ?? false,
-      query: "",
-    };
     setTrails(tab, [...(trails[tab] ?? []), step]);
     saveTrails();
   });
 }
 
 /**
- * Goes back out: one collection, or to where the trail was `depth` long.
- * Resolves to the collection that was left for the one outside it.
+ * Goes back out: one set, or to where the trail was `depth` long.
+ * Resolves to the set that was left for what is outside it.
  */
 export function leave(depth = trail().length - 1): Step | undefined {
   const tab = activeId();
@@ -156,7 +142,7 @@ export function leave(depth = trail().length - 1): Step | undefined {
   return steps[depth];
 }
 
-/** Filters the collection the active tab is inside. */
+/** Filters the set the active tab is inside. */
 export function filterInside(query: string) {
   const tab = activeId();
   const depth = trail().length - 1;
@@ -243,27 +229,27 @@ export const openSelection = (ids: number[]) =>
     select(tab.id);
   });
 
-/** Shows a collection in its own tab, going to the one it has if any. */
-export async function openCollection(id: number) {
-  const existing = tabs.find((tab) => tab.collection?.id === id);
+/** Shows a set in its own tab, going to the one it has if any. */
+export async function openSet(id: number) {
+  const existing = tabs.find((tab) => tab.set?.id === id);
   if (existing) return select(existing.id);
   await guard(async () => {
-    const tab = await api.createTab("collection", "", id);
+    const tab = await api.createTab("set", "", id);
     setTabs(tabs.length, tab);
     select(tab.id);
   });
 }
 
 /**
- * Re-reads the tabs, after library changes: a collection tab follows its
- * collection's title, and goes when the collection is deleted.
+ * Re-reads the tabs, after library changes: a set tab follows its set's
+ * title, and goes when the set does.
  */
 export const refresh = () =>
   guard(async () => {
     let list = await api.listTabs();
     if (list.length === 0) list = [await api.createTab("gallery", "")];
     const index = tabs.findIndex((tab) => tab.id === activeId());
-    // A collection tab goes with its collection.
+    // A set tab goes with its set.
     for (const tab of tabs) {
       if (!list.some((kept) => kept.id === tab.id)) forget(tab.id);
     }
@@ -275,8 +261,8 @@ export const refresh = () =>
   });
 
 /**
- * Brings the active tab's trail up to date with its collections: their
- * titles and whether they are ordered. It ends where one has been deleted.
+ * Brings the active tab's trail up to date with its sets: what they are
+ * called. It ends where one is gone.
  */
 async function followTrail() {
   const tab = activeId();
@@ -284,9 +270,9 @@ async function followTrail() {
   if (tab === null || steps.length === 0) return;
   const kept: Step[] = [];
   for (const step of steps) {
-    const entity = await api.getEntity(step.id).catch(() => null);
-    if (!entity?.collection) break;
-    kept.push({ ...step, title: entity.title, ordered: entity.collection.ordered });
+    const now = await stepInto(step.id, step.query);
+    if (!now) break;
+    kept.push(now);
   }
   if (activeId() === tab && trails[tab]?.length === steps.length) {
     setTrails(tab, reconcile(kept, { key: "id" }));

@@ -50,22 +50,19 @@ pub const TAG_FIELDS: &[&str] = &[
     "source",
     "bucket",
 ];
-pub const KINDS: &[&str] = &["file", "collection"];
 pub const MEDIA_TYPES: &[&str] = &["image", "video", "audio", "book", "other"];
-pub const COLLECTION_TYPES: &[&str] =
-    &["variant", "set", "sourceset", "sequence", "usercollection"];
 pub const CONTENT_RATINGS: &[&str] = &["safe", "risky", "nsfw"];
 
 const SORT_KEYS: &[&str] = &[
     "added", "date", "score", "title", "name", "size", "width", "height", "length", "pages", "id",
-    "random", "position",
+    "random", "set_id", "set_index",
 ];
 
-/// The tables a compiled filter refers to: `e0` is the entity, `f0` and `c0`
-/// its file or collection row (whichever exists).
+/// The tables a compiled filter refers to: `e0` is the entity, `f0` its
+/// file row, and `s0` the set it is in, if it is in one.
 pub const FROM: &str = "entity e0
-    LEFT JOIN file f0 ON f0.entity_id = e0.id
-    LEFT JOIN collection c0 ON c0.entity_id = e0.id";
+    JOIN file f0 ON f0.entity_id = e0.id
+    LEFT JOIN file_set s0 ON s0.id = f0.set_key";
 
 #[derive(Debug)]
 pub struct QueryError {
@@ -130,11 +127,12 @@ enum Unit {
 }
 
 /// What a field name refers to. Columns are given as table letter (`e`, `f`
-/// or `c`) and column name; the nesting depth completes the alias.
+/// or `s`) and column name.
 #[derive(Clone, Copy)]
 enum Field {
     /// A plain list of values kept in a table of its own (table, column):
-    /// multi-valued like a tag field, but not tags.
+    /// multi-valued like a tag field, but not tags. A file's set has such
+    /// lists too, in `set_<table>`, and what its set has a file has.
     List(&'static str, &'static str),
     Text(char, &'static str),
     Choice(char, &'static str, &'static [&'static str]),
@@ -146,10 +144,6 @@ enum Field {
     Bool(char, &'static str),
     Has,
     Id,
-    In,
-    /// In a collection, or in one inside it, at any depth.
-    Within,
-    Contains,
     Sort,
 }
 
@@ -165,10 +159,11 @@ fn lookup(name: &str) -> Option<Field> {
         "name" => Field::Text('f', "original_name"),
         "ext" => Field::Text('f', "extension"),
         "hash" => Field::Text('f', "hash"),
-        "kind" => Field::Choice('e', "kind", KINDS),
         "media" => Field::Choice('f', "media_type", MEDIA_TYPES),
-        "type" => Field::Choice('c', "collection_type", COLLECTION_TYPES),
-        "collection_id" => Field::Text('c', "collection_id"),
+        "set_id" => Field::Text('s', "set_id"),
+        "set_title" => Field::Text('s', "title"),
+        "set_index" => Field::Number('f', "set_index", Unit::Plain),
+        "alt_group_id" => Field::Text('f', "alt_group_id"),
         "score" => Field::Number('e', "score", Unit::Plain),
         "width" => Field::Number('f', "width", Unit::Plain),
         "height" => Field::Number('f', "height", Unit::Plain),
@@ -181,9 +176,6 @@ fn lookup(name: &str) -> Option<Field> {
         "looping" => Field::Bool('f', "looping"),
         "has" => Field::Has,
         "id" => Field::Id,
-        "in" => Field::In,
-        "within" => Field::Within,
-        "contains" => Field::Contains,
         "sort" => Field::Sort,
         _ => return None,
     })
@@ -199,8 +191,6 @@ struct Val {
 struct Sort {
     key: &'static str,
     descending: bool,
-    pos: usize,
-    line: usize,
 }
 
 /// Turns a value into a LIKE pattern (escape character `\`). `\*` and `\\`
@@ -331,17 +321,11 @@ struct Parser<'a> {
     pos: usize,
     /// The line of a stacked query being parsed, from 0.
     line: usize,
-    /// Subquery nesting; numbers the table aliases.
-    depth: usize,
-    /// How many `within` terms there have been; numbers their tables.
-    walks: usize,
-    /// Non-zero inside parentheses, negations and subqueries, where `sort=`
-    /// is not allowed.
+    /// Non-zero inside parentheses and negations, where `sort=` is not
+    /// allowed.
     restricted: usize,
     params: Vec<Value>,
     sorts: Vec<Sort>,
-    /// Collections named by top-level `in=<id>` terms, for `sort=position`.
-    top_level_in: Vec<i64>,
     /// Whether the query itself mentions `@trashed`.
     asks_trashed: bool,
 }
@@ -391,7 +375,7 @@ impl Parser<'_> {
     }
 
     fn column(&self, table: char, name: &str) -> String {
-        format!("{table}{}.{name}", self.depth)
+        format!("{table}0.{name}")
     }
 
     fn parse_or(&mut self) -> Res<String> {
@@ -523,9 +507,7 @@ impl Parser<'_> {
             }
             // Asking about the trash is what lets trashed entities through;
             // see `compile`.
-            if self.depth == 0 {
-                self.asks_trashed = true;
-            }
+            self.asks_trashed = true;
             // `trashed` is the only state so far.
             return Ok(format!("({} = 1)", self.column('e', "trashed")));
         };
@@ -616,41 +598,20 @@ impl Parser<'_> {
         const STRING: &[Op] = &[Op::Eq, Op::Ne, Op::Like];
         const ORDERED: &[Op] = &[Op::Eq, Op::Ne, Op::Lt, Op::Le, Op::Gt, Op::Ge];
 
-        if self.peek() == Some('(') {
-            return match field {
-                Field::In | Field::Contains => {
-                    allow(EQUALITY)?;
-                    let sql = self.relation_subquery(matches!(field, Field::In))?;
-                    Ok(negate_if(op == Op::Ne, sql))
-                }
-                Field::Within => {
-                    allow(EQUALITY)?;
-                    self.depth += 1;
-                    let n = self.depth;
-                    let inner = self.parse_group();
-                    self.depth -= 1;
-                    let from = format!(
-                        "SELECT e{n}.id FROM entity e{n}
-                         LEFT JOIN file f{n} ON f{n}.entity_id = e{n}.id
-                         LEFT JOIN collection c{n} ON c{n}.entity_id = e{n}.id
-                         WHERE {}",
-                        inner?
-                    );
-                    Ok(negate_if(op == Op::Ne, self.within(&from)))
-                }
-                _ => error(format!("`{name}` does not take a subquery"), self.pos),
-            };
-        }
         let values = self.parse_values()?;
 
         let sql = match field {
             Field::List(table, column) => {
                 allow(STRING)?;
-                let matches = self.string_match(&format!("l.{column}"), op, &values);
+                let own = self.string_match(&format!("l.{column}"), op, &values);
+                let of_set = self.string_match(&format!("l.{column}"), op, &values);
                 format!(
                     "(EXISTS (SELECT 1 FROM {table} l
-                      WHERE l.entity_id = {} AND {matches}))",
-                    self.column('e', "id")
+                      WHERE l.entity_id = {} AND {own})
+                      OR EXISTS (SELECT 1 FROM set_{table} l
+                      WHERE l.set_key = {} AND {of_set}))",
+                    self.column('e', "id"),
+                    self.column('f', "set_key")
                 )
             }
             Field::Text(table, column) => {
@@ -705,15 +666,6 @@ impl Parser<'_> {
                 let ids = self.id_list(name, &values)?;
                 format!("({} IN ({ids}))", self.column('e', "id"))
             }
-            Field::In | Field::Contains => {
-                allow(EQUALITY)?;
-                self.membership_term(name, matches!(field, Field::In), op, &values)?
-            }
-            Field::Within => {
-                allow(EQUALITY)?;
-                let ids = self.id_list(name, &values)?;
-                self.within(&format!("VALUES {}", ids.replace('?', "(?)")))
-            }
             Field::Sort => {
                 if op != Op::Eq {
                     return error("write sorting as `sort=key` or `sort=-key`", start);
@@ -767,48 +719,6 @@ impl Parser<'_> {
         Ok(format!("({column} IS NOT NULL AND {column} = ?)"))
     }
 
-    /// `in=<ids>`: members of those collections; `contains=<ids>`:
-    /// collections holding those entities.
-    fn membership_term(&mut self, name: &str, is_in: bool, op: Op, values: &[Val]) -> Res<String> {
-        // Remembered for `sort=position`, which needs to know the collection.
-        if is_in
-            && self.restricted == 0
-            && op == Op::Eq
-            && values.len() == 1
-            && let Ok(id) = values[0].text.parse()
-        {
-            self.top_level_in.push(id);
-        }
-        let ids = self.id_list(name, values)?;
-        let (near, far) = if is_in {
-            ("member_id", "collection_id")
-        } else {
-            ("collection_id", "member_id")
-        };
-        Ok(format!(
-            "(EXISTS (SELECT 1 FROM membership m WHERE m.{near} = {} AND m.{far} IN ({ids})))",
-            self.column('e', "id")
-        ))
-    }
-
-    /// Whether the entity is inside one of the collections `from` selects
-    /// the IDs of: a member, or a member of a member, at any depth. What
-    /// is inside them is worked out once, not for every entity.
-    fn within(&mut self, from: &str) -> String {
-        self.walks += 1;
-        let inside = format!("inside{}", self.walks);
-        format!(
-            "({} IN (
-                WITH RECURSIVE {inside} (id) AS (
-                    SELECT member_id FROM membership WHERE collection_id IN ({from})
-                    UNION
-                    SELECT m.member_id FROM membership m JOIN {inside} ON m.collection_id = {inside}.id
-                )
-                SELECT id FROM {inside}))",
-            self.column('e', "id")
-        )
-    }
-
     /// Records the keys of a `sort=` term.
     fn sort_term(&mut self, values: &[Val], start: usize) -> Res<()> {
         if self.restricted > 0 {
@@ -829,12 +739,7 @@ impl Parser<'_> {
                     value.pos,
                 );
             };
-            self.sorts.push(Sort {
-                key,
-                descending,
-                pos: value.pos,
-                line: self.line,
-            });
+            self.sorts.push(Sort { key, descending });
         }
         Ok(())
     }
@@ -1035,13 +940,11 @@ impl Parser<'_> {
         let set = |column: String| format!("{column} IS NOT NULL");
         Ok(match lookup(&name) {
             Some(Field::List(table, _)) => {
-                format!("EXISTS (SELECT 1 FROM {table} l WHERE l.entity_id = {entity})")
-            }
-            Some(Field::In | Field::Within) => {
-                format!("EXISTS (SELECT 1 FROM membership m WHERE m.member_id = {entity})")
-            }
-            Some(Field::Contains) => {
-                format!("EXISTS (SELECT 1 FROM membership m WHERE m.collection_id = {entity})")
+                format!(
+                    "(EXISTS (SELECT 1 FROM {table} l WHERE l.entity_id = {entity})
+                      OR EXISTS (SELECT 1 FROM set_{table} l WHERE l.set_key = {}))",
+                    self.column('f', "set_key")
+                )
             }
             Some(Field::Rating) => set(self.column('e', "content_rating")),
             Some(Field::Date { added: false }) => set(self.column('e', "date")),
@@ -1050,7 +953,7 @@ impl Parser<'_> {
                 Field::Text(table, column)
                 | Field::Choice(table, column, _)
                 | Field::Number(table, column, _),
-            ) if !matches!(name.as_str(), "kind" | "media" | "hash" | "ext" | "size") => {
+            ) if !matches!(name.as_str(), "media" | "hash" | "ext" | "size") => {
                 set(self.column(table, column))
             }
             Some(Field::Has | Field::Id | Field::Sort) | None => {
@@ -1075,28 +978,6 @@ impl Parser<'_> {
         }
         Ok(placeholders(values.len()))
     }
-
-    /// `in=(…)` or `contains=(…)`; the opening parenthesis is next.
-    fn relation_subquery(&mut self, is_in: bool) -> Res<String> {
-        let outer = self.column('e', "id");
-        self.depth += 1;
-        let n = self.depth;
-        let inner = self.parse_group();
-        self.depth -= 1;
-        let inner = inner?;
-        let (near, far) = if is_in {
-            ("member_id", "collection_id")
-        } else {
-            ("collection_id", "member_id")
-        };
-        Ok(format!(
-            "(EXISTS (SELECT 1 FROM membership m{n}
-              JOIN entity e{n} ON e{n}.id = m{n}.{far}
-              LEFT JOIN file f{n} ON f{n}.entity_id = e{n}.id
-              LEFT JOIN collection c{n} ON c{n}.entity_id = e{n}.id
-              WHERE m{n}.{near} = {outer} AND {inner}))"
-        ))
-    }
 }
 
 fn negate_if(negate: bool, sql: String) -> String {
@@ -1108,8 +989,8 @@ fn placeholders(count: usize) -> String {
 }
 
 /// The contents of an ORDER BY clause for the given keys, and its
-/// parameters. `top_level_in` is what `sort=position` orders by.
-fn order_by(sorts: &[Sort], top_level_in: &[i64], seed: i64) -> Res<(String, Vec<Value>)> {
+/// parameters.
+fn order_by(sorts: &[Sort], seed: i64) -> (String, Vec<Value>) {
     let mut clauses = Vec::new();
     let mut order_params = Vec::new();
     for sort in sorts {
@@ -1122,19 +1003,8 @@ fn order_by(sorts: &[Sort], top_level_in: &[i64], seed: i64) -> Res<(String, Vec
                 clauses.push("shuffle(e0.id, ?)".to_string());
                 continue;
             }
-            "position" => {
-                let [collection] = top_level_in[..] else {
-                    return Err(QueryError {
-                        message: "`sort=position` needs exactly one top-level `in=<id>` term"
-                            .to_string(),
-                        position: sort.pos,
-                        line: sort.line,
-                    });
-                };
-                // The expression appears twice below.
-                order_params.extend([Value::Integer(collection), Value::Integer(collection)]);
-                "(SELECT position FROM membership WHERE collection_id = ? AND member_id = e0.id)"
-            }
+            "set_id" => "s0.set_id COLLATE NOCASE",
+            "set_index" => "f0.set_index",
             "added" => "e0.date_added",
             "date" => "e0.date",
             "score" => "e0.score",
@@ -1153,7 +1023,7 @@ fn order_by(sorts: &[Sort], top_level_in: &[i64], seed: i64) -> Res<(String, Vec
     let tie = if sorts[0].descending { "DESC" } else { "ASC" };
     clauses.push(format!("e0.id {tie}"));
 
-    Ok((clauses.join(", "), order_params))
+    (clauses.join(", "), order_params)
 }
 
 /// Compiles a query. A query of several lines is a stack: each line is a
@@ -1169,12 +1039,9 @@ pub fn compile(source: &str, seed: i64, aliases: &Aliases, include_trashed: bool
         chars: Vec::new(),
         pos: 0,
         line: 0,
-        depth: 0,
-        walks: 0,
         restricted: 0,
         params: Vec::new(),
         sorts: Vec::new(),
-        top_level_in: Vec::new(),
         asks_trashed: false,
     };
     let mut filters = Vec::new();
@@ -1215,11 +1082,9 @@ pub fn compile(source: &str, seed: i64, aliases: &Aliases, include_trashed: bool
         parser.sorts.push(Sort {
             key: "added",
             descending: true,
-            pos: 0,
-            line: 0,
         });
     }
-    let (order, order_params) = order_by(&parser.sorts, &parser.top_level_in, seed)?;
+    let (order, order_params) = order_by(&parser.sorts, seed);
     Ok(Compiled {
         filter,
         filter_params: parser.params,
@@ -1238,7 +1103,7 @@ mod tests {
     use super::*;
 
     /// A small library: three files and a book, one of them trashed, and a
-    /// collection holding two of them.
+    /// set holding two of them.
     fn library() -> Connection {
         let conn = crate::db::open(Path::new(":memory:")).unwrap();
         conn.execute_batch(
@@ -1246,7 +1111,6 @@ mod tests {
              VALUES (1, 'file', '2026-01-01T00:00:01Z', 'Cat on a mat', '2020-05-01', 5, 'safe', 0),
                     (2, 'file', '2026-01-01T00:00:02Z', NULL, NULL, 2, 'nsfw', 0),
                     (3, 'file', '2026-01-01T00:00:03Z', NULL, NULL, NULL, NULL, 1),
-                    (4, 'collection', '2026-01-01T00:00:04Z', 'Pets', NULL, NULL, NULL, 0),
                     (5, 'file', '2026-01-01T00:00:05Z', NULL, NULL, NULL, NULL, 0);
              INSERT INTO file
                  (entity_id, hash, extension, media_type, size, original_name, width, height,
@@ -1255,8 +1119,10 @@ mod tests {
                     (2, printf('%064d', 2), 'mp4', 'video', 5000000, 'dog.mp4', 1920, 1080, NULL, 90),
                     (3, printf('%064d', 3), 'png', 'image', 2000, 'old.png', 10, 10, NULL, NULL),
                     (5, printf('%064d', 5), 'epub', 'book', 3000, 'book.epub', NULL, NULL, 120, NULL);
-             INSERT INTO collection (entity_id, collection_type) VALUES (4, 'set');
-             INSERT INTO membership (collection_id, member_id, position) VALUES (4, 1, 2), (4, 2, 1);
+             INSERT INTO file_set (id, set_id, title) VALUES (4, 'pinterest:pin:77', 'Pets');
+             UPDATE file SET set_key = 4, set_index = 3 - entity_id WHERE entity_id IN (1, 2);
+             UPDATE file SET alt_group_id = 'alt:1' WHERE entity_id IN (2, 5);
+             INSERT INTO set_source_url (set_key, url) VALUES (4, 'https://pins.test/pin/77');
              INSERT INTO tag (id, field, value)
              VALUES (1, 'tags', 'cat'), (2, 'tags', 'animal:feline'), (3, 'tags', 'dog'),
                     (4, 'creator', 'Abba'), (5, 'creator', 'Beta');
@@ -1315,89 +1181,33 @@ mod tests {
     }
 
     #[test]
-    fn collection_ids_are_searched_by_namespace() {
+    fn files_are_found_by_their_set() {
         let conn = library();
-        conn.execute_batch(
-            "INSERT INTO entity (id, kind, date_added) VALUES
-                 (10, 'collection', '2026-01-02T00:00:00Z'),
-                 (11, 'collection', '2026-01-02T00:00:01Z'),
-                 (12, 'collection', '2026-01-02T00:00:02Z');
-             INSERT INTO collection (entity_id, collection_type, collection_id) VALUES
-                 (10, 'sourceset', 'pinterest:someone:women'),
-                 (11, 'sourceset', 'pinterest:someone:women:celebs'),
-                 (12, 'set', 'pinterest:pin:77');
-             INSERT INTO membership (collection_id, member_id) VALUES (10, 11), (11, 1), (12, 2);",
-        )
-        .unwrap();
         // As with a tag: the name alone is that one, `:*` what is under it.
-        assert_eq!(found(&conn, "collection_id=pinterest:someone:women"), [10]);
-        assert_eq!(
-            found(&conn, "collection_id=pinterest:someone:women:*"),
-            [11]
-        );
-        assert_eq!(found(&conn, "collection_id=pinterest:someone:*"), [10, 11]);
-        assert_eq!(found(&conn, "collection_id=pinterest:*"), [10, 11, 12]);
-        assert_eq!(found(&conn, "collection_id=*:celebs"), [11]);
-        assert_eq!(found(&conn, "collection_id=PINTEREST:PIN:*"), [12]);
-        assert!(found(&conn, "collection_id=pinterest").is_empty());
-        // What is in them, and which have an ID at all.
-        assert_eq!(
-            found(&conn, "in=(collection_id=pinterest:someone:*)"),
-            [1, 11]
-        );
-        assert_eq!(found(&conn, "has=collection_id"), [10, 11, 12]);
-        assert_eq!(found(&conn, "kind=collection -has=collection_id"), [4]);
-    }
-
-    #[test]
-    fn within_reaches_through_collections() {
-        let conn = library();
-        // 10 holds 11 and the book; 11 holds 12 and the cat; 12 the dog.
-        conn.execute_batch(
-            "INSERT INTO entity (id, kind, date_added) VALUES
-                 (10, 'collection', '2026-01-02T00:00:00Z'),
-                 (11, 'collection', '2026-01-02T00:00:01Z'),
-                 (12, 'collection', '2026-01-02T00:00:02Z');
-             INSERT INTO collection (entity_id, collection_type, collection_id) VALUES
-                 (10, 'sourceset', 'site:board'),
-                 (11, 'sourceset', 'site:board:section'),
-                 (12, 'set', 'site:pin:77');
-             INSERT INTO membership (collection_id, member_id) VALUES
-                 (10, 11), (10, 5), (11, 12), (11, 1), (12, 2);",
-        )
-        .unwrap();
-        // `in` is one level; `within` is every level.
-        assert_eq!(found(&conn, "in=10"), [5, 11]);
-        assert_eq!(found(&conn, "within=10"), [1, 2, 5, 11, 12]);
-        assert_eq!(found(&conn, "within=11"), [1, 2, 12]);
-        assert_eq!(found(&conn, "within=12"), [2]);
-        assert_eq!(found(&conn, "within=12,4"), [1, 2]);
-        assert_eq!(found(&conn, "within=10 kind=file"), [1, 2, 5]);
-        assert_eq!(found(&conn, "within=10 dog"), [2]);
-        // Negated, and with the collections found by a query of their own.
-        assert_eq!(found(&conn, "kind=file -within=11"), [5]);
-        assert_eq!(found(&conn, "kind=file within!=11"), [5]);
-        assert_eq!(
-            found(&conn, "within=(collection_id=site:board)"),
-            [1, 2, 5, 11, 12]
-        );
-        assert_eq!(
-            found(&conn, "within=(collection_id=site:board:*) kind=file"),
-            [1, 2]
-        );
-        assert_eq!(found(&conn, "within=(type=set)"), [1, 2]);
-        // Inside one another, and beside one another.
-        assert_eq!(found(&conn, "within=(within=10 type=set)"), [2]);
-        assert_eq!(found(&conn, "within=4 within=10 kind=file"), [1, 2]);
-        assert_eq!(found(&conn, "in=(within=10)"), [1, 2, 12]);
-        assert!(fails("within=cat"));
-        assert!(fails("within>10"));
+        assert_eq!(found(&conn, "set_id=pinterest:pin:77"), [1, 2]);
+        assert_eq!(found(&conn, "set_id=pinterest:*"), [1, 2]);
+        assert_eq!(found(&conn, "set_id=PINTEREST:PIN:*"), [1, 2]);
+        assert!(found(&conn, "set_id=pinterest").is_empty());
+        assert_eq!(found(&conn, "set_title~pets"), [1, 2]);
+        assert_eq!(found(&conn, "set_index=1"), [2]);
+        assert_eq!(found(&conn, "has=set_id"), [1, 2]);
+        assert_eq!(found(&conn, "-has=set_id"), [5]);
+        assert_eq!(found(&conn, "alt_group_id=alt:1"), [2, 5]);
+        assert_eq!(found(&conn, "has=alt_group_id"), [2, 5]);
+        // What a set says of where it came from, its files say too.
+        assert_eq!(found(&conn, "source_url~pin/77"), [1, 2]);
+        assert_eq!(found(&conn, "has=source_url"), [1, 2, 5]);
+        assert_eq!(found(&conn, "-has=source_url"), [] as [i64; 0]);
+        // Collections are gone, and what asked about them with them.
+        assert!(fails("kind=file"));
+        assert!(fails("in=4"));
+        assert!(fails("within=4"));
     }
 
     #[test]
     fn plain_terms_are_tags() {
         let conn = library();
-        assert_eq!(found(&conn, ""), [1, 2, 4, 5]);
+        assert_eq!(found(&conn, ""), [1, 2, 5]);
         assert_eq!(found(&conn, "cat"), [1]);
         assert_eq!(found(&conn, "CAT"), [1]);
         assert_eq!(found(&conn, "ca*"), [1]);
@@ -1413,7 +1223,7 @@ mod tests {
         assert_eq!(found(&conn, "@creator:abba"), [1]);
         assert_eq!(found(&conn, "@cr:Abba,Beta"), [1, 2]);
         assert_eq!(found(&conn, "@cr:*"), [1, 2]);
-        assert_eq!(found(&conn, "-@cr:*"), [4, 5]);
+        assert_eq!(found(&conn, "-@cr:*"), [5]);
         assert_eq!(found(&conn, "@ta:cat"), [1]);
         // A creator is not a plain tag.
         assert_eq!(found(&conn, "Abba"), [] as [i64; 0]);
@@ -1435,7 +1245,7 @@ mod tests {
     fn terms_combine() {
         let conn = library();
         assert_eq!(found(&conn, "cat or dog"), [1, 2]);
-        assert_eq!(found(&conn, "-cat"), [2, 4, 5]);
+        assert_eq!(found(&conn, "-cat"), [2, 5]);
         assert_eq!(found(&conn, "(cat or dog) score>=3"), [1]);
         assert_eq!(found(&conn, "cat dog"), [] as [i64; 0]);
         assert!(fails("(cat"));
@@ -1449,8 +1259,6 @@ mod tests {
         assert_eq!(found(&conn, "score=1..2"), [2]);
         assert_eq!(found(&conn, "rating=nsfw"), [2]);
         assert_eq!(found(&conn, "media=video"), [2]);
-        assert_eq!(found(&conn, "kind=collection"), [4]);
-        assert_eq!(found(&conn, "type=set"), [4]);
         assert_eq!(found(&conn, "title~mat"), [1]);
         assert_eq!(found(&conn, "length>1m"), [2]);
         assert_eq!(found(&conn, "size>1mb"), [2]);
@@ -1458,7 +1266,7 @@ mod tests {
         assert_eq!(found(&conn, "width>=1920"), [2]);
         assert_eq!(found(&conn, "date=2020"), [1]);
         assert_eq!(found(&conn, "date>=2021"), [] as [i64; 0]);
-        assert_eq!(found(&conn, "has=title"), [1, 4]);
+        assert_eq!(found(&conn, "has=title"), [1]);
         assert_eq!(found(&conn, "identifier=isbn-1"), [5]);
         assert_eq!(found(&conn, "reference=ref-*"), [5]);
         assert_eq!(found(&conn, "source_url~example"), [5]);
@@ -1466,27 +1274,14 @@ mod tests {
         assert!(fails("media=film"));
         assert!(fails("nosuchfield=1"));
         assert_eq!(found(&conn, "media=image,video"), [1, 2]);
-        // The negation of `=`: what has no media type is not an image either.
-        assert_eq!(found(&conn, "media!=image"), [2, 4, 5]);
+        assert_eq!(found(&conn, "media!=image"), [2, 5]);
         assert_eq!(found(&conn, "id=1,5"), [1, 5]);
         assert_eq!(found(&conn, "looping=true"), [] as [i64; 0]);
         assert!(fails("looping=maybe"));
         assert!(fails("looping=true,false"));
         assert!(fails("media>image"));
-        assert!(fails("in=(sort=id)"));
+        assert!(fails("(sort=id)"));
         assert!(fails("sort>id"));
-        assert_eq!(found(&conn, "in!=4"), [4, 5]);
-        assert_eq!(found(&conn, "contains=1,2"), [4]);
-    }
-
-    #[test]
-    fn collections_relate() {
-        let conn = library();
-        assert_eq!(found(&conn, "in=4"), [1, 2]);
-        assert_eq!(found(&conn, "in=(title~pets)"), [1, 2]);
-        assert_eq!(found(&conn, "contains=1"), [4]);
-        assert_eq!(found(&conn, "has=in"), [1, 2]);
-        assert_eq!(found(&conn, "has=contains"), [4]);
     }
 
     #[test]
@@ -1494,13 +1289,13 @@ mod tests {
         let conn = library();
         let none = Aliases::new();
         // Newest first unless told otherwise.
-        assert_eq!(ordered(&conn, "", &none), [5, 4, 2, 1]);
-        assert_eq!(ordered(&conn, "sort=id", &none), [1, 2, 4, 5]);
+        assert_eq!(ordered(&conn, "", &none), [5, 2, 1]);
+        assert_eq!(ordered(&conn, "sort=id", &none), [1, 2, 5]);
         // Those without a score come last in either direction.
-        assert_eq!(ordered(&conn, "kind=file sort=score", &none), [2, 1, 5]);
-        assert_eq!(ordered(&conn, "kind=file sort=-score", &none), [1, 2, 5]);
-        assert_eq!(ordered(&conn, "in=4 sort=position", &none), [2, 1]);
-        assert!(fails("sort=position"));
+        assert_eq!(ordered(&conn, "sort=score", &none), [2, 1, 5]);
+        assert_eq!(ordered(&conn, "sort=-score", &none), [1, 2, 5]);
+        // A set's files together, in its order; what is in none comes last.
+        assert_eq!(ordered(&conn, "sort=set_id,set_index", &none), [2, 1, 5]);
         assert!(fails("sort=nothing"));
         assert!(!compile("cat", 7, &none, false).unwrap().sorted);
         assert!(compile("cat sort=id", 7, &none, false).unwrap().sorted);

@@ -46,7 +46,7 @@ const PARTS: Part[] = [
   },
   {
     title: "Text",
-    note: "Fields: title, description, ai_description, version, name (the file's name), ext, hash, identifier, reference, source_url, collection_id.",
+    note: "Fields: title, description, ai_description, version, name (the file's name), ext, hash, identifier, reference, source_url, set_id, set_title, alt_group_id.",
     rows: [
       ["title=Sunset", "the title is exactly that"],
       ["title~holiday", "the title contains holiday"],
@@ -58,16 +58,14 @@ const PARTS: Part[] = [
   {
     title: "Kinds",
     rows: [
-      ["kind=file", "files only; kind=collection for collections"],
       ["media=video", "image, video, audio, book or other"],
-      ["type=set", "variant, set, sourceset, sequence or usercollection"],
       ["rating<=risky", "safe, risky or nsfw, in that order"],
       ["looping=true", "true or false"],
     ],
   },
   {
     title: "Numbers",
-    note: "Fields: score, width, height, pages, length, size. They take =, !=, <, <=, > and >=.",
+    note: "Fields: score, width, height, pages, length, size, set_index. They take =, !=, <, <=, > and >=.",
     rows: [
       ["score>=5", "scored 5 or more"],
       ["score=3..5", "from 3 to 5; ..3 and 3.. leave a side open"],
@@ -90,27 +88,19 @@ const PARTS: Part[] = [
     rows: [
       ["has=title", "has a title"],
       ["-has=score", "has not been rated"],
-      ["has=in", "is in some collection"],
-      ["-has=in", "is in none"],
+      ["has=set_id", "is in some set"],
+      ["-has=alt_group_id", "is a variant of nothing"],
     ],
   },
   {
-    title: "Collections",
-    note: "Numbers are IDs. In place of one, brackets hold a query for the collections meant.",
+    title: "Sets and variants",
+    note: "A file is in at most one set. A set is not found by itself: its files are, and what a set says of where it came from (source_url, identifier, reference) its files are found by too.",
     rows: [
-      ["in=12", "the members of collection 12"],
-      ["within=12", "those, and what is inside the collections among them"],
-      [
-        "in=(type=sequence title~holiday)",
-        "members of the collections matching that",
-      ],
-      ["contains=12", "the collections holding entity 12"],
-      ["collection_id=4chan:g:*", "the collections with such an ID"],
-      [
-        "within=(collection_id=pinterest:someone:*)",
-        "everything from that user's boards",
-      ],
-      ["id=12,15", "those two"],
+      ["set_id=pinterest:pin:123", "the files of that set"],
+      ["set_id=pinterest:*", "the files of every set with such an ID"],
+      ["set_title~holiday", "the files of sets titled so"],
+      ["alt_group_id=alt:3f9a1c2e", "the variants of that group"],
+      ["id=12,15", "those two files"],
     ],
   },
   {
@@ -123,13 +113,13 @@ const PARTS: Part[] = [
   },
   {
     title: "Order",
-    note: "Keys: added, date, score, title, name, size, width, height, length, pages, id, random, position. Newest added first if nothing is said.",
+    note: "Keys: added, date, score, title, name, size, width, height, length, pages, id, random, set_id, set_index. Newest added first if nothing is said.",
     rows: [
       ["sort=score", "lowest score first"],
       ["sort=-score", "highest first"],
       ["sort=-score sort=title", "by score, then by title"],
       ["sort=random", "shuffled"],
-      ["in=12 sort=position", "in the collection's own order"],
+      ["sort=set_id,set_index", "sets together, each in its own order"],
     ],
   },
   {

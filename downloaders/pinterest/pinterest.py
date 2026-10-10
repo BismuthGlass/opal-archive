@@ -403,21 +403,20 @@ def download() -> int:
                 continue
             description = (pin.get("description") or "").strip()
             # A pin of several files becomes a set, named for the pin. Nothing
-            # else is grouped: a board's pins are not put in a collection, and
+            # else is grouped: a board's pins are not put in a set for it, and
             # refer to the board instead, the file of a pin or its set.
             inside = pin.get("_in")
             whole = {}
             if len(files) > 1:
-                whole["collection"] = {
+                whole["set"] = {
                     "id": f"pinterest:pin:{pin['id']}",
-                    "type": "set",
                     "url": key,
                     # Titled as the pin is, and not at all if it has no title.
                     "title": pin_title(pin),
                     "description": description,
                 }
                 if inside:
-                    whole["collection"]["reference"] = inside
+                    whole["set"]["reference"] = inside
             elif inside:
                 whole["reference"] = inside
             emit(

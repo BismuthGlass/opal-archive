@@ -16,24 +16,23 @@ struct Tab {
     /// `gallery`, a search of the library; `upload`, the files uploaded
     /// or downloaded through the tab; `inbox`, what was sent to be
     /// downloaded from outside; `selection`, the entities it was given; or
-    /// `collection`, the members of one collection.
+    /// `set`, the files of one set.
     kind: String,
-    /// What the tab searches for; in an upload or collection tab, a filter
-    /// on what it holds.
+    /// What the tab searches for; in an upload or set tab, a filter on what
+    /// it holds.
     query: String,
     /// Chosen by the user; empty if the tab goes by its query.
     name: String,
-    /// The collection a collection tab shows.
-    collection: Option<TabCollection>,
+    /// The set a set tab shows.
+    set: Option<TabSet>,
 }
 
 #[derive(Serialize)]
-struct TabCollection {
+struct TabSet {
     id: i64,
+    /// What it is called by when it has no title.
+    set_id: String,
     title: Option<String>,
-    ordered: bool,
-    /// Its identifier, which it is called by when it has no title.
-    collection_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -42,8 +41,8 @@ struct NewTab {
     kind: String,
     #[serde(default)]
     query: String,
-    /// For a collection tab, the collection.
-    collection: Option<i64>,
+    /// For a set tab, the set.
+    set: Option<i64>,
     /// For a selection tab, the entities it is to hold.
     #[serde(default)]
     ids: Vec<i64>,
@@ -86,19 +85,17 @@ pub fn router() -> Router<AppState> {
 }
 
 const SELECT_TAB: &str = "
-    SELECT t.id, t.position, t.kind, t.query, t.name, t.collection_id, e.title, c.ordered,
-           t.downloader, c.collection_id, t.picked
+    SELECT t.id, t.position, t.kind, t.query, t.name, t.set_key, s.set_id, s.title,
+           t.downloader, t.picked
     FROM tab t
-    LEFT JOIN entity e ON e.id = t.collection_id
-    LEFT JOIN collection c ON c.entity_id = t.collection_id";
+    LEFT JOIN file_set s ON s.id = t.set_key";
 
 fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
-    let collection = match row.get::<_, Option<i64>>(5)? {
-        Some(id) => Some(TabCollection {
+    let set = match row.get::<_, Option<i64>>(5)? {
+        Some(id) => Some(TabSet {
             id,
-            title: row.get(6)?,
-            ordered: row.get(7)?,
-            collection_id: row.get(9)?,
+            set_id: row.get(6)?,
+            title: row.get(7)?,
         }),
         None => None,
     };
@@ -110,7 +107,7 @@ fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
         position: row.get(1)?,
         kind: if inbox {
             "inbox".to_string()
-        } else if row.get(10)? {
+        } else if row.get(9)? {
             // Kept as an upload tab that was given what it holds.
             "selection".to_string()
         } else {
@@ -118,7 +115,7 @@ fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
         },
         query: row.get(3)?,
         name: row.get(4)?,
-        collection,
+        set,
     })
 }
 
@@ -193,27 +190,29 @@ async fn create(
         )?;
         return Ok((StatusCode::CREATED, Json(one(&conn, id)?)));
     }
-    if let Some(collection) = input.collection {
+    if let Some(set) = input.set {
         let exists: bool = conn.query_row(
-            "SELECT EXISTS (SELECT 1 FROM collection WHERE entity_id = ?1)",
-            [collection],
+            "SELECT EXISTS (SELECT 1 FROM file_set WHERE id = ?1)",
+            [set],
             |row| row.get(0),
         )?;
         if !exists {
-            return Err(ApiError::bad_request("no such collection"));
+            return Err(ApiError::bad_request("no such set"));
         }
     }
     // A downloader has no tab of its own: an upload tab takes its addresses.
-    if !["gallery", "upload", "collection"].contains(&input.kind.as_str()) {
+    if !["gallery", "upload", "set"].contains(&input.kind.as_str())
+        || (input.kind == "set") != input.set.is_some()
+    {
         return Err(ApiError::BadRequest(format!(
             "`{}` is not a kind of tab",
             input.kind
         )));
     }
     conn.execute(
-        "INSERT INTO tab (position, kind, query, collection_id)
+        "INSERT INTO tab (position, kind, query, set_key)
          VALUES ((SELECT coalesce(max(position), -1) + 1 FROM tab), ?1, ?2, ?3)",
-        params![input.kind, input.query, input.collection],
+        params![input.kind, input.query, input.set],
     )?;
     let tab = one(&conn, conn.last_insert_rowid())?;
     Ok((StatusCode::CREATED, Json(tab)))

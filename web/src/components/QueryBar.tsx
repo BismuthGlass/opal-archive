@@ -33,7 +33,7 @@ export default function QueryBar() {
   /** Whether the trash is to be listed too: like the rows, searched for when asked. */
   const [trashed, setTrashed] = createSignal(false);
 
-  // Inside a collection the box filters it, and the tab's own query waits.
+  // Inside a set the box filters it, and the tab's own query waits.
   const stored = () => inside()?.query ?? activeTab()?.query ?? "";
   /** The saved queries there is something to add from. */
   const offered = () => savedQueries().filter((saved) => saved.query.trim() !== "");
@@ -129,8 +129,8 @@ export default function QueryBar() {
   onCleanup(() => document.removeEventListener("keydown", onKeyDown));
 
   const placeholder = () =>
-    inside() || activeTab()?.kind === "collection"
-      ? "Filter this collection"
+    inside() || activeTab()?.kind === "set"
+      ? "Filter this set"
       : activeTab()?.kind === "upload"
         ? "Filter these uploads"
         : activeTab()?.kind === "selection"

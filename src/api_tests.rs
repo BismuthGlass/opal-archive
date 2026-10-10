@@ -173,16 +173,16 @@ impl Api {
             .collect()
     }
 
-    /// Member IDs of a collection by position.
-    fn members(&self, collection: i64) -> Vec<(i64, Option<i64>)> {
+    /// The files of a set, in its order, each with its index.
+    fn members(&self, set: i64) -> Vec<(i64, Option<i64>)> {
         let conn = self.state.db.lock().unwrap();
         let mut stmt = conn
             .prepare(
-                "SELECT member_id, position FROM membership WHERE collection_id = ?1
-                 ORDER BY position IS NULL, position, member_id",
+                "SELECT entity_id, set_index FROM file WHERE set_key = ?1
+                 ORDER BY set_index IS NULL, set_index, entity_id",
             )
             .unwrap();
-        stmt.query_map([collection], |row| Ok((row.get(0)?, row.get(1)?)))
+        stmt.query_map([set], |row| Ok((row.get(0)?, row.get(1)?)))
             .unwrap()
             .collect::<rusqlite::Result<_>>()
             .unwrap()
@@ -229,7 +229,6 @@ async fn scalars_are_set_checked_and_cleared() {
 
     let both = api.metadata(&[a, b]).await;
     assert_eq!(both["count"], 2);
-    assert_eq!(both["files"], 2);
     assert_eq!(
         both["scalars"]["score"],
         json!({ "value": 5, "mixed": false })
@@ -260,7 +259,7 @@ async fn scalars_are_set_checked_and_cleared() {
         json!({ "date": "May 2020" }),
         json!({ "content_rating": "spicy" }),
         json!({ "kind": "collection" }),
-        json!({ "collection_type": null }),
+        json!({ "set_id": "mine" }),
     ] {
         api.refused("/entities/edit", json!({ "ids": [a], "set": bad }))
             .await;
@@ -416,7 +415,7 @@ async fn deleting_takes_two_steps() {
     assert_eq!(api.metadata(&[a, b]).await["trashed"], 1);
     assert_eq!(
         api.get("/stats").await,
-        json!({ "files": 1, "collections": 0, "trashed": 1 })
+        json!({ "files": 1, "trashed": 1 })
     );
     // Trashed, it keeps its file and tags.
     assert!(api.stored(a).exists());
@@ -440,98 +439,7 @@ async fn deleting_takes_two_steps() {
 }
 
 #[tokio::test]
-async fn collections_hold_members() {
-    let api = Api::new();
-    let (a, b, c) = (api.file("a.png"), api.file("b.png"), api.file("c.png"));
-
-    let set = api
-        .post(
-            "/collections",
-            json!({ "collection_type": "set", "members": [a, b] }),
-        )
-        .await["id"]
-        .as_i64()
-        .unwrap();
-    let made = api.get(&format!("/entities/{set}")).await;
-    assert_eq!(made["title"], "Set");
-    assert_eq!(
-        made["collection"],
-        json!({ "collection_type": "set", "member_count": 2, "ordered": false, "collection_id": null })
-    );
-    assert_eq!(api.members(set), [(a, None), (b, None)]);
-    assert_eq!(api.found(&format!("in={set}")).await, [a, b]);
-
-    let shared = api.metadata(&[a, c]).await;
-    assert_eq!(
-        shared["memberships"],
-        json!([{ "id": set, "title": "Set", "collection_type": "set", "count": 1, "collection_id": null }])
-    );
-
-    let answer = api
-        .post(
-            &format!("/collections/{set}/members"),
-            json!({ "add": [c, a], "remove": [b] }),
-        )
-        .await;
-    assert_eq!(answer["member_count"], 2);
-    assert_eq!(api.members(set), [(a, None), (c, None)]);
-
-    // A title, when given, is kept; a blank one is not one.
-    for (title, stored) in [("  Mine ", "Mine"), ("  ", "User Collection")] {
-        let id = api
-            .post(
-                "/collections",
-                json!({ "collection_type": "usercollection", "title": title }),
-            )
-            .await["id"]
-            .as_i64()
-            .unwrap();
-        assert_eq!(api.get(&format!("/entities/{id}")).await["title"], stored);
-    }
-
-    api.refused("/collections", json!({ "collection_type": "pile" }))
-        .await;
-    assert_eq!(
-        api.refused("/collections/999/members", json!({ "add": [a] }))
-            .await,
-        StatusCode::NOT_FOUND
-    );
-    api.refused(
-        &format!("/collections/{set}/members"),
-        json!({ "add": [999] }),
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn collections_nest_but_never_in_themselves() {
-    let api = Api::new();
-    let a = api.file("a.png");
-    let new = async |body: Value| api.post("/collections", body).await["id"].as_i64().unwrap();
-    let outer = new(json!({ "collection_type": "set" })).await;
-    let inner = new(json!({ "collection_type": "variant", "members": [a], "parent": outer })).await;
-    assert_eq!(api.members(outer), [(inner, None)]);
-    assert_eq!(api.found(&format!("contains={inner}")).await, [outer]);
-
-    for (collection, member) in [(outer, outer), (inner, outer)] {
-        api.refused(
-            &format!("/collections/{collection}/members"),
-            json!({ "add": [member] }),
-        )
-        .await;
-    }
-    assert_eq!(api.members(inner), [(a, None)]);
-
-    // Deleting a collection leaves its members.
-    api.post("/entities/trash", json!({ "ids": [inner] })).await;
-    api.post("/entities/delete", json!({ "ids": [inner] }))
-        .await;
-    assert_eq!(api.found("").await, [a, outer]);
-    assert_eq!(api.members(outer), []);
-}
-
-#[tokio::test]
-async fn ordered_collections_keep_positions() {
+async fn sets_hold_files_in_order() {
     let api = Api::new();
     let (a, b, c, d) = (
         api.file("a.png"),
@@ -539,82 +447,215 @@ async fn ordered_collections_keep_positions() {
         api.file("c.png"),
         api.file("d.png"),
     );
-    // A sequence is ordered unless told otherwise.
-    let sequence = api
-        .post(
-            "/collections",
-            json!({ "collection_type": "sequence", "members": [c, a, b] }),
-        )
-        .await["id"]
-        .as_i64()
-        .unwrap();
+
+    // A set is made of files, in the order given, and is given an ID if it
+    // is not told one.
+    let made = api
+        .post("/sets", json!({ "title": "  Mine ", "files": [c, a, b] }))
+        .await;
+    let set = made["id"].as_i64().unwrap();
+    let set_id = made["set_id"].as_str().unwrap();
+    assert!(set_id.starts_with("set:"));
+    assert_eq!(api.members(set), [(c, Some(0)), (a, Some(1)), (b, Some(2))]);
     assert_eq!(
-        api.members(sequence),
-        [(c, Some(0)), (a, Some(1)), (b, Some(2))]
+        api.get(&format!("/sets/{set}")).await,
+        json!({
+            "id": set, "set_id": set_id, "title": "Mine", "description": null, "files": 3,
+            "source_url": [], "identifier": [], "reference": [],
+        })
+    );
+    // Its files say which set they are in, and are found by it.
+    assert_eq!(
+        api.get(&format!("/entities/{a}")).await["set"],
+        json!({ "id": set, "set_id": set_id, "title": "Mine", "index": 1 })
+    );
+    assert_eq!(api.found(&format!("set_id={set_id}")).await, [a, b, c]);
+    assert_eq!(
+        api.metadata(&[a, d]).await["sets"],
+        json!([{ "id": set, "set_id": set_id, "title": "Mine", "count": 1 }])
     );
 
-    // New members go on the end; ones already in keep their place.
-    api.post(
-        &format!("/collections/{sequence}/members"),
-        json!({ "add": [a, d] }),
-    )
-    .await;
-    assert_eq!(api.members(sequence).last(), Some(&(d, Some(3))));
+    // New files go on the end; ones already in keep their place.
+    let answer = api
+        .post(&format!("/sets/{set}/files"), json!({ "add": [a, d] }))
+        .await;
+    assert_eq!(answer["files"], 4);
+    assert_eq!(api.members(set).last(), Some(&(d, Some(3))));
 
-    // A search can be kept to a collection's members without a tab of its
-    // own: in the collection's order, filtered by the query, and whatever
-    // another tab would have held. One that is gone has no members.
-    let within = async |query: &str, collection: i64| -> Vec<i64> {
-        let path = format!("/search/ids?q={query}&collection={collection}");
+    // A search can be kept to a set without a tab of its own: in the
+    // set's order, filtered by the query, and whatever another tab would
+    // have held. One that is gone holds nothing.
+    let within = async |query: &str, set: i64| -> Vec<i64> {
+        let path = format!("/search/ids?q={query}&set={set}");
         serde_json::from_value(api.get(&path).await["ids"].clone()).unwrap()
     };
-    assert_eq!(within("", sequence).await, [c, a, b, d]);
-    assert_eq!(within("sort%3Did", sequence).await, [a, b, c, d]);
-    assert_eq!(within(&format!("id%3D{a},{d}"), sequence).await, [a, d]);
+    assert_eq!(within("", set).await, [c, a, b, d]);
+    assert_eq!(within("sort%3Did", set).await, [a, b, c, d]);
+    assert_eq!(within(&format!("id%3D{a},{d}"), set).await, [a, d]);
     assert!(within("", 999).await.is_empty());
     let upload = api.post("/tabs", json!({ "kind": "upload" })).await["id"]
         .as_i64()
         .unwrap();
-    let both = format!("/search/ids?q=&collection={sequence}&tab={upload}");
+    let both = format!("/search/ids?q=&set={set}&tab={upload}");
     assert_eq!(api.get(&both).await["ids"], json!([c, a, b, d]));
+    // A tab of its own shows it the same way, and is called by it.
+    let tab = api.post("/tabs", json!({ "kind": "set", "set": set })).await;
+    assert_eq!(tab["set"], json!({ "id": set, "set_id": set_id, "title": "Mine" }));
+    let in_tab = format!("/search/ids?q=&tab={}", tab["id"]);
+    assert_eq!(api.get(&in_tab).await["ids"], json!([c, a, b, d]));
+    api.refused("/tabs", json!({ "kind": "set" })).await;
+    api.refused("/tabs", json!({ "kind": "set", "set": 999 })).await;
 
-    // Members left out of a new order follow it, as they were.
+    // Files left out of a new order follow it, as they were.
     let (status, _) = api
         .call(
             "PUT",
-            &format!("/collections/{sequence}/order"),
+            &format!("/sets/{set}/order"),
             Some(json!({ "ids": [b, d] })),
         )
         .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(
-        api.members(sequence),
+        api.members(set),
         [(b, Some(0)), (d, Some(1)), (c, Some(2)), (a, Some(3))]
     );
 
-    // A collection that becomes ordered gives its members positions.
-    let set = api
-        .post(
-            "/collections",
-            json!({ "collection_type": "set", "members": [b, a] }),
-        )
-        .await["id"]
+    // A file is in one set: put in another, it leaves the first.
+    let other = api
+        .post("/sets", json!({ "set_id": " site:post:1 ", "files": [b] }))
+        .await;
+    assert_eq!(other["set_id"], "site:post:1");
+    let other = other["id"].as_i64().unwrap();
+    assert_eq!(api.members(set).len(), 3);
+    assert_eq!(api.members(other), [(b, Some(0))]);
+
+    // Sets are listed for picking one, by what they are called.
+    let listed = api.get("/sets").await;
+    assert_eq!(
+        listed,
+        json!([
+            { "id": set, "set_id": set_id, "title": "Mine", "files": 3 },
+            { "id": other, "set_id": "site:post:1", "title": null, "files": 1 },
+        ])
+    );
+    assert_eq!(api.get("/sets?q=POST").await[0]["id"], other);
+    assert_eq!(api.get("/sets?q=min").await[0]["id"], set);
+    assert_eq!(api.get("/sets?q=100%25").await, json!([]));
+
+    // No two sets share an ID, and a set is made of something.
+    api.refused("/sets", json!({ "set_id": "site:post:1", "files": [a] }))
+        .await;
+    api.refused("/sets", json!({ "files": [] })).await;
+    assert_eq!(
+        api.refused_with("PATCH", &format!("/sets/{set}"), json!({ "set": { "set_id": "site:post:1" } }))
+            .await,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        api.refused("/sets/999/files", json!({ "add": [a] })).await,
+        StatusCode::NOT_FOUND
+    );
+
+    // A set left with no file is gone, and its tab with it; so is one
+    // that is taken apart, whose files stay.
+    api.post(&format!("/sets/{other}/files"), json!({ "remove": [b] }))
+        .await;
+    assert_eq!(
+        api.call("GET", &format!("/sets/{other}"), None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(api.get(&format!("/entities/{b}")).await["set"], Value::Null);
+    let (status, _) = api.call("DELETE", &format!("/sets/{set}"), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(api.found("has=set_id").await, [] as [i64; 0]);
+    assert_eq!(api.found("").await, [a, b, c, d]);
+    let tabs = api.get("/tabs").await;
+    assert!(tabs.as_array().unwrap().iter().all(|tab| tab["kind"] != "set"));
+
+    // Deleting the last file of a set for good takes the set with it.
+    let last = api.post("/sets", json!({ "files": [d] })).await["id"]
         .as_i64()
         .unwrap();
-    assert_eq!(api.members(set), [(a, None), (b, None)]);
-    api.edit(&[set], json!({ "set": { "ordered": true } }))
-        .await;
-    assert_eq!(api.members(set), [(a, Some(0)), (b, Some(1))]);
+    api.post("/entities/trash", json!({ "ids": [d] })).await;
+    assert_eq!(api.get(&format!("/sets/{last}")).await["files"], 0);
+    api.post("/entities/delete", json!({ "ids": [d] })).await;
     assert_eq!(
-        api.metadata(&[set, sequence]).await["ordered"],
-        json!({ "value": true, "mixed": false })
+        api.call("GET", &format!("/sets/{last}"), None).await.0,
+        StatusCode::NOT_FOUND
     );
-    api.edit(&[set], json!({ "set": { "collection_type": "variant" } }))
+}
+
+#[tokio::test]
+async fn a_set_describes_itself_and_variants_are_grouped() {
+    let api = Api::new();
+    let (a, b, c) = (api.file("a.png"), api.file("b.png"), api.file("c.png"));
+    let set = api.post("/sets", json!({ "files": [a, b] })).await["id"]
+        .as_i64()
+        .unwrap();
+    let path = format!("/sets/{set}");
+
+    let changed = api
+        .ok(
+            "PATCH",
+            &path,
+            Some(json!({
+                "set": { "set_id": " book:1 ", "title": "A book", "description": " In two parts " },
+                "add_source_url": ["example.com/book"],
+                "add_identifier": ["isbn-1"],
+                "add_reference": ["shelf:3", " shelf:4 "],
+            })),
+        )
         .await;
     assert_eq!(
-        api.metadata(&[set, sequence]).await["collection_type"]["mixed"],
-        true
+        changed,
+        json!({
+            "id": set, "set_id": "book:1", "title": "A book", "description": "In two parts",
+            "files": 2, "source_url": ["https://example.com/book"], "identifier": ["isbn-1"],
+            "reference": ["shelf:3", "shelf:4"],
+        })
     );
+    // Where a set came from, its files came from.
+    assert_eq!(api.found("source_url~example.com/book").await, [a, b]);
+    assert_eq!(api.found("reference=shelf:*").await, [a, b]);
+    assert_eq!(api.found("has=identifier").await, [a, b]);
+    assert_eq!(api.found("set_title~book").await, [a, b]);
+
+    let changed = api
+        .ok(
+            "PATCH",
+            &path,
+            Some(json!({ "set": { "title": "" }, "remove_reference": ["shelf:3"] })),
+        )
+        .await;
+    assert_eq!((&changed["title"], &changed["reference"]), (&Value::Null, &json!(["shelf:4"])));
+    // A change is all or nothing, and only what a set has can be set.
+    for bad in [
+        json!({ "set": { "title": "New" }, "add_source_url": ["not a url"] }),
+        json!({ "set": { "set_id": "" } }),
+        json!({ "set": { "score": 5 } }),
+        json!({ "add_identifier": [" "] }),
+    ] {
+        assert_eq!(api.refused_with("PATCH", &path, bad).await, StatusCode::BAD_REQUEST);
+    }
+    assert_eq!(api.get(&path).await["title"], Value::Null);
+
+    // Variants are files that share a group; a file joins the group of
+    // those it is grouped with.
+    let grouped = api.post("/variants", json!({ "ids": [a, c] })).await;
+    let group = grouped["alt_group_id"].as_str().unwrap();
+    assert_eq!(grouped["updated"], 2);
+    assert_eq!(api.found(&format!("alt_group_id={group}")).await, [a, c]);
+    assert_eq!(api.post("/variants", json!({ "ids": [b, c] })).await["alt_group_id"], group);
+    assert_eq!(api.get(&format!("/entities/{b}")).await["file"]["alt_group_id"], group);
+    assert_eq!(
+        api.metadata(&[a, b, c]).await["scalars"]["alt_group_id"],
+        json!({ "value": group, "mixed": false })
+    );
+    // It is a field like another: set by hand, or cleared.
+    api.edit(&[a], json!({ "set": { "alt_group_id": null } })).await;
+    api.edit(&[b], json!({ "set": { "alt_group_id": " pair " } })).await;
+    assert_eq!(api.found("has=alt_group_id").await, [b, c]);
+    assert_eq!(api.found("alt_group_id=pair").await, [b]);
 }
 
 #[tokio::test]
@@ -846,7 +887,7 @@ async fn a_bad_query_says_where() {
 
 /// A downloader that fetches from nowhere: two things, the first with a
 /// reference to its board and the second, of two files, in a set of its
-/// own that is in a collection for the board, and a complaint.
+/// own, and a complaint.
 const FAKE_DOWNLOADER: &str = r#"
 [ "$1" = download ] || exit 2
 input=$(cat)
@@ -865,9 +906,8 @@ for n in 1 2; do
     printf 'file %s b' "$n" > "$out/$n-b.txt"
     files="$files,\"$out/$n-b.txt\""
   fi
-  whole='"id":"fake:board","type":"sourceset","url":"https://example.test/board","title":"Board"'
   if [ "$n" = 2 ]; then
-    part='"collection":{"id":"fake#2","url":"'$key'","description":" A pair ","reference":"fake:board:part","tags":{"genre":["Twos"],"nonsense":["x"]},"collection":{'$whole'}}'
+    part='"set":{"id":"fake#2","url":"'$key'","description":" A pair ","reference":"fake:board:part","tags":{"genre":["Twos"],"nonsense":["x"]}}'
   else
     part='"reference":" fake:board "'
   fi
@@ -915,10 +955,10 @@ impl Api {
         panic!("the download never ended");
     }
 
-    /// What a tab lists of one kind, lowest ID first.
-    async fn in_tab(&self, tab: i64, kind: &str) -> Vec<i64> {
+    /// What a tab lists, lowest ID first.
+    async fn in_tab(&self, tab: i64) -> Vec<i64> {
         let answer = self
-            .get(&format!("/search/ids?q=kind%3D{kind}+sort%3Did&tab={tab}"))
+            .get(&format!("/search/ids?q=sort%3Did&tab={tab}"))
             .await;
         serde_json::from_value(answer["ids"].clone()).unwrap()
     }
@@ -1011,10 +1051,10 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     };
     assert_eq!(counts(&job), [2, 2, 3, 0, 0, 1]);
     assert_eq!(job["errors"], json!(["one thing could not be had"]));
-    let files = api.found("kind=file sort=id").await;
+    let files = api.found("").await;
     assert_eq!(files.len(), 3);
-    // The tab lists them all: the two that are in a set too, beside it.
-    assert_eq!(api.in_tab(tab, "file").await, files);
+    // The tab lists them all, the two that are in a set too.
+    assert_eq!(api.in_tab(tab).await, files);
     // A view saved before the files came does not outlast them.
     assert_eq!(api.get(&format!("/tabs/{tab}/view")).await, Value::Null);
     let all = api.metadata(&files).await;
@@ -1055,49 +1095,24 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     assert_eq!(api.found("reference=fake:board").await, files[..1]);
 
     // The second thing asked for a set of its own: it holds its files in
-    // order, under the ID, description and tags given for it, with the
-    // tab's tags but not those of the thing. Given no title, it has none:
-    // its ID is not its title.
-    let sets = api.found("type=set").await;
-    assert_eq!(sets.len(), 1);
+    // order, under the ID and description given for it. Given no title,
+    // it has none: its ID is not its title. The tags given for it are its
+    // files'.
+    let set = api.get(&format!("/entities/{}", files[1])).await["set"].clone();
     assert_eq!(
-        api.members(sets[0]),
-        [(files[1], Some(0)), (files[2], Some(1))]
+        set,
+        json!({ "id": set["id"], "set_id": "fake#2", "title": null, "index": 0 })
     );
-    let set = api.metadata(&sets).await;
-    assert_eq!(set["scalars"]["title"]["value"], Value::Null);
-    assert_eq!(set["collection_id"]["value"], "fake#2");
-    assert_eq!(api.found("collection_id=fake#2").await, sets);
-    assert_eq!(set["scalars"]["description"]["value"], "A pair");
-    assert_eq!(carried(&set, "source"), [tag("fakesite", 1)]);
-    assert_eq!(carried(&set, "creator"), [tag("Someone", 1)]);
-    assert_eq!(carried(&set, "genre"), [tag("Twos", 1)]);
-    // What it is part of is its own reference, and not its files'.
-    assert_eq!(carried(&set, "reference"), [tag("fake:board:part", 1)]);
-    assert_eq!(api.found("reference=fake:board:*").await, sets);
-    assert_eq!(
-        carried(&set, "source_url"),
-        [tag("https://example.test/item/2", 1)]
-    );
-
-    // It asked for its set to be put in a collection of another type and
-    // address, which holds the set and not its files.
-    let wholes = api.found("type=sourceset").await;
-    assert_eq!(wholes.len(), 1);
-    assert_eq!(api.members(wholes[0]), [(sets[0], Some(0))]);
-    let whole = api.metadata(&wholes).await;
-    assert_eq!(whole["scalars"]["title"]["value"], "Board");
-    assert_eq!(carried(&whole, "source"), [tag("fakesite", 1)]);
-    assert_eq!(carried(&whole, "creator"), [tag("Someone", 1)]);
-    assert_eq!(
-        carried(&whole, "source_url"),
-        [tag("https://example.test/board", 1)]
-    );
-
-    // Both collections are listed in the tab, beside the files.
-    let mut made = [sets[0], wholes[0]];
-    made.sort();
-    assert_eq!(api.in_tab(tab, "collection").await, made);
+    let set = set["id"].as_i64().unwrap();
+    assert_eq!(api.members(set), [(files[1], Some(0)), (files[2], Some(1))]);
+    assert_eq!(api.found("set_id=fake#2").await, files[1..]);
+    assert_eq!(carried(&all, "genre"), [tag("Twos", 2)]);
+    // What it is part of is its own reference, and its address its own.
+    let described = api.get(&format!("/sets/{set}")).await;
+    assert_eq!(described["description"], "A pair");
+    assert_eq!(described["reference"], json!(["fake:board:part"]));
+    assert_eq!(described["source_url"], json!(["https://example.test/item/2"]));
+    assert_eq!(api.found("reference=fake:board:*").await, files[1..]);
 
     // What was seen is passed over the next time.
     let seen = api.get(&format!("{path}/seen")).await;
@@ -1115,51 +1130,38 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         .await;
     assert_eq!(forgotten["forgotten"], 1);
     // A title the user wrote stays when the thing is fetched again. The
-    // set is found by its ID, whatever else about it has changed, even
-    // from the trash.
+    // set is found by its ID, whatever else about it has changed.
     api.edit(&files[1..2], json!({ "set": { "title": "Mine" } }))
         .await;
-    api.edit(&sets, json!({ "set": { "title": "A pair of mine" } }))
-        .await;
-    api.edit(
-        &sets,
-        json!({ "remove_source_url": ["https://example.test/item/2"] }),
-    )
-    .await;
-    api.post("/entities/trash", json!({ "ids": sets })).await;
+    let changes = json!({ "set": { "title": "A pair of mine", "description": "Two" } });
+    api.ok("PATCH", &format!("/sets/{set}"), Some(changes)).await;
     let third = api.download(tab, "https://example.test/board").await;
     assert_eq!(
         api.get(&format!("/entities/{}", files[1])).await["title"],
         "Mine"
     );
     assert_eq!(counts(&third), [2, 1, 0, 2, 1, 1]);
-    assert_eq!(api.in_tab(tab, "file").await, files);
-    assert_eq!(api.in_tab(tab, "collection").await.len(), 2);
-    assert_eq!(api.found("type=set").await, sets);
-    assert_eq!(api.found("type=sourceset").await, wholes);
-    assert_eq!(api.members(sets[0]).len(), 2);
-    assert_eq!(api.members(wholes[0]).len(), 1);
+    assert_eq!(api.in_tab(tab).await, files);
+    assert_eq!(api.members(set).len(), 2);
+    let described = api.get(&format!("/sets/{set}")).await;
     assert_eq!(
-        api.metadata(&sets).await["scalars"]["title"]["value"],
-        "A pair of mine"
+        (&described["title"], &described["description"]),
+        (&json!("A pair of mine"), &json!("Two"))
     );
 
-    // No two collections share an ID, and one is one collection's alone.
-    let taken = json!({ "ids": wholes, "set": { "collection_id": "fake#2" } });
-    api.refused("/entities/edit", taken).await;
-    let both = json!({ "ids": [sets[0], wholes[0]], "set": { "collection_id": "new" } });
-    api.refused("/entities/edit", both).await;
-    let made = json!({ "collection_type": "set", "collection_id": "fake:board" });
-    api.refused("/collections", made).await;
-    api.edit(&wholes, json!({ "set": { "collection_id": " board " } }))
-        .await;
-    assert_eq!(
-        api.get(&format!("/entities/{}", wholes[0])).await["collection"]["collection_id"],
-        "board"
-    );
-    api.edit(&wholes, json!({ "set": { "collection_id": null } }))
-        .await;
-    assert_eq!(api.found("has=collection_id").await, sets);
+    // A file that is in a set stays in it, though it is downloaded again
+    // as part of something else.
+    let other = api.post("/sets", json!({ "files": [files[2]] })).await["id"]
+        .as_i64()
+        .unwrap();
+    api.post(
+        &format!("{path}/seen/forget"),
+        json!({ "keys": ["https://example.test/item/2"] }),
+    )
+    .await;
+    api.download(tab, "https://example.test/board").await;
+    assert_eq!(api.members(set), [(files[1], Some(0))]);
+    assert_eq!(api.members(other), [(files[2], Some(0))]);
     assert_eq!(api.get(&path).await["seen"], 2);
     assert_eq!(
         api.post(&format!("{path}/seen/forget"), json!({})).await["forgotten"],
@@ -1172,7 +1174,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     // The files outlive the tab.
     api.ok("DELETE", &format!("/tabs/{tab}"), None).await;
     assert_eq!(api.call("GET", &path, None).await.0, StatusCode::NOT_FOUND);
-    assert_eq!(api.found("kind=file").await, files);
+    assert_eq!(api.found("").await, files);
 }
 
 #[tokio::test]
@@ -1274,7 +1276,7 @@ echo "{\"event\":\"item\",\"key\":\"https://outer.test/post\",\"source_url\":\"h
     );
     // The one file has what each downloader gives: the source of both,
     // the address on both sites, the tags of both, and the tab's.
-    let files = api.in_tab(tab, "file").await;
+    let files = api.in_tab(tab).await;
     assert_eq!(files.len(), 1);
     let file = api.metadata(&files).await;
     assert_eq!(carried(&file, "source"), [tag("inner", 1), tag("outer", 1)]);
@@ -1345,7 +1347,7 @@ async fn a_file_is_fetched_from_its_address() {
     assert_eq!(file["original_name"], "a picture.png");
     assert_eq!(file["extension"], "png");
     let id = file["id"].as_i64().unwrap();
-    assert_eq!(api.in_tab(tab, "file").await, [id]);
+    assert_eq!(api.in_tab(tab).await, [id]);
     assert_eq!(
         api.get(&format!("/entities/{id}")).await["source_url"],
         json!([url])
@@ -1366,7 +1368,7 @@ async fn a_file_is_fetched_from_its_address() {
         api.refused("/files/fetch", json!({ "url": bad, "tab": tab }))
             .await;
     }
-    assert_eq!(api.found("kind=file").await, [id]);
+    assert_eq!(api.found("").await, [id]);
     assert_eq!(std::fs::read_dir(&api.state.tmp).unwrap().count(), 0);
 }
 
@@ -1424,17 +1426,16 @@ async fn the_inbox_downloads_what_it_is_sent() {
         (&json!("done"), &json!(0), &json!(3))
     );
 
-    // It is all listed under the inbox's tab: the files and their collections.
+    // It is all listed under the inbox's tab.
     let inbox = api.get("/inbox").await;
     let tab = inbox["tab"].as_i64().unwrap();
-    assert_eq!(inbox["listed"], 5);
+    assert_eq!(inbox["listed"], 3);
     assert_eq!(inbox["queue"].as_array().unwrap().len(), 2);
     assert_eq!(inbox["downloaders"][0]["tags"], json!({ "tags": ["sent"] }));
-    assert_eq!(api.in_tab(tab, "file").await.len(), 3);
-    assert_eq!(api.in_tab(tab, "collection").await.len(), 2);
-    assert_eq!(api.found("sent kind=file").await.len(), 3);
+    assert_eq!(api.in_tab(tab).await.len(), 3);
+    assert_eq!(api.found("sent").await.len(), 3);
     // The request's own tags are given too, beside the downloader's.
-    assert_eq!(api.found("sent once \"@cr:A Sender\" @ge:quick kind=file").await.len(), 3);
+    assert_eq!(api.found("sent once \"@cr:A Sender\" @ge:quick").await.len(), 3);
     let tabs = api.get("/tabs").await;
     assert_eq!(tabs[0]["kind"], "inbox");
     // Asked for again, it is the same tab.
@@ -1446,7 +1447,7 @@ async fn the_inbox_downloads_what_it_is_sent() {
     api.ok("DELETE", &format!("/tabs/{tab}"), None).await;
     assert_eq!(api.get("/tabs").await, json!([]));
     let inbox = api.get("/inbox").await;
-    assert_eq!((&inbox["tab"], &inbox["listed"]), (&Value::Null, &json!(5)));
+    assert_eq!((&inbox["tab"], &inbox["listed"]), (&Value::Null, &json!(3)));
     let (_, third) = send("https://example.test/board").await;
     assert_eq!(ended(&api, &third["id"]).await["status"], "done");
     assert_eq!(api.get("/tabs").await, json!([]));
@@ -1454,13 +1455,13 @@ async fn the_inbox_downloads_what_it_is_sent() {
     let again = api.post("/tabs", json!({ "kind": "inbox" })).await;
     assert_eq!(again["id"], tab);
     assert_eq!(api.get("/tabs").await[0]["id"], tab);
-    assert_eq!(api.in_tab(tab, "file").await.len(), 3);
+    assert_eq!(api.in_tab(tab).await.len(), 3);
 
     // Only clearing empties it, and that takes nothing out of the library.
     api.post("/inbox/clear", json!({})).await;
     let inbox = api.get("/inbox").await;
     assert_eq!((&inbox["listed"], &inbox["queue"]), (&json!(0), &json!([])));
-    assert_eq!(api.found("kind=file").await.len(), 3);
+    assert_eq!(api.found("").await.len(), 3);
 }
 
 #[tokio::test]
@@ -1476,7 +1477,7 @@ async fn a_selection_tab_holds_what_it_is_given() {
         .await;
     assert_eq!(tab["kind"], "selection");
     let id = tab["id"].as_i64().unwrap();
-    assert_eq!(api.in_tab(id, "file").await, [a, c]);
+    assert_eq!(api.in_tab(id).await, [a, c]);
     assert_eq!(api.get("/tabs").await[0]["kind"], "selection");
 
     // Its query filters what it holds, and never reaches beyond it.
@@ -1490,7 +1491,7 @@ async fn a_selection_tab_holds_what_it_is_given() {
 
     // Closing it takes nothing out of the library.
     api.ok("DELETE", &format!("/tabs/{id}"), None).await;
-    assert_eq!(api.found("kind=file").await, [a, b, c]);
+    assert_eq!(api.found("").await, [a, b, c]);
 }
 
 /// A downloader with a login: its script takes its own site's cookies out
@@ -1553,7 +1554,7 @@ async fn a_headless_server_is_sent_its_logins() {
 }
 
 #[tokio::test]
-async fn a_zip_is_unpacked_into_files_and_collections() {
+async fn a_zip_is_unpacked_into_files_and_sets() {
     use std::io::Write;
     use zip::{ZipWriter, write::SimpleFileOptions};
 
@@ -1591,12 +1592,12 @@ async fn a_zip_is_unpacked_into_files_and_collections() {
         serde_json::from_slice::<Value>(&body).unwrap()
     };
 
-    // The files the library can show go in; the folders they are in become
-    // collections, one inside the other; the rest is said to have failed,
-    // and what a Mac leaves behind is not spoken of.
+    // The files the library can show go in; each folder that holds some
+    // becomes a set of them; the rest is said to have failed, and what a
+    // Mac leaves behind is not spoken of.
     let unpacked = send().await;
     assert_eq!(
-        (&unpacked["added"], &unpacked["duplicates"], &unpacked["collections"]),
+        (&unpacked["added"], &unpacked["duplicates"], &unpacked["sets"]),
         (&json!(4), &json!(0), &json!(2))
     );
     let failed: Vec<&str> = unpacked["failures"]
@@ -1606,34 +1607,40 @@ async fn a_zip_is_unpacked_into_files_and_collections() {
         .map(|failure| failure["name"].as_str().unwrap())
         .collect();
     assert_eq!(failed, ["notes.txt", "Album/inner.zip", "Unshown/readme.txt"]);
-    // The archive itself is not kept.
-    assert_eq!(api.found("kind=file").await.len(), 4);
+    // The archive itself is not kept, and the tab lists every file of it.
+    assert_eq!(api.found("").await.len(), 4);
+    assert_eq!(api.in_tab(tab).await.len(), 4);
 
-    // The tab lists what was at the top: the loose file, and the folder.
-    let titled = |id: i64| {
+    let names = |ids: Vec<i64>| {
         let conn = api.state.db.lock().unwrap();
-        conn.query_row(
-            "SELECT coalesce(e.title, f.original_name) FROM entity e
-             LEFT JOIN file f ON f.entity_id = e.id WHERE e.id = ?1",
-            [id],
-            |row| row.get::<_, String>(0),
-        )
-        .unwrap()
+        let name = |id: i64| {
+            conn.query_row("SELECT original_name FROM file WHERE entity_id = ?1", [id], |row| {
+                row.get::<_, String>(0)
+            })
+            .unwrap()
+        };
+        ids.into_iter().map(name).collect::<Vec<_>>()
     };
-    let names = |ids: Vec<i64>| ids.into_iter().map(&titled).collect::<Vec<_>>();
-    assert_eq!(names(api.in_tab(tab, "file").await), ["cover.pdf"]);
-    let top = api.in_tab(tab, "collection").await;
-    assert_eq!(names(top.clone()), ["Album"]);
-    // A folder holds its files by name, 2 before 10, and then its folders.
-    let inside = |collection: i64| {
-        names(api.members(collection).into_iter().map(|(id, _)| id).collect())
+    // A folder's set is named for it, and holds its own files by name, 2
+    // before 10. What is at the top is in no set.
+    let set_of = async |query: &str| {
+        let file = api.found(query).await[0];
+        api.get(&format!("/entities/{file}")).await["set"].clone()
     };
-    assert_eq!(inside(top[0]), ["page 2.pdf", "page 10.pdf", "Extras"]);
-    let extras = api.members(top[0])[2].0;
-    assert_eq!(inside(extras), ["bonus.pdf"]);
+    let inside = |set: &Value| {
+        let files = api.members(set["id"].as_i64().unwrap());
+        names(files.into_iter().map(|(id, _)| id).collect())
+    };
+    let album = set_of("name=\"page 2.pdf\"").await;
+    assert_eq!(album["title"], "Album");
+    assert_eq!(inside(&album), ["page 2.pdf", "page 10.pdf"]);
+    let extras = set_of("name=bonus.pdf").await;
+    assert_eq!(extras["title"], "Extras");
+    assert_eq!(inside(&extras), ["bonus.pdf"]);
+    assert_eq!(set_of("name=cover.pdf").await, Value::Null);
 
     // The tab can be set to give tags: to what is uploaded from then on,
-    // files and folders alike, and to a file the library already had.
+    // and to a file the library already had.
     assert!(api.found("holiday").await.is_empty());
     api.ok("PATCH", &format!("/tabs/{tab}/upload"), Some(json!({ "tags": { "tags": ["holiday", " holiday "], "creator": ["Me"] } })))
         .await;
@@ -1641,11 +1648,15 @@ async fn a_zip_is_unpacked_into_files_and_collections() {
         api.get(&format!("/tabs/{tab}/upload")).await["tags"],
         json!({ "creator": ["Me"], "tags": ["holiday"] })
     );
-    // Sent again, the library has the files already.
+    // Sent again, the library has the files already, and they stay in the
+    // sets they are in: no second set is made of a folder.
     let again = send().await;
-    assert_eq!((&again["added"], &again["duplicates"]), (&json!(0), &json!(4)));
-    assert_eq!(api.found("holiday @cr:Me kind=file").await.len(), 4);
-    assert_eq!(api.found("holiday kind=collection").await.len(), 2);
+    assert_eq!(
+        (&again["added"], &again["duplicates"], &again["sets"]),
+        (&json!(0), &json!(4), &json!(0))
+    );
+    assert_eq!(api.found("holiday @cr:Me").await.len(), 4);
+    assert_eq!(set_of("name=bonus.pdf").await, extras);
     // Only an upload tab gives tags, and only tags that are tags.
     let bad = json!({ "tags": { "nonsense": ["x"] } });
     assert_eq!(api.refused_with("PATCH", &format!("/tabs/{tab}/upload"), bad).await, StatusCode::BAD_REQUEST);
@@ -1684,11 +1695,14 @@ async fn an_export_carries_metadata_to_another_library() {
         .unwrap()
         .execute("UPDATE entity SET date_added = '2020-01-02T03:04:05Z' WHERE id = ?1", [a])
         .unwrap();
-    let new = async |body: Value| from.post("/collections", body).await["id"].as_i64().unwrap();
-    let series = new(json!({ "collection_type": "sequence", "title": "Series", "members": [b, a] })).await;
-    new(json!({ "collection_type": "set", "members": [c], "collection_id": "pinterest:pin:1" })).await;
-    let all = new(json!({ "collection_type": "usercollection", "title": "Everything", "members": [series] })).await;
-    from.edit(&[series], json!({ "add": { "genre": ["horror"] } })).await;
+    // Two of them are a set that says something of itself, one is in a
+    // set that says nothing, and two are variants of each other.
+    let series = json!({ "set_id": "book:series", "title": "Series", "files": [b, a] });
+    let series = from.post("/sets", series).await["id"].as_i64().unwrap();
+    from.ok("PATCH", &format!("/sets/{series}"), Some(json!({ "add_reference": ["shelf:3"] })))
+        .await;
+    from.post("/sets", json!({ "set_id": "pinterest:pin:1", "files": [c] })).await;
+    from.edit(&[a, d], json!({ "set": { "alt_group_id": "alt:a" } })).await;
 
     let zip_of = async |form: String| {
         let request = Request::builder()
@@ -1709,26 +1723,24 @@ async fn an_export_carries_metadata_to_another_library() {
     };
 
     // A download is the files alone.
-    let plain = zip_of(format!("ids={series},{c},{d}")).await;
+    let plain = zip_of(format!("ids={a},{b},{c},{d}")).await;
     assert_eq!(names_in(&plain), ["a (2).pdf", "a.pdf", "b.pdf", "c.pdf"]);
 
-    // An export has a sidecar beside each, and one for each collection:
-    // those selected, and those that what was selected is in.
-    let exported = zip_of(format!("ids={series},{c},{d}&sidecars=1")).await;
+    // An export has a sidecar beside each, and one for each set that says
+    // more of itself than which it is.
+    let exported = zip_of(format!("ids={a},{b},{c},{d}&sidecars=1")).await;
     assert_eq!(
         names_in(&exported),
         [
-            "a (2).pdf".to_string(),
-            "a (2).pdf.json".to_string(),
-            "a.pdf".to_string(),
-            "a.pdf.json".to_string(),
-            "b.pdf".to_string(),
-            "b.pdf.json".to_string(),
-            "c.pdf".to_string(),
-            "c.pdf.json".to_string(),
-            format!("collection-{series}.json"),
-            format!("collection-{all}.json"),
-            "pinterest_pin_1.json".to_string(),
+            "a (2).pdf",
+            "a (2).pdf.json",
+            "a.pdf",
+            "a.pdf.json",
+            "b.pdf",
+            "b.pdf.json",
+            "book_series.json",
+            "c.pdf",
+            "c.pdf.json",
         ]
     );
     let sidecar = |name: &str| {
@@ -1751,9 +1763,9 @@ async fn an_export_carries_metadata_to_another_library() {
             "source_url": ["https://example.com/a"],
             "identifier": ["site:1"],
             "reference": ["4chan:g:1"],
-            "collection": [
-                { "id": format!("collection-{series}"), "collection_type": "sequence", "index": 1 },
-            ],
+            "set_id": "book:series",
+            "set_index": 1,
+            "alt_group_id": "alt:a",
             "hash": format!("{a:064x}"),
             "extension": "png",
             "media_type": "image",
@@ -1761,8 +1773,16 @@ async fn an_export_carries_metadata_to_another_library() {
             "original_name": "a.pdf",
         })
     );
-    assert_eq!(sidecar("pinterest_pin_1.json")["collection_id"], "pinterest:pin:1");
-    assert_eq!(sidecar("c.pdf.json")["collection"][0]["id"], "pinterest:pin:1");
+    assert_eq!(
+        sidecar("book_series.json"),
+        json!({
+            "metadata_type": "set",
+            "set_id": "book:series",
+            "title": "Series",
+            "reference": ["shelf:3"],
+        })
+    );
+    assert_eq!(sidecar("c.pdf.json")["set_id"], "pinterest:pin:1");
     // The files can be named otherwise: by title where they have one, by
     // hash, or by nothing at all. The sidecar still has the name each had.
     assert_eq!(
@@ -1783,11 +1803,6 @@ async fn an_export_carries_metadata_to_another_library() {
     let disposition = response.headers()["content-disposition"].to_str().unwrap();
     assert_eq!(disposition, format!("attachment; filename*=UTF-8''{name}"));
 
-    // A collection by itself can be exported, with nothing in it.
-    let empty = new(json!({ "collection_type": "variant" })).await;
-    let alone = zip_of(format!("ids={empty}&sidecars=1")).await;
-    assert_eq!(names_in(&alone), [format!("collection-{empty}.json")]);
-
     // Uploaded to another library, the zip gives what it holds the same
     // metadata there.
     let to = Api::new();
@@ -1806,8 +1821,8 @@ async fn an_export_carries_metadata_to_another_library() {
     let unpacked = send(exported.clone()).await;
     assert_eq!(unpacked["failures"], json!([]));
     assert_eq!(
-        (&unpacked["added"], &unpacked["duplicates"], &unpacked["collections"]),
-        (&json!(4), &json!(0), &json!(3))
+        (&unpacked["added"], &unpacked["duplicates"], &unpacked["sets"]),
+        (&json!(4), &json!(0), &json!(2))
     );
     let one = async |query: &str| {
         let found = to.found(query).await;
@@ -1826,79 +1841,89 @@ async fn an_export_carries_metadata_to_another_library() {
     // The two files of one name have it again, though the zip told them apart.
     assert_eq!(to.found("name=a.pdf").await.len(), 2);
 
-    // The collections are as they were: the sequence in its order, inside
-    // the collection it was in, and the set with its collection ID.
-    let series = one("title=Series").await;
-    assert_eq!(to.found("kind=collection @ge:horror").await, [series]);
-    let details = to.get(&format!("/entities/{series}")).await["collection"].clone();
-    assert_eq!(
-        (&details["collection_type"], &details["ordered"], &details["collection_id"]),
-        (&json!("sequence"), &json!(true), &Value::Null)
-    );
+    // The sets are as they were: the one in its order, with what it said
+    // of itself, and the other with its ID alone. So are the variants.
     let second = one("name=b.pdf").await;
+    let series = to.get(&format!("/entities/{first}")).await["set"].clone();
+    assert_eq!(
+        series,
+        json!({ "id": series["id"], "set_id": "book:series", "title": "Series", "index": 1 })
+    );
+    let series = series["id"].as_i64().unwrap();
     assert_eq!(to.members(series), [(second, Some(0)), (first, Some(1))]);
-    let everything = one("title=Everything").await;
-    assert_eq!(to.members(everything), [(series, None)]);
-    let pin = one("collection_id=pinterest:pin:1").await;
-    assert_eq!(to.members(pin), [(one("name=c.pdf").await, None)]);
-    assert_eq!(to.get(&format!("/entities/{pin}")).await["title"], "Set");
-    // The tab lists what was at the top of the zip, and the collections.
-    assert_eq!(to.in_tab(tab, "file").await.len(), 4);
-    assert_eq!(to.in_tab(tab, "collection").await.len(), 3);
+    assert_eq!(to.get(&format!("/sets/{series}")).await["reference"], json!(["shelf:3"]));
+    assert_eq!(to.found("set_id=pinterest:pin:1").await, [one("name=c.pdf").await]);
+    assert_eq!(to.found("alt_group_id=alt:a").await.len(), 2);
+    assert_eq!(to.in_tab(tab).await.len(), 4);
 
     // Sent again, nothing the library has is replaced: what the user has
-    // written since stays, and the collection with the ID is not made twice.
+    // written since stays, and no set is made twice.
     to.edit(&[first], json!({ "set": { "title": "Mine", "score": null } })).await;
+    to.ok("PATCH", &format!("/sets/{series}"), Some(json!({ "set": { "title": "My series" } })))
+        .await;
     let again = send(exported).await;
-    assert_eq!((&again["added"], &again["duplicates"]), (&json!(0), &json!(4)));
+    assert_eq!(
+        (&again["added"], &again["duplicates"], &again["sets"]),
+        (&json!(0), &json!(4), &json!(0))
+    );
     let entity = to.get(&format!("/entities/{first}")).await;
     assert_eq!((&entity["title"], &entity["score"]), (&json!("Mine"), &json!(6)));
-    assert_eq!(to.found("collection_id=pinterest:pin:1").await, [pin]);
-    assert_eq!(to.members(pin).len(), 1);
+    assert_eq!(entity["set"]["title"], "My series");
+    assert_eq!(to.members(series).len(), 2);
 
     // Sidecars written by hand: what can be used of one is, and the rest
-    // is said. A folder's own describes the collection the folder becomes.
+    // is said. A folder's own says which set the folder is, and a set's
+    // own can be anywhere.
     let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
     let x = json!({
         "title": "Loose",
         "score": 9,
         "tags": ["fine", "@not"],
         "genre": "noir",
-        "collection": [{ "id": "group:1", "collection_type": "variant" }],
+        "set_id": "group:1",
+        "set_index": "first",
+        "alt_group_id": " pair:1 ",
         "anything_else": { "is": "ignored" },
     });
-    let folder = json!({ "collection_type": "sequence", "title": "Chapters", "collection_id": "book:1" });
+    let group = json!({ "metadata_type": "set", "set_id": "group:1", "title": "Group" });
+    let folder = json!({ "title": "Chapters", "set_id": "book:1", "source_url": "example.com/book" });
     for (name, content) in [
         ("x.pdf", "the loose one".to_string()),
         ("x.pdf.json", x.to_string()),
+        ("a group.json", group.to_string()),
         ("stray.json", json!({ "title": "of nothing" }).to_string()),
         ("broken.pdf.json", "{".to_string()),
         ("Book/1.pdf", "chapter one".to_string()),
-        ("Book/_collection.json", folder.to_string()),
+        ("Book/_set.json", folder.to_string()),
+        ("Empty/_set.json", folder.to_string()),
     ] {
         zip.start_file(name, SimpleFileOptions::default()).unwrap();
         zip.write_all(content.as_bytes()).unwrap();
     }
     let unpacked = send(zip.finish().unwrap().into_inner()).await;
-    assert_eq!((&unpacked["added"], &unpacked["collections"]), (&json!(2), &json!(2)));
+    assert_eq!((&unpacked["added"], &unpacked["sets"]), (&json!(2), &json!(2)));
     let failed: Vec<&str> = unpacked["failures"]
         .as_array()
         .unwrap()
         .iter()
         .map(|failure| failure["name"].as_str().unwrap())
         .collect();
-    assert_eq!(failed, ["broken.pdf.json", "stray.json", "x.pdf.json"]);
+    assert_eq!(failed, ["broken.pdf.json", "stray.json", "x.pdf.json", "Empty/_set.json"]);
     let reason = unpacked["failures"][2]["reason"].as_str().unwrap();
-    assert!(reason.contains("`score`") && reason.contains("@not"), "{reason}");
+    assert!(
+        reason.contains("`score`") && reason.contains("@not") && reason.contains("`set_index`"),
+        "{reason}"
+    );
     let loose = one("title=Loose").await;
     let entity = to.get(&format!("/entities/{loose}")).await;
     assert_eq!(entity["score"], Value::Null);
     assert_eq!(entity["tags"], json!({ "genre": ["noir"], "tags": ["fine"] }));
-    let group = one("collection_id=group:1").await;
-    assert_eq!(to.get(&format!("/entities/{group}")).await["collection"]["collection_type"], "variant");
-    assert_eq!(to.members(group), [(loose, None)]);
-    let book = one("collection_id=book:1").await;
-    let entity = to.get(&format!("/entities/{book}")).await;
-    assert_eq!((&entity["title"], &entity["collection"]["collection_type"]), (&json!("Chapters"), &json!("sequence")));
-    assert_eq!(to.members(book).len(), 1);
+    assert_eq!(entity["file"]["alt_group_id"], "pair:1");
+    assert_eq!((&entity["set"]["set_id"], &entity["set"]["title"]), (&json!("group:1"), &json!("Group")));
+    let chapter = to.get(&format!("/entities/{}", one("name=1.pdf").await)).await;
+    assert_eq!(
+        (&chapter["set"]["set_id"], &chapter["set"]["title"]),
+        (&json!("book:1"), &json!("Chapters"))
+    );
+    assert_eq!(to.found("source_url~example.com/book").await, [chapter["id"].as_i64().unwrap()]);
 }

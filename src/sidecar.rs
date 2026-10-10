@@ -1,42 +1,40 @@
-//! The metadata of a file or collection as a JSON sidecar, in the format
+//! The metadata of a file or of a set as a JSON sidecar, in the format
 //! `schema.md` describes: written beside each file of an export, and read
 //! back from the sidecars of a zip that is uploaded.
 
-use std::collections::HashMap;
-
-use rusqlite::{Connection, OptionalExtension, params, types::Value as SqlValue};
+use rusqlite::{Connection, params, types::Value as SqlValue};
 use serde_json::{Map, Value, json};
 
 use crate::{
     archive::reason,
     entities::{self, IDENTIFIERS, REFERENCES, SCALARS, SOURCE_URLS},
-    error::ApiError,
-    query::{COLLECTION_TYPES, TAG_FIELDS},
-    tags,
+    query::TAG_FIELDS,
+    sets, tags,
 };
 
 /// What a sidecar holds: field to value.
 pub type Metadata = Map<String, Value>;
 
-/// The sidecar of an entity. `names` is what the export calls each of its
-/// collections, for the entity to say which of them it is in.
-pub fn write(
-    conn: &Connection,
-    id: i64,
-    names: &HashMap<i64, String>,
-) -> rusqlite::Result<Metadata> {
+/// A field with nothing in it is left out.
+fn filled(mut meta: Metadata) -> Metadata {
+    meta.retain(|_, value| !value.is_null() && value.as_array().is_none_or(|list| !list.is_empty()));
+    meta
+}
+
+/// The sidecar of a file.
+pub fn write(conn: &Connection, id: i64) -> rusqlite::Result<Metadata> {
     let mut meta = conn.query_row(
         &format!(
-            "SELECT kind, date_added, {} FROM entity WHERE id = ?1",
+            "SELECT date_added, {} FROM entity WHERE id = ?1",
             SCALARS.join(", ")
         ),
         [id],
         |row| {
             let mut meta = Map::new();
-            meta.insert("metadata_type".into(), json!(row.get::<_, String>(0)?));
-            meta.insert("date_added".into(), json!(row.get::<_, String>(1)?));
+            meta.insert("metadata_type".into(), json!("file"));
+            meta.insert("date_added".into(), json!(row.get::<_, String>(0)?));
             for (i, field) in SCALARS.iter().enumerate() {
-                meta.insert(field.to_string(), entities::to_json(row.get(2 + i)?));
+                meta.insert(field.to_string(), entities::to_json(row.get(1 + i)?));
             }
             Ok(meta)
         },
@@ -47,48 +45,37 @@ pub fn write(
     for list in [SOURCE_URLS, IDENTIFIERS, REFERENCES] {
         meta.insert(list.0.into(), json!(entities::list_of(conn, list, id)?));
     }
-
-    let mut stmt = conn.prepare(
-        "SELECT m.collection_id, c.collection_type, m.position
-         FROM membership m JOIN collection c ON c.entity_id = m.collection_id
-         WHERE m.member_id = ?1 ORDER BY m.collection_id",
-    )?;
-    let rows = stmt.query_map([id], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-    })?;
-    let mut inside = Vec::new();
-    for row in rows {
-        let (collection, collection_type, position): (i64, String, Option<i64>) = row?;
-        let Some(name) = names.get(&collection) else {
-            continue;
-        };
-        let mut within = Map::new();
-        within.insert("id".into(), json!(name));
-        within.insert("collection_type".into(), json!(collection_type));
-        if let Some(position) = position {
-            within.insert("index".into(), json!(position));
-        }
-        inside.push(Value::Object(within));
+    if let Some(set) = entities::set_of(conn, id)? {
+        meta.insert("set_id".into(), set["set_id"].clone());
+        meta.insert("set_index".into(), set["index"].clone());
     }
-    meta.insert("collection".into(), json!(inside));
-
-    // What it is as a file or as a collection; the counts and flags that
-    // are the library's own business stay out.
-    let details = [
-        entities::file_details(conn, id)?,
-        entities::collection_details(conn, id)?,
-    ];
-    for detail in details.into_iter().flatten() {
-        let Value::Object(detail) = detail else { continue };
+    // What it is as a file; the flags that are the library's own business
+    // stay out.
+    if let Some(Value::Object(detail)) = entities::file_details(conn, id)? {
         for (field, value) in detail {
-            if !["has_thumbnail", "member_count"].contains(&field.as_str()) {
+            if field != "has_thumbnail" {
                 meta.insert(field, value);
             }
         }
     }
-    // A field with nothing in it is left out.
-    meta.retain(|_, value| !value.is_null() && value.as_array().is_none_or(|list| !list.is_empty()));
-    Ok(meta)
+    Ok(filled(meta))
+}
+
+/// The sidecar of a set, and whether it says anything of the set beyond
+/// which it is: one that does not is not worth writing.
+pub fn write_set(conn: &Connection, set: i64) -> rusqlite::Result<Option<(Metadata, bool)>> {
+    let Some(Value::Object(mut meta)) = sets::describe(conn, set)? else {
+        return Ok(None);
+    };
+    // The library's own business, as above.
+    meta.remove("id");
+    meta.remove("files");
+    let meta = filled(meta);
+    let says = meta.len() > 1;
+    let mut whole = Map::new();
+    whole.insert("metadata_type".into(), json!("set"));
+    whole.extend(meta);
+    Ok(Some((whole, says)))
 }
 
 /// The text values of a field that holds a list of them. One by itself is
@@ -106,11 +93,12 @@ fn texts<'a>(meta: &'a Metadata, field: &str, problems: &mut Vec<String>) -> Vec
     }
 }
 
-/// Gives an entity what a sidecar says of it. Tags, source URLs,
-/// identifiers and references are added to what it has; a field that
-/// holds one value is only filled in where the entity has none. What only
-/// the library decides (when it was added, the name of the file) is taken
-/// from the sidecar for an entity that is `new`, and left alone otherwise.
+/// Gives a file what a sidecar says of it. Tags, source URLs, identifiers
+/// and references are added to what it has; a field that holds one value
+/// is only filled in where the file has none. What only the library
+/// decides (when it was added, the name of the file) is taken from the
+/// sidecar for a file that is `new`, and left alone otherwise. Which set
+/// it is in is for `wanted_set`.
 /// What the file itself says (its hash, its size, its dimensions) is never
 /// read from a sidecar. Each thing in it that could not be used is added
 /// to `problems`, and the rest still is.
@@ -139,6 +127,12 @@ pub fn apply(
                 params![id, value],
             )?;
         }
+    }
+    if let Some(group) = scalar("alt_group_id", problems) {
+        conn.execute(
+            "UPDATE file SET alt_group_id = ?2 WHERE entity_id = ?1 AND alt_group_id IS NULL",
+            params![id, group],
+        )?;
     }
     if new {
         if let Some(name) = scalar("original_name", problems) {
@@ -205,117 +199,79 @@ pub fn apply(
     Ok(())
 }
 
-/// A collection type a sidecar gives, if it is one there is.
-fn collection_type(value: Option<&Value>, problems: &mut Vec<String>) -> Option<String> {
-    match value {
-        None | Some(Value::Null) => None,
-        Some(Value::String(given)) if COLLECTION_TYPES.contains(&given.as_str()) => {
-            Some(given.clone())
-        }
-        Some(_) => {
-            problems.push(format!(
-                "`collection_type` must be one of {}",
-                COLLECTION_TYPES.join(", ")
-            ));
-            None
-        }
-    }
-}
-
-/// A collection an entity is to be put in, as its sidecar asks.
-pub struct Wanted {
-    pub member: i64,
-    /// What the sidecar calls the collection: its collection ID, or the
-    /// name of its sidecar in the same archive.
-    pub id: String,
-    pub collection_type: Option<String>,
-    /// Where among the collection's members it comes.
-    pub index: Option<i64>,
-}
-
-/// The collections a sidecar says its entity is in.
-pub fn memberships(meta: &Metadata, member: i64, problems: &mut Vec<String>) -> Vec<Wanted> {
-    let listed = match meta.get("collection") {
-        None | Some(Value::Null) => return Vec::new(),
-        Some(Value::Array(listed)) => listed.iter().collect(),
-        Some(one) => vec![one],
-    };
-    let mut wanted = Vec::new();
-    for within in listed {
-        let id = within.get("id").and_then(Value::as_str).map(str::trim);
-        let Some(id) = id.filter(|id| !id.is_empty()) else {
-            problems.push("each of `collection` must have an `id`".to_string());
-            continue;
-        };
-        wanted.push(Wanted {
-            member,
-            id: id.to_string(),
-            collection_type: collection_type(within.get("collection_type"), problems),
-            index: within.get("index").and_then(Value::as_i64),
-        });
-    }
-    wanted
-}
-
-/// What a sidecar says of the collection it is of.
-#[derive(Default)]
-pub struct Described {
-    pub collection_id: Option<String>,
-    pub collection_type: Option<String>,
-    pub ordered: Option<bool>,
-}
-
-pub fn described(meta: &Metadata, problems: &mut Vec<String>) -> Described {
-    let collection_id = match meta.get("collection_id") {
+/// A set ID a sidecar gives, as it is kept.
+fn set_id(meta: &Metadata, problems: &mut Vec<String>) -> Option<String> {
+    match meta.get("set_id") {
         None | Some(Value::Null) => None,
         Some(Value::String(id)) => Some(id.trim().to_string()).filter(|id| !id.is_empty()),
         Some(_) => {
-            problems.push("`collection_id` must be text".to_string());
+            problems.push("`set_id` must be text".to_string());
             None
         }
-    };
-    let ordered = match meta.get("ordered") {
-        None | Some(Value::Null) => None,
-        Some(Value::Bool(ordered)) => Some(*ordered),
-        Some(_) => {
-            problems.push("`ordered` must be true or false".to_string());
-            None
-        }
-    };
-    Described {
-        collection_id,
-        collection_type: collection_type(meta.get("collection_type"), problems),
-        ordered,
     }
 }
 
-/// The collection that has the collection ID, or a new one, made with it
-/// (or with none) and without a title. Returns it, and whether it is new.
-/// One the library already has keeps its type and order.
-pub fn find_or_make(
+/// The set a file's sidecar says it is in, and where in it.
+pub fn wanted_set(meta: &Metadata, problems: &mut Vec<String>) -> Option<(String, Option<i64>)> {
+    let set = set_id(meta, problems)?;
+    let index = match meta.get("set_index") {
+        None | Some(Value::Null) => None,
+        Some(index) if index.is_i64() => index.as_i64(),
+        Some(_) => {
+            problems.push("`set_index` must be a whole number".to_string());
+            None
+        }
+    };
+    Some((set, index))
+}
+
+/// The set a set's sidecar is of: the one in the library that has its set
+/// ID, or a new one. A sidecar that gives no set ID is of the set
+/// `otherwise`. Returns it, and whether it is new.
+pub fn set_of(
     conn: &Connection,
-    collection_id: Option<&str>,
-    collection_type: &str,
-    ordered: bool,
-) -> Result<(i64, bool), ApiError> {
-    if let Some(collection_id) = collection_id {
-        let found = conn
-            .query_row(
-                "SELECT entity_id FROM collection WHERE collection_id = ?1",
-                [collection_id],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if let Some(found) = found {
-            return Ok((found, false));
+    meta: &Metadata,
+    otherwise: &str,
+    problems: &mut Vec<String>,
+) -> rusqlite::Result<(i64, bool)> {
+    let id = set_id(meta, problems);
+    sets::find_or_make(conn, id.as_deref().unwrap_or(otherwise))
+}
+
+/// Gives a set what its sidecar says of it, as `apply` does a file: its
+/// title and description where it has none, and the lists added to.
+pub fn apply_set(
+    conn: &Connection,
+    set: i64,
+    meta: &Metadata,
+    problems: &mut Vec<String>,
+) -> rusqlite::Result<()> {
+    for field in ["title", "description"] {
+        match meta.get(field) {
+            None | Some(Value::Null) => {}
+            Some(Value::String(text)) if text.trim().is_empty() => {}
+            Some(Value::String(text)) => {
+                conn.execute(
+                    &format!("UPDATE file_set SET {field} = ?2 WHERE id = ?1 AND {field} IS NULL"),
+                    params![set, text.trim()],
+                )?;
+            }
+            Some(_) => problems.push(format!("`{field}` must be text")),
         }
     }
-    conn.execute("INSERT INTO entity (kind) VALUES ('collection')", [])?;
-    let collection = conn.last_insert_rowid();
-    conn.execute(
-        "INSERT INTO collection (entity_id, collection_type, ordered, collection_id)
-         VALUES (?1, ?2, ?3, ?4)",
-        params![collection, collection_type, ordered, collection_id],
-    )?;
-    Ok((collection, true))
+    for url in texts(meta, "source_url", problems) {
+        match entities::source_url(url) {
+            Ok(url) => sets::add_to_list(conn, set, sets::SOURCE_URLS, &url)?,
+            Err(err) => problems.push(reason(err)),
+        }
+    }
+    for (field, list) in [("identifier", sets::IDENTIFIERS), ("reference", sets::REFERENCES)] {
+        for value in texts(meta, field, problems) {
+            match value.trim() {
+                "" => problems.push(format!("empty {field}")),
+                value => sets::add_to_list(conn, set, list, value)?,
+            }
+        }
+    }
+    Ok(())
 }

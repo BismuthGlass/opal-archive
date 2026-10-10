@@ -22,36 +22,30 @@ struct SearchParams {
     /// Fixes the order of `sort=random` across pages.
     #[serde(default)]
     seed: i64,
-    /// Tab to search within: an upload tab's files, or a collection tab's
-    /// members.
+    /// Tab to search within: an upload tab's files, or a set tab's set.
     tab: Option<i64>,
-    /// Collection to search within, in place of what `tab` holds: the
-    /// collection a tab has gone into.
-    collection: Option<i64>,
+    /// Set to search within, in place of what `tab` holds: the set a tab
+    /// has gone into.
+    set: Option<i64>,
     /// Present to have trashed entities included without `@trashed`.
     trashed: Option<String>,
 }
 
-/// What the results grid needs to draw one entity.
+/// What the results grid needs to draw one file.
 #[derive(Serialize)]
 struct Item {
     id: i64,
-    kind: String,
     title: Option<String>,
-    media_type: Option<String>,
-    extension: Option<String>,
+    media_type: String,
+    extension: String,
     length: Option<f64>,
-    collection_type: Option<String>,
-    /// A collection's identifier, which it is called by when it has no title.
-    collection_id: Option<String>,
-    /// ID of the file whose thumbnail represents this entity: the file
-    /// itself, or a collection's first member that has one.
-    thumbnail: Option<i64>,
-    /// What to ask for that thumbnail as (`?v=`), so that it can be kept:
+    /// The set it is in, and how many files not in the trash that holds.
+    set: Option<i64>,
+    set_files: Option<i64>,
+    has_thumbnail: bool,
+    /// What to ask for its thumbnail as (`?v=`), so that it can be kept:
     /// it tells this file from any other that has had its ID.
     thumbnail_version: Option<String>,
-    /// Members not in the trash.
-    member_count: Option<i64>,
     trashed: bool,
 }
 
@@ -61,61 +55,42 @@ pub fn router() -> Router<AppState> {
         .route("/search/ids", get(search_ids))
 }
 
-/// Compiles `source`, narrowed to the members of `collection` if one is
-/// given, and otherwise to what `tab` holds if it is an upload, a download
-/// or a collection tab. An ordered collection is shown in its own order
-/// unless the query asks for another.
+/// Compiles `source`, narrowed to the files of `set` if one is given, and
+/// otherwise to what `tab` holds if it is an upload, a download or a set
+/// tab. A set is shown in its own order unless the query asks for another.
 fn compile(
     conn: &Connection,
     source: &str,
     seed: i64,
     tab: Option<i64>,
-    collection: Option<i64>,
+    set: Option<i64>,
     include_trashed: bool,
 ) -> Result<query::Compiled, ApiError> {
     let mut compiled = query::compile(source, seed, &tags::aliases(conn)?, include_trashed)?;
-    // What to narrow to: a tab's own list, or a collection and whether it
-    // is ordered. A collection that is gone has no members.
-    let scope: Option<(String, Option<i64>, Option<bool>)> = match (collection, tab) {
-        (Some(collection), _) => {
-            let ordered = conn
-                .query_row(
-                    "SELECT ordered FROM collection WHERE entity_id = ?1",
-                    [collection],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            Some(("collection".to_string(), Some(collection), ordered))
-        }
+    // What to narrow to: a tab's own list, or a set.
+    let scope: Option<(String, Option<i64>)> = match (set, tab) {
+        (Some(set), _) => Some(("set".to_string(), Some(set))),
         (None, Some(tab)) => conn
-            .query_row(
-                "SELECT t.kind, t.collection_id, c.ordered FROM tab t
-                 LEFT JOIN collection c ON c.entity_id = t.collection_id WHERE t.id = ?1",
-                [tab],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-            )
+            .query_row("SELECT kind, set_key FROM tab WHERE id = ?1", [tab], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
             .optional()?,
         (None, None) => None,
     };
     match (scope, tab) {
-        (Some((kind, _, _)), Some(tab)) if kind == "upload" || kind == "download" => {
+        (Some((kind, _)), Some(tab)) if kind == "upload" || kind == "download" => {
             compiled.filter = format!(
                 "({}) AND e0.id IN (SELECT entity_id FROM tab_upload WHERE tab_id = ?)",
                 compiled.filter
             );
             compiled.filter_params.push(Value::Integer(tab));
         }
-        (Some((_, Some(collection), ordered)), _) => {
-            compiled.filter = format!(
-                "({}) AND e0.id IN (SELECT member_id FROM membership WHERE collection_id = ?)",
-                compiled.filter
-            );
-            compiled.filter_params.push(Value::Integer(collection));
-            if ordered == Some(true) && !compiled.sorted {
-                let position = "(SELECT position FROM membership
-                                 WHERE collection_id = ? AND member_id = e0.id)";
-                compiled.order = format!("{position} IS NULL, {position}, e0.id");
-                compiled.order_params = vec![Value::Integer(collection); 2];
+        (Some((_, Some(set))), _) => {
+            compiled.filter = format!("({}) AND f0.set_key = ?", compiled.filter);
+            compiled.filter_params.push(Value::Integer(set));
+            if !compiled.sorted {
+                compiled.order = "f0.set_index IS NULL, f0.set_index, e0.id".to_string();
+                compiled.order_params = Vec::new();
             }
         }
         _ => {}
@@ -129,10 +104,10 @@ pub fn matching_ids(
     source: &str,
     seed: i64,
     tab: Option<i64>,
-    collection: Option<i64>,
+    set: Option<i64>,
     include_trashed: bool,
 ) -> Result<Vec<i64>, ApiError> {
-    let compiled = compile(conn, source, seed, tab, collection, include_trashed)?;
+    let compiled = compile(conn, source, seed, tab, set, include_trashed)?;
     let sql = format!(
         "SELECT e0.id FROM {} WHERE {} ORDER BY {}",
         query::FROM,
@@ -160,7 +135,7 @@ async fn search(
         &params.q,
         params.seed,
         params.tab,
-        params.collection,
+        params.set,
         include_trashed,
     )?;
 
@@ -175,24 +150,10 @@ async fn search(
     )?;
 
     let sql = format!(
-        "SELECT e0.id, e0.kind, e0.title, f0.media_type, f0.extension,
-                f0.length, c0.collection_type,
-                CASE
-                    WHEN f0.has_thumbnail = 1 THEN e0.id
-                    WHEN c0.entity_id IS NOT NULL THEN (
-                        SELECT m.member_id FROM membership m
-                        JOIN file mf ON mf.entity_id = m.member_id
-                        JOIN entity me ON me.id = m.member_id
-                        WHERE m.collection_id = e0.id AND mf.has_thumbnail = 1
-                          AND me.trashed = 0
-                        ORDER BY m.position IS NULL, m.position, m.member_id LIMIT 1)
-                END,
-                CASE WHEN c0.entity_id IS NOT NULL THEN
-                    (SELECT count(*) FROM membership m
-                     JOIN entity me ON me.id = m.member_id
-                     WHERE m.collection_id = e0.id AND me.trashed = 0)
-                END,
-                e0.trashed, c0.collection_id
+        "SELECT e0.id, e0.title, f0.media_type, f0.extension, f0.length, f0.set_key,
+                (SELECT count(*) FROM file sf JOIN entity se ON se.id = sf.entity_id
+                 WHERE sf.set_key = f0.set_key AND se.trashed = 0),
+                f0.has_thumbnail, f0.hash, e0.trashed
          FROM {} WHERE {} ORDER BY {} LIMIT ? OFFSET ?",
         query::FROM,
         compiled.filter,
@@ -207,31 +168,24 @@ async fn search(
     let mut stmt = conn.prepare(&sql)?;
     let items = stmt
         .query_map(params_from_iter(sql_params), |row| {
+            let set: Option<i64> = row.get(5)?;
+            let has_thumbnail: bool = row.get(7)?;
+            let hash: String = row.get(8)?;
             Ok(Item {
                 id: row.get(0)?,
-                kind: row.get(1)?,
-                title: row.get(2)?,
-                media_type: row.get(3)?,
-                extension: row.get(4)?,
-                length: row.get(5)?,
-                collection_type: row.get(6)?,
-                collection_id: row.get(10)?,
-                thumbnail: row.get(7)?,
-                thumbnail_version: None,
-                member_count: row.get(8)?,
+                title: row.get(1)?,
+                media_type: row.get(2)?,
+                extension: row.get(3)?,
+                length: row.get(4)?,
+                set,
+                set_files: set.and(row.get(6)?),
+                has_thumbnail,
+                thumbnail_version: has_thumbnail
+                    .then(|| files::thumbnail_version(&hash).to_string()),
                 trashed: row.get(9)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    drop(stmt);
-    let mut items = items;
-    let mut version = conn.prepare("SELECT hash FROM file WHERE entity_id = ?1")?;
-    for item in &mut items {
-        if let Some(file) = item.thumbnail {
-            let hash: String = version.query_row([file], |row| row.get(0))?;
-            item.thumbnail_version = Some(files::thumbnail_version(&hash).to_string());
-        }
-    }
 
     Ok(Json(
         json!({ "total": total, "offset": offset, "items": items }),
@@ -248,7 +202,7 @@ async fn search_ids(
         &params.q,
         params.seed,
         params.tab,
-        params.collection,
+        params.set,
         params.trashed.is_some(),
     )?;
     Ok(Json(json!({ "ids": ids })))

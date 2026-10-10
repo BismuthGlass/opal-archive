@@ -10,7 +10,7 @@
 It takes a thread URL and downloads the files posted in it, through 4chan's
 read-only JSON API (https://github.com/4chan/4chan-API). A thread still on
 the board or in its archive can be read; one that has been pruned is gone.
-The files are not put in a collection: each is given a reference to its
+The files are not put in a set: each is given a reference to its
 thread, `4chan:<board>:<thread>`, by which the files of a thread are found.
 
 It also takes the address of one post, a thread URL ending in `#p` and the
@@ -211,7 +211,7 @@ def download() -> int:
     def post_url(post: dict) -> str:
         return POST.format(board=board, thread=thread, no=post["no"])
 
-    # Each file refers to its thread, and is in no collection for it. Thread
+    # Each file refers to its thread, and is in no set for it. Thread
     # numbers are a board's own, so the board is part of the reference.
     reference = f"4chan:{board}:{thread}"
 

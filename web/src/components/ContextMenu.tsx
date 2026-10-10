@@ -16,7 +16,7 @@ import {
   selectMarked,
   selected,
 } from "../search";
-import { inside, leave, open as openTab, openSelection } from "../tabs";
+import { open as openTab, openSelection, shownSet } from "../tabs";
 import { editTag } from "../tagEditing";
 import { fieldLabel, tagQuery } from "../format";
 import { showToast } from "../toast";
@@ -32,8 +32,6 @@ type Opened = {
   item?: Item;
   tag?: MenuTag;
   mark?: number;
-  /** The collection on show, to be trashed. */
-  shown?: { id: number; title: string | null };
 };
 
 const [opened, setOpened] = createSignal<Opened | null>(null);
@@ -59,35 +57,17 @@ export function openMarkMenu(event: MouseEvent, mark: number) {
   setOpened({ x: event.clientX, y: event.clientY, mark });
 }
 
-/** Opens the menu of ways to trash the collection on show, under what was pressed. */
-export function openTrashMenu(event: MouseEvent, shown: { id: number; title: string | null }) {
-  const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  setOpened({ x: box.left, y: box.bottom + 2, shown });
-}
-
 const close = () => setOpened(null);
 
 /**
- * These and, with `whole`, everything inside the collections among them:
- * what of it is in the trash, or with `trashed` false what of it is not.
+ * Deletes trashed files for good, once it has been agreed to. What is not
+ * in the trash is never deleted. Returns whether anything was.
  */
-async function withInside(ids: number[], whole: boolean, trashed: boolean): Promise<number[]> {
-  if (!whole) return ids;
-  const within = (await api.insideOf(ids, trashed)).filter((id) => !ids.includes(id));
-  return [...ids, ...within];
-}
-
-/**
- * Deletes trashed entities for good, once it has been agreed to, and with
- * `whole` what is inside them and in the trash too. What is not in the
- * trash is never deleted. Returns whether anything was.
- */
-async function removeForGood(ids: number[], whole: boolean): Promise<boolean> {
-  const going = await withInside(ids, whole, true);
-  if (!confirm(`Delete ${plural(going.length, "item")} for good? This cannot be undone.`)) {
+async function removeForGood(ids: number[]): Promise<boolean> {
+  if (!confirm(`Delete ${plural(ids.length, "item")} for good? This cannot be undone.`)) {
     return false;
   }
-  await api.deleteEntities(going);
+  await api.deleteEntities(ids);
   return true;
 }
 
@@ -99,140 +79,22 @@ async function removeForGood(ids: number[], whole: boolean): Promise<boolean> {
 export default function ContextMenu(props: {
   /** Opens the viewer on a result; with `only`, on those results alone. */
   onPreview: (index: number, only: number[] | null) => void;
+  /** Asks for the given files to be put into a set. */
+  onGroup: (ids: number[]) => void;
 }) {
   // Keyed, so the menu is given the value itself and can use it as it closes.
   return (
     <Show when={opened()} keyed>
       {(at) =>
-        at.shown ? (
-          <TrashMenu at={at} shown={at.shown} />
-        ) : at.mark ? (
+        at.mark ? (
           <MarkMenu at={at} mark={at.mark} />
         ) : at.tag ? (
           <TagMenu at={at} tag={at.tag} />
         ) : (
-          <Menu at={at} item={at.item!} onPreview={props.onPreview} />
+          <Menu at={at} item={at.item!} onPreview={props.onPreview} onGroup={props.onGroup} />
         )
       }
     </Show>
-  );
-}
-
-/** What can be done with the collection on show: trashing it, or once trashed the rest. */
-function TrashMenu(props: { at: Opened; shown: { id: number; title: string | null } }) {
-  const shown = props.shown;
-  const [state] = createResource(() => api.getMetadata([shown.id]));
-  const trashed = () => (state()?.trashed ?? 0) > 0;
-
-  /** Does it and says so; with `gone`, the tab leaves the collection. */
-  const run = async (action: () => Promise<string | null>, gone: boolean) => {
-    close();
-    try {
-      const said = await action();
-      if (said === null) return;
-      showToast(said);
-      // Out of it, if the tab had gone into it; its own tab stays on it.
-      if (gone && inside()?.id === shown.id) leave();
-    } catch (err) {
-      showToast(errorMessage(err));
-    }
-    changed();
-  };
-  const within = (count: number) => plural(count - 1, "item");
-  const trash = (whole: boolean) =>
-    run(async () => {
-      const going = await withInside([shown.id], whole, false);
-      await api.trashEntities(going);
-      return whole
-        ? `Moved the collection and ${within(going.length)} inside it to the trash`
-        : "Moved the collection to the trash";
-    }, true);
-  const restore = (whole: boolean) =>
-    run(async () => {
-      const back = await withInside([shown.id], whole, true);
-      await api.restoreEntities(back);
-      return whole
-        ? `Took the collection and ${within(back.length)} inside it out of the trash`
-        : "Took the collection out of the trash";
-    }, false);
-  const remove = (whole: boolean) =>
-    run(async () => ((await removeForGood([shown.id], whole)) ? "Deleted for good" : null), true);
-
-  return (
-    <Shell at={props.at} label="Actions on this collection">
-      <li class="context-menu-title" role="none">
-        This collection
-      </li>
-      <Show
-        when={trashed()}
-        fallback={
-          <>
-            <li role="none">
-              <button
-                class="danger"
-                role="menuitem"
-                title="Move the collection to the trash. What is in it stays in the library."
-                onClick={() => trash(false)}
-              >
-                <Icon name="delete-outline" />
-                Trash the collection
-              </button>
-            </li>
-            <li role="none">
-              <button
-                class="danger"
-                role="menuitem"
-                title="Move the collection to the trash, with everything inside it, at any depth"
-                onClick={() => trash(true)}
-              >
-                <Icon name="delete-outline" />
-                Trash it and what is inside
-              </button>
-            </li>
-          </>
-        }
-      >
-        <li role="none">
-          <button role="menuitem" title="Take the collection out of the trash" onClick={() => restore(false)}>
-            <Icon name="restore-from-trash-outline" />
-            Restore the collection
-          </button>
-        </li>
-        <li role="none">
-          <button
-            role="menuitem"
-            title="Take the collection out of the trash, with everything inside it that is in the trash"
-            onClick={() => restore(true)}
-          >
-            <Icon name="restore-from-trash-outline" />
-            Restore it and what is inside
-          </button>
-        </li>
-        <li class="menu-divider" role="separator" />
-        <li role="none">
-          <button
-            class="danger"
-            role="menuitem"
-            title="Delete the collection for good. What is in it is left as it is."
-            onClick={() => remove(false)}
-          >
-            <Icon name="delete-forever-outline" />
-            Delete the collection for good
-          </button>
-        </li>
-        <li role="none">
-          <button
-            class="danger"
-            role="menuitem"
-            title="Delete the collection for good, with everything inside it that is in the trash"
-            onClick={() => remove(true)}
-          >
-            <Icon name="delete-forever-outline" />
-            Delete it and what is inside
-          </button>
-        </li>
-      </Show>
-    </Shell>
   );
 }
 
@@ -382,6 +244,7 @@ function Menu(props: {
   at: Opened;
   item: Item;
   onPreview: (index: number, only: number[] | null) => void;
+  onGroup: (ids: number[]) => void;
 }) {
   // Read once, here: after the menu closes, what it was opened with can no
   // longer be asked for.
@@ -408,7 +271,7 @@ function Menu(props: {
   const download = () => {
     close();
     // One file downloads as itself; anything else as a zip.
-    if (ids.length === 1 && clicked.kind === "file") {
+    if (ids.length === 1) {
       location.href = api.contentUrl(ids[0], downloadNames());
     } else {
       api.exportZip(ids, downloadNames());
@@ -444,13 +307,23 @@ function Menu(props: {
     action().catch((err) => showToast(errorMessage(err)));
   };
 
-  /** Whether there are collections selected, to have what is inside them. */
-  const collections = () => (state()?.collections ?? 0) > 0;
-
-  const remove = async (whole: boolean) => {
+  /** The set on show, which the selection can be taken out of. */
+  const set = shownSet();
+  /** Says what was done to the selection's sets or variants, once it is. */
+  const group = async (action: () => Promise<string>) => {
     close();
     try {
-      if (!(await removeForGood(ids, whole))) return;
+      showToast(await action());
+    } catch (err) {
+      showToast(errorMessage(err));
+    }
+    changed();
+  };
+
+  const remove = async () => {
+    close();
+    try {
+      if (!(await removeForGood(ids))) return;
       // What was deleted is gone from the view, and so from the selection.
       clearSelection();
     } catch (err) {
@@ -520,6 +393,56 @@ function Menu(props: {
       <li role="none">
         <button
           role="menuitem"
+          title="Put in a set, new or existing. A file is in one set."
+          onClick={() => {
+            close();
+            props.onGroup(ids);
+          }}
+        >
+          <Icon name="photo-library-outline" />
+          Put in a set…
+        </button>
+      </li>
+      <Show when={set}>
+        {(shown) => (
+          <li role="none">
+            <button
+              role="menuitem"
+              title="Take out of the set on show. The files stay in the library."
+              onClick={() =>
+                group(async () => {
+                  await api.changeSetFiles(shown().id, { remove: ids });
+                  return `Took ${plural(ids.length, "file")} out of the set`;
+                })
+              }
+            >
+              <Icon name="close" />
+              Take out of this set
+            </button>
+          </li>
+        )}
+      </Show>
+      <Show when={ids.length > 1}>
+        <li role="none">
+          <button
+            role="menuitem"
+            title="Mark these as variants of each other: they share a variant group"
+            onClick={() =>
+              group(async () => {
+                await api.groupVariants(ids);
+                return `Grouped ${plural(ids.length, "file")} as variants`;
+              })
+            }
+          >
+            <Icon name="label-outline" />
+            Group as variants
+          </button>
+        </li>
+      </Show>
+      <li class="menu-divider" role="separator" />
+      <li role="none">
+        <button
+          role="menuitem"
           title="Put at the start of this view"
           onClick={() => arrange(() => moveItems(ids, 0))}
         >
@@ -563,22 +486,6 @@ function Menu(props: {
                 Trash
               </button>
             </li>
-            {/* For collections: what is in them goes too. */}
-            <Show when={collections()}>
-              <li role="none">
-                <button
-                  class="danger"
-                  role="menuitem"
-                  title="Move to the trash, with everything inside the collections, at any depth"
-                  onClick={() =>
-                    run(async (ids) => api.trashEntities(await withInside(ids, true, false)))
-                  }
-                >
-                  <Icon name="delete-outline" />
-                  Trash with what is inside
-                </button>
-              </li>
-            </Show>
           </>
         }
       >
@@ -592,44 +499,17 @@ function Menu(props: {
             Restore
           </button>
         </li>
-        <Show when={collections()}>
-          <li role="none">
-            <button
-              role="menuitem"
-              title="Take out of the trash, with everything inside the collections that is in the trash"
-              onClick={() =>
-                run(async (ids) => api.restoreEntities(await withInside(ids, true, true)))
-              }
-            >
-              <Icon name="restore-from-trash-outline" />
-              Restore with what is inside
-            </button>
-          </li>
-        </Show>
         <li role="none">
           <button
             class="danger"
             role="menuitem"
             title="Delete for good"
-            onClick={() => remove(false)}
+            onClick={remove}
           >
             <Icon name="delete-forever-outline" />
             Delete for good
           </button>
         </li>
-        <Show when={collections()}>
-          <li role="none">
-            <button
-              class="danger"
-              role="menuitem"
-              title="Delete for good, with everything inside the collections that is in the trash"
-              onClick={() => remove(true)}
-            >
-              <Icon name="delete-forever-outline" />
-              Delete with what is inside
-            </button>
-          </li>
-        </Show>
       </Show>
     </Shell>
   );

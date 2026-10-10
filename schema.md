@@ -1,38 +1,46 @@
 # Metadata schema
 
-This file describes the metastasis v1.1 format for media file metadata.  It is the format OpalArchive writes when it exports, and reads from the sidecars of a zip that is uploaded; what the library stores is what decides it.
+This file describes the metastasis v2.0 format for media file metadata.  It is the format OpalArchive writes when it exports, and reads from the sidecars of a zip that is uploaded; what the library stores is what decides it.
 
-Metadata is stored as a JSON object in a sidecar file with the same path as the media file, but with a `.json` extension appended.  The sidecar file for `file.png` is `file.png.json`.  We can also have metadata not attached to any files, such as metadata for collections.  Such a sidecar says so with `metadata_type: "collection"`, and may be anywhere.
+Metadata is stored as a JSON object in a sidecar file with the same path as the media file, but with a `.json` extension appended.  The sidecar file for `file.png` is `file.png.json`.
 
-A collection is referred to by an ID.  That is its `collection_id` where it has one.  A collection need not have one: its ID is then the name of its sidecar minus the `.json` extension, so `collection.json` can be referred to by the ID `collection`, and that ID means something only beside that sidecar.  An ID that no sidecar answers to is a `collection_id`: every file that refers to it is in the one collection that has it.
+Files that belong together are a set.  A file says which set it is in with `set_id`, and where in it with `set_index`; it is in at most one.  That is all a set needs: files that give the same `set_id` are in the same set, and no other file has to exist for it.
 
-A special type of collection is a collection tying all the files inside a directory together.  This can be done by adding a `_collection.json` file to the directory.  Files within the directory may still have their own metadata, but they implicitly belong to the directory's collection.  Directories with a `_collection.json` file are also implicitly included as a single unit to collections defined in their parent directories (but their contents aren't, so this is not recursive.)
+A set may say something of itself as well: a title, a description, where it came from.  That goes in a sidecar of its own, which says so with `metadata_type: "set"` and may be anywhere.  It is conventionally named for the set ID (`pinterest_pin_123.json` for `pinterest:pin:123`), but it is its `set_id` field that says which set it is of; one with no `set_id` is of the set named as the sidecar is, minus the `.json` extension.  A set has no tags and none of the fields that describe a work: those are its files'.
 
-Both files and collections share the same metadata format. Field names are lowercase snake_case.  The TypeScript interfaces below describe the JSON representation.
+A directory can be a set.  Its files, those directly in it, are in the set of the directory unless their own sidecars name another.  A `_set.json` file in the directory is that set's sidecar: it gives the set its `set_id` and whatever else is known of it.
+
+Files that are variants of each other (another crop, another resolution, an edit) share an `alt_group_id`.  A group is the ID alone: nothing else is said of it.
+
+Field names are lowercase snake_case.  The TypeScript interfaces below describe the JSON representation.
 
 ```ts
 type ContentRating = "safe" | "risky" | "nsfw";
-type CollectionType = "variant" | "set" | "sourceset" | "sequence" | "usercollection";
-type MetadataType = "file" | "collection";
+type MetadataType = "file" | "set";
 
-interface FileCollection {
-  // Which collection: its `collection_id`, or for a collection that
-  // has none the name of its sidecar, without `.json`.
-  // A sidecar for the collection is optional, and it's valid to simply
-  // use `id` to tie files together.
-  id: string;
+// The sidecar of a set.
+interface SetMetadata {
+  metadata_type: "set";
 
-  // How the files are related.  The collection's own sidecar, if it has
-  // one, is what decides this; it is repeated here for when it has none.
-  collection_type: CollectionType;
+  // Which set: what its files give as their `set_id`.  No two sets
+  // share one.  Unlike the title, which is for people and need not be
+  // unique, it says for certain which set is meant:
+  // `pinterest:pin:924574998519073090`, or a UUID.
+  set_id?: string;
 
-  // Position within the collection, if it keeps its members in order:
-  // members come lowest first.
-  index?: number;
+  title?: string;
+
+  // Human-readable description.
+  description?: string;
+
+  // Where the set came from, as a file's fields of the same names.
+  source_url?: string[];
+  identifier?: string[];
+  reference?: string[];
 }
 
 interface FileMetadata {
-  // Defines what type of entity this metadata file describes.
+  // Defines what this metadata file describes.
   // If omited, the type is "file".
   metadata_type?: MetadataType;
 
@@ -46,24 +54,16 @@ interface FileMetadata {
   // Title of the work.
   title?: string;
 
-  // For a collection: its identifier, the `id` its members refer to it
-  // by. No two collections share one. Unlike the title, which is for
-  // people and need not be unique, it says for certain which collection
-  // is meant: `pinterest:pin:924574998519073090`, or a UUID.
-  // A collection may have none.
-  collection_id?: string;
+  // The set the file is in.  A sidecar for the set is optional, and
+  // it's valid to simply use `set_id` to tie files together.
+  set_id?: string;
 
-  // For a collection: how its members are related.
-  collection_type?: CollectionType;
+  // Position within the set: files come lowest first, and those
+  // without one after them.
+  set_index?: number;
 
-  // For a collection: whether its members are kept in an order, the one
-  // their `index` gives.
-  ordered?: boolean;
-
-  // Collections this file belongs to.
-  // Since collections may have their own metadata, they can
-  // also belong to other collections.
-  collection?: FileCollection[];
+  // What the file shares with the files it is a variant of.
+  alt_group_id?: string;
 
   // Work's date, e.g. YYYY or YYYY-MM-DD.
   date?: string;
@@ -154,8 +154,10 @@ interface FileMetadata {
 
 All fields are optional.  Fields without values may simply be omited.  A field that holds a list may hold one value by itself instead.
 
-The library has no custom fields: a field not listed here is ignored when a sidecar is read, and is not kept.  A value the library does not allow (a `score` of 9, a `content_rating` or `collection_type` that is none of those listed, a `date` in another form, a tag starting with `@`) is left out and reported, and the rest of the sidecar is still used.
+The library has no custom fields: a field not listed here is ignored when a sidecar is read, and is not kept.  A value the library does not allow (a `score` of 9, a `content_rating` that is none of those listed, a `date` in another form, a `set_index` that is not a whole number, a tag starting with `@`) is left out and reported, and the rest of the sidecar is still used.
 
 ## Changes
+
+v2.0: collections are gone.  A file is in at most one set, which it names with `set_id` and `set_index` in place of the `collection` list, and variants share an `alt_group_id` in place of a collection of that type.  A set's own sidecar has `metadata_type: "set"` and only a title, a description and the lists that say where it came from; it has no type, no tags, and cannot be in another set.  A directory's is `_set.json`, formerly `_collection.json`.  `collection_id`, `collection_type` and `ordered` are gone: a set is always in the order its files give.
 
 v1.1: a collection says what it is itself, with `collection_type` and `ordered`, and need not have a `collection_id`; `date_added` is a date and time; `media_type`, `size` and `original_name` are added to the file attributes; `ai_content` is gone, a `medium` tag saying it instead; unknown fields are ignored rather than preserved, and unknown values are refused rather than only warned about.

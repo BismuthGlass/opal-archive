@@ -1,6 +1,6 @@
 # OpalArchive
 
-Media library with metadata, collections and search. See `SPEC.md` for the
+Media library with metadata, sets and search. See `SPEC.md` for the
 idea, `schema.md` for the metadata format it is based on, and `query.md` for
 the search language.
 
@@ -117,16 +117,16 @@ is on, for a query of several lines).
 | Method and path                  | Purpose                                                        |
 | -------------------------------- | -------------------------------------------------------------- |
 | `POST /files?name=<filename>`    | Upload; the file is the raw body. 201 if new, 200 if a duplicate, which is only taken out of the trash if it was there. `tab=<id>` lists it under that upload tab either way |
-| `POST /files/archive?name=<filename>` | Upload a zip, as the raw body, to be unpacked: its images, video, audio and books are taken in as uploads of their own, each folder becomes a set holding its files by name, a folder inside it a set inside that one, and the archive is not kept. A sidecar in it (`<name>.json` beside a file, `_collection.json` in a folder, or a collection's anywhere) gives the file or collection its metadata, as an export writes them. `tab=<id>` lists what was at the top of it under that upload tab, and the collections its sidecars speak of. Answers `{added, duplicates, collections, failures}`, the last saying of each file passed over what it was and why, and of each sidecar what in it could not be used |
+| `POST /files/archive?name=<filename>` | Upload a zip, as the raw body, to be unpacked: its images, video, audio and books are taken in as uploads of their own, each folder becomes a set holding the files directly in it by name, and the archive is not kept. A sidecar in it (`<name>.json` beside a file, `_set.json` in a folder, or a set's anywhere) gives the file or set its metadata, as an export writes them: a file goes in the set its sidecar names, and one the library already had stays in the set it is in. `tab=<id>` lists its files under that upload tab. Answers `{added, duplicates, sets, failures}`, the last saying of each file passed over what it was and why, and of each sidecar what in it could not be used |
 | `GET /tabs/{id}/upload`, `PATCH …` | The tags an upload tab gives to everything uploaded into it; `{tags}`, tag field to values → set them, for what is uploaded from then on |
 | `POST /files/fetch`              | `{url, tab}` → have the server fetch the file at that web address, as an upload of it, with the address as its source URL. Answers as an upload does. A page is refused: the address has to be of the file itself |
 | `GET /files/{id}/content`        | The file. `?download=1` to save rather than display, and with it `names=` for what it is saved as: `original` (the default), `title`, `hash` or `random` |
 | `GET /files/{id}/thumbnail`      | JPEG thumbnail, 404 if the file has none. With `?v=` as a search result gives it (`thumbnail_version`), the answer may be kept for good; without, the browser asks again each time |
-| `GET /search?q=&offset=&limit=`  | One page of results and the total. `seed` fixes `sort=random`; `tab=<id>` searches only what that upload or collection tab holds, and `collection=<id>` only that collection's members, in its order if it has one. Trashed entities only match with `@trashed` in the query, or with `trashed=1` |
-| `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed`, `tab` and `collection` too |
-| `GET /entities/{id}`             | Everything about one file or collection                        |
-| `POST /entities/metadata`        | `{ids}` → what those entities have in common                   |
-| `POST /entities/edit`            | `{ids, set, add, remove, add_source_url, remove_source_url, add_identifier, remove_identifier, add_reference, remove_reference}` → the same edit applied to all. `set` takes `ordered` (true or false) and `collection_id` for collections (an ID another collection has is refused, as is giving one to several); the `_source_url`, `_identifier` and `_reference` lists change those plain lists |
+| `GET /search?q=&offset=&limit=`  | One page of results and the total. `seed` fixes `sort=random`; `tab=<id>` searches only what that upload or set tab holds, and `set=<id>` only that set's files, in its order unless the query sorts. Each result says which set it is in (`set`) and how many files that holds (`set_files`). Trashed entities only match with `@trashed` in the query, or with `trashed=1` |
+| `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed`, `tab` and `set` too |
+| `GET /entities/{id}`             | Everything about one file, the set it is in (`set`: its `id`, `set_id`, `title`, and the file's `index` in it) included |
+| `POST /entities/metadata`        | `{ids}` → what those files have in common, and the sets any of them are in |
+| `POST /entities/edit`            | `{ids, set, add, remove, add_source_url, remove_source_url, add_identifier, remove_identifier, add_reference, remove_reference}` → the same edit applied to all. `set` takes `alt_group_id` too, which files that are variants of each other share; the `_source_url`, `_identifier` and `_reference` lists change those plain lists |
 | `POST /entities/trash`           | `{ids}` → move to the trash: hidden from searches, nothing removed |
 | `POST /entities/restore`         | `{ids}` → take back out of the trash                           |
 | `POST /entities/delete`          | `{ids}` → delete for good those that are in the trash; files leave storage |
@@ -138,11 +138,16 @@ is on, for a query of several lines).
 | `POST /tags/rename`              | `{field, from, to}` → rename a tag, merging it into `to` if that exists |
 | `POST /tags/alias`               | `{field, alias, target}` → make `alias` stand for `target`; an empty `target` removes the alias |
 | `POST /tags/aliases/apply`       | Replace aliases still on entities with the tags they stand for |
-| `POST /collections`              | `{collection_type, title, members, ordered, parent, collection_id}` → new collection, put inside `parent` if given. A `collection_id` another collection has is refused. Without a title it is named after its type (`Sequence`, `User Collection`…) |
-| `POST /collections/{id}/members` | `{add, remove}` → change membership                            |
-| `PUT /collections/{id}/order`    | `{ids}` → set member positions; members left out follow        |
-| `POST /export`                   | Form field `ids=1,2,3` → zip of those files. With `sidecars=1` it is an export: each file has a sidecar with its metadata beside it (`<name>.json`), and each collection one of its own, in the format of `schema.md`. `names=` says what the files are called in the zip, as for one file |
-| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, collection, downloader, ids}` → new tab, `kind` being `gallery`, `upload`, `collection`, `download`, `selection` (which holds the entities in `ids`, and nothing else) or `inbox` (of which there is one: asked for again, it is the one there is, and closed it keeps what it lists) |
+| `GET /sets?q=`                   | The sets whose title or set ID contains `q`, with how many files each holds, for picking one |
+| `POST /sets`                     | `{files, title, set_id}` → a new set of those files, in that order; any of them in another set leave it. Without a `set_id` it is given one; one another set has is refused |
+| `GET /sets/{id}`                 | Everything about one set: `set_id`, `title`, `description`, how many files it holds, and its `source_url`, `identifier` and `reference` lists |
+| `PATCH /sets/{id}`               | `{set, add_source_url, remove_source_url, …}` as an edit of entities is written → change it, all or nothing. `set` takes `set_id`, `title` and `description`. A set has no tags |
+| `DELETE /sets/{id}`              | Take the set apart: its files stay, in no set                  |
+| `POST /sets/{id}/files`          | `{add, remove}` → put files in it, out of any other set, or take them out. A set left with none is gone |
+| `PUT /sets/{id}/order`           | `{ids}` → set the order of its files; those left out follow    |
+| `POST /variants`                 | `{ids}` → make those files variants of each other: they get the `alt_group_id` one of them has, or a new one |
+| `POST /export`                   | Form field `ids=1,2,3` → zip of those files. With `sidecars=1` it is an export: each file has a sidecar with its metadata beside it (`<name>.json`), and each set that says something of itself one of its own, in the format of `schema.md`. `names=` says what the files are called in the zip, as for one file |
+| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, set, downloader, ids}` → new tab, `kind` being `gallery`, `upload`, `set`, `download`, `selection` (which holds the entities in `ids`, and nothing else) or `inbox` (of which there is one: asked for again, it is the one there is, and closed it keeps what it lists) |
 | `PATCH /tabs/{id}`, `DELETE …`   | `{query, name}`, either or both → change a tab; close a tab     |
 | `PUT /tabs/order`                | `{ids}` → put the tabs in that order                           |
 | `GET /tabs/{id}/view`, `PUT …`   | The snapshot a tab shows: `{query, ids, custom}`, or `null` if none is saved |

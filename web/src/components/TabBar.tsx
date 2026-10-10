@@ -5,15 +5,15 @@ import { activeId, close, move, open, rename, saveOrder, select, tabs } from "..
 const ICONS: Record<TabKind, IconName> = {
   gallery: "photo-library-outline",
   upload: "upload",
-  collection: "folder-outline",
+  set: "folder-outline",
   inbox: "inbox-outline",
   selection: "select-all",
 };
 import type { IconName } from "./Icon";
 import Icon from "./Icon";
 
-/** The kinds of tab the + button offers. A collection tab is opened from
-    its collection instead. A downloader has none of its own: an upload tab
+/** The kinds of tab the + button offers. A set tab is opened from its
+    set instead. A downloader has none of its own: an upload tab
     takes the addresses of every downloader's site. */
 const KINDS: { kind: TabKind; label: string; title?: string }[] = [
   { kind: "gallery", label: "Gallery" },
@@ -41,9 +41,7 @@ function described(tab: Tab) {
         ? "Inbox"
         : tab.kind === "selection"
           ? "Selection"
-        : tab.collection?.title ||
-          tab.collection?.collection_id ||
-          `Collection #${tab.collection?.id}`;
+        : tab.set?.title || tab.set?.set_id || "Set";
   return query ? `${what}: ${query}` : what;
 }
 

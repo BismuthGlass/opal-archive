@@ -94,13 +94,8 @@ export function BaseTags(props: {
   /** The tab's tags as the editor reads a selection's: one item with them all. */
   const asSelection = (): Metadata => ({
     count: 1,
-    files: 0,
-    collections: 0,
     trashed: 0,
     scalars: {},
-    collection_type: { value: null, mixed: false },
-    ordered: { value: null, mixed: false },
-    collection_id: { value: null, mixed: false },
     tags: Object.fromEntries(
       Object.entries(props.data.tags).map(([field, values]) => [
         field,
@@ -110,7 +105,7 @@ export function BaseTags(props: {
     source_url: [],
     identifier: [],
     reference: [],
-    memberships: [],
+    sets: [],
   });
 
   /** The editor's changes, made to the tab's tags. */

@@ -1,5 +1,6 @@
 import { createEffect, createSignal, on, onCleanup, onMount, Show } from "solid-js";
-import CollectionDialog from "./components/CollectionDialog";
+import SetDialog from "./components/SetDialog";
+import SetPanel from "./components/SetPanel";
 import ContextMenu, { contextMenuOpen } from "./components/ContextMenu";
 import Grid from "./components/Grid";
 import InboxPanel from "./components/InboxPanel";
@@ -46,7 +47,7 @@ import {
   load,
   open,
   refresh,
-  shownCollection as collectionShown,
+  shownSet as setShown,
   showsTrashed,
   trail,
 } from "./tabs";
@@ -64,18 +65,10 @@ export default function App() {
     setViewingOnly(index === null ? null : only);
     setViewing(index);
   };
-  /** The entities being put into a collection, while that dialog is open. */
+  /** The files being put into a set, while that dialog is open. */
   const [grouping, setGrouping] = createSignal<number[] | null>(null);
-  /**
-   * The collection a new one made from these could go inside: the one the
-   * tab is tied to, unless it is itself among them.
-   */
-  const parentFor = (ids: number[]) => {
-    const collection = collectionShown();
-    return collection && !ids.includes(collection.id) ? collection : undefined;
-  };
-  /** The collection on show, described when nothing is selected. */
-  const shownCollection = () => (selected().size === 0 ? collectionShown() : undefined);
+  /** The set on show, described when nothing is selected. */
+  const shownSet = () => (selected().size === 0 ? setShown() : undefined);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [helpOpen, setHelpOpen] = createSignal(false);
   /** What the tagging hotkey applies to, while the tag editor it opens is up. */
@@ -96,18 +89,18 @@ export default function App() {
   });
 
   // Each tab shows a search, over the library or over what the tab holds
-  // (its uploads, or a collection's members): run it when the tab or its
-  // query changes.
-  /** The tab the last search was shown in, and how far inside collections. */
+  // (its uploads, or a set's files): run it when the tab or its query
+  // changes.
+  /** The tab the last search was shown in, and how far inside sets. */
   let shown: { tab: number; inside: boolean; depth: number } | null = null;
   createEffect(
     on(
       () => {
         const tab = activeTab();
         if (!tab) return undefined;
-        // Inside a collection, the view is of its members: one view for
-        // each way in, kept apart from the tab's own by a character that
-        // cannot be typed.
+        // Inside a set, the view is of its files: one view for each way
+        // in, kept apart from the tab's own by a character that cannot be
+        // typed.
         const way = trail().map((step) => step.id).join("/");
         // With the trash on show it is another view of the same query.
         const trashed = showsTrashed() ? "\u0002" : "";
@@ -122,7 +115,7 @@ export default function App() {
         const step = inside();
         // The query of the tab on show changed: the search was asked for.
         const asked = shown?.tab === tab.id && !shown.inside && !step;
-        // A collection just gone into is listed afresh, though it was seen
+        // A set just gone into is listed afresh, though it was seen
         // before: what is in it may have changed since.
         const entered = shown?.tab === tab.id && trail().length > shown.depth;
         shown = { tab: tab.id, inside: !!step, depth: trail().length };
@@ -139,8 +132,7 @@ export default function App() {
     ),
   );
 
-  // Collection tabs follow their collection: its title, whether it is
-  // ordered, and its deletion.
+  // Set tabs follow their set: what it is called, and its going.
   createEffect(on(dataVersion, refresh, { defer: true }));
 
   /**
@@ -280,7 +272,7 @@ export default function App() {
 
     if (viewing() !== null) return;
     if (event.key === "Backspace" && inside()) {
-      // Back out of the collection, as the arrow above the grid does.
+      // Back out of the set, as the arrow above the grid does.
       event.preventDefault();
       goBack();
     } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
@@ -355,8 +347,8 @@ export default function App() {
               title={
                 selected().size > 0
                   ? `${plural(selected().size, "item")} selected`
-                  : shownCollection()
-                    ? "This collection"
+                  : shownSet()
+                    ? "This set"
                     : "Selection"
               }
               action={
@@ -370,13 +362,13 @@ export default function App() {
               <Show
                 when={selected().size > 0}
                 fallback={
-                  // In a collection's tab, with nothing selected, the panel
-                  // is about the collection itself.
+                  // Showing a set, with nothing selected, the panel is about
+                  // the set itself.
                   <Show
-                    when={shownCollection()}
+                    when={shownSet()}
                     fallback={<p class="hint">Select items to see and edit their metadata.</p>}
                   >
-                    {(collection) => <Sidebar ids={[collection().id]} onGroup={setGrouping} />}
+                    {(set) => <SetPanel set={set().id} />}
                   </Show>
                 }
               >
@@ -386,7 +378,7 @@ export default function App() {
           </aside>
         </Show>
         <main class="content">
-          {/* What a tab is for gives way while it is inside a collection. */}
+          {/* What a tab is for gives way while it is inside a set. */}
           <Show when={activeTab()?.kind === "upload" && !inside()}>
             <UploadBox />
           </Show>
@@ -406,8 +398,7 @@ export default function App() {
         <Show when={stats()}>
           {(counts) => (
             <span class="library">
-              {plural(counts().files, "file")}, {plural(counts().collections, "collection")} in the
-              library
+              {plural(counts().files, "file")} in the library
               <Show when={counts().trashed > 0}>
                 {", "}
                 <button
@@ -431,7 +422,7 @@ export default function App() {
           <TagsModal ids={target.ids} target={target.name} onClose={() => setTagging(null)} />
         )}
       </Show>
-      <ContextMenu onPreview={view} />
+      <ContextMenu onPreview={view} onGroup={setGrouping} />
       <Show when={toast()}>
         <div class="toast" role="status">
           {toast()}
@@ -451,13 +442,7 @@ export default function App() {
           there is nothing left to read. The same goes for the other
           dialogs opened with a value. */}
       <Show when={grouping()} keyed>
-        {(ids) => (
-          <CollectionDialog
-            ids={ids}
-            parent={parentFor(ids)}
-            onClose={() => setGrouping(null)}
-          />
-        )}
+        {(ids) => <SetDialog ids={ids} onClose={() => setGrouping(null)} />}
       </Show>
     </>
   );

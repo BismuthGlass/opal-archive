@@ -38,12 +38,12 @@ use tokio::{
 };
 
 use crate::{
-    AppState, collections,
+    AppState,
     entities::{self, REFERENCES, SOURCE_URLS},
     error::ApiError,
     files,
-    query::{COLLECTION_TYPES, tag_type},
-    tags,
+    query::tag_type,
+    sets, tags,
 };
 
 /// What each of a downloader's options is set to.
@@ -163,7 +163,7 @@ struct Item {
     key: String,
     source_url: Option<String>,
     /// What its files are part of on the site, as a thread: kept as a
-    /// reference of theirs, where a collection would group them too much.
+    /// reference of theirs, where a set would group them too much.
     reference: Option<String>,
     /// Its files, in order, in the folder the script was given.
     #[serde(default)]
@@ -178,20 +178,16 @@ struct Item {
     /// Tags of its own, by field, besides the source and the tab's.
     #[serde(default)]
     tags: BaseTags,
-    /// The collection its files are to be put in.
-    collection: Option<Whole>,
+    /// The set its files are to be put in.
+    set: Option<Whole>,
 }
 
-/// A collection a downloader asks for, to hold what it fetches: a set of
-/// the files of one post, or what several posts are part of, as a thread.
+/// A set a downloader asks for, to hold the files of one post.
 #[derive(Deserialize)]
 struct Whole {
-    /// Its collection ID, which is what tells it from every other: the
-    /// collection that has it is the one used, and no second is made.
+    /// Its set ID, which is what tells it from every other: the set that
+    /// has it is the one used, and no second is made.
     id: String,
-    /// Its type; a `set` if not said.
-    #[serde(rename = "type")]
-    kind: Option<String>,
     /// Its address on the site, kept as its source URL.
     url: Option<String>,
     /// What it is called when it is made; it has no title if not said.
@@ -199,14 +195,9 @@ struct Whole {
     description: Option<String>,
     /// What it is part of on the site, kept as a reference of its own.
     reference: Option<String>,
-    /// Tags of its own, by field, besides the source and the tab's.
+    /// Tags for its files, by field, besides the source and the tab's.
     #[serde(default)]
     tags: BaseTags,
-    /// Whether it keeps what is put in it in order. It does if not said.
-    ordered: Option<bool>,
-    /// The collection it is itself to be put in: a board, for the set of
-    /// one of its posts.
-    collection: Option<Box<Whole>>,
 }
 
 /// One line of a downloader's output.
@@ -936,8 +927,8 @@ impl Download {
     /// Takes one downloaded thing into the library: its files go in and get
     /// the source URL, the reference, the tags, and the title and
     /// description where they have none. They are listed under the tab,
-    /// and if the thing asks for a collection they are put in it, and it
-    /// is listed beside them. What it hands over to other
+    /// and if the thing asks for a set those of them in no set are put in
+    /// it. What it hands over to other
     /// downloaders is fetched by them, and is its files too. Then the
     /// thing is remembered as seen. Returns how many files were new, and
     /// how many the library had.
@@ -955,7 +946,7 @@ impl Download {
             text.map(str::to_string)
         };
         let (title, description) = (text(&item.title), text(&item.description));
-        let whole = item.collection.as_ref();
+        let whole = item.set.as_ref();
         let whole = whole.filter(|whole| !whole.id.trim().is_empty());
         let tab = Some(self.tab);
         let mut ids = Vec::new();
@@ -996,38 +987,30 @@ impl Download {
         let mut conn = self.state.db.lock().unwrap();
         let tx = conn.transaction()?;
         let tagged = entities::ids_json(&ids);
-        // The collection the downloader asks for holds the files, in order;
-        // the one that collection is in holds it, and so on outwards.
-        let mut wholes = Vec::new();
-        let mut members = ids.clone();
-        let mut next = whole.filter(|_| !ids.is_empty());
-        while let Some(whole) = next.filter(|whole| !whole.id.trim().is_empty()) {
-            let kind = whole.kind.as_deref().unwrap_or("set");
-            if !COLLECTION_TYPES.contains(&kind) {
-                return Err(ApiError::BadRequest(format!(
-                    "`{kind}` is not a type of collection"
-                )));
+        // The set the downloader asks for holds the files, in order. One
+        // that is in a set already, as the same picture posted twice, stays
+        // in the set it is in.
+        if let Some(whole) = whole.filter(|_| !ids.is_empty()) {
+            let (set, new) = sets::find_or_make(&tx, whole.id.trim())?;
+            if new {
+                tx.execute(
+                    "UPDATE file_set SET title = ?2 WHERE id = ?1",
+                    params![set, text(&whole.title)],
+                )?;
             }
-            let wanted = whole.id.trim();
-            let title = text(&whole.title);
-            let ordered = whole.ordered.unwrap_or(true);
-            let id = collection_of(&tx, wanted, kind, title.as_deref(), ordered, &members)?;
-            let json = entities::ids_json(&[id]);
+            tx.execute(
+                "UPDATE file_set SET description = ?2 WHERE id = ?1 AND description IS NULL",
+                params![set, text(&whole.description)],
+            )?;
+            sets::add_files(&tx, set, &ids, false)?;
             if let Some(url) = text(&whole.url) {
-                entities::add_to_list(&tx, &json, SOURCE_URLS, &url)?;
+                sets::add_to_list(&tx, set, sets::SOURCE_URLS, &url)?;
             }
             if let Some(reference) = text(&whole.reference) {
-                entities::add_to_list(&tx, &json, REFERENCES, &reference)?;
+                sets::add_to_list(&tx, set, sets::REFERENCES, &reference)?;
             }
-            // It is listed under the tab beside its files.
-            tx.execute(
-                "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
-                 SELECT id, ?2 FROM tab WHERE id = ?1",
-                params![self.tab, id],
-            )?;
-            wholes.push((json, text(&whole.description), &whole.tags));
-            members = vec![id];
-            next = whole.collection.as_deref();
+            // None of them may have been free to go in it.
+            sets::prune(&tx)?;
         }
         // What the user has written is never written over.
         let fill = |ids: &str, column: &str, value: &Option<String>| {
@@ -1042,9 +1025,6 @@ impl Download {
         };
         fill(&tagged, "title", &title)?;
         fill(&tagged, "description", &description)?;
-        for (whole, description, _) in &wholes {
-            fill(whole, "description", description)?;
-        }
         if let Some(url) = source_url {
             entities::add_to_list(&tx, &tagged, SOURCE_URLS, url)?;
         }
@@ -1066,20 +1046,17 @@ impl Download {
                 Some((field.clone(), tags::normalize(&field, &value).ok()?))
             })
         };
-        // The files and the collections all get the source and the tab's
-        // tags; beyond those, each gets the tags the script gave it.
-        let shared: Vec<_> = source.into_iter().chain(each(&self.base)).collect();
-        let mut given: Vec<(&str, (String, String))> = Vec::new();
-        given.extend(shared.iter().cloned().map(|tag| (tagged.as_str(), tag)));
-        given.extend(checked(&item.tags).map(|tag| (tagged.as_str(), tag)));
-        for (whole, _, tags) in &wholes {
-            given.extend(shared.iter().cloned().map(|tag| (whole.as_str(), tag)));
-            given.extend(checked(tags).map(|tag| (whole.as_str(), tag)));
+        // The files get the source and the tab's tags, and beyond those
+        // the tags the script gave the thing and its set.
+        let mut given: Vec<(String, String)> = source.into_iter().chain(each(&self.base)).collect();
+        given.extend(checked(&item.tags));
+        if let Some(whole) = whole {
+            given.extend(checked(&whole.tags));
         }
-        for (ids, (field, value)) in given {
+        for (field, value) in given {
             // An alias stands for the tag it defers to.
             let value = tags::resolve(&tx, &field, value)?;
-            entities::attach_tag(&tx, ids, &field, &value)?;
+            entities::attach_tag(&tx, &tagged, &field, &value)?;
         }
         tx.execute(
             "INSERT OR IGNORE INTO tab_download_seen (tab_id, key)
@@ -1094,48 +1071,6 @@ impl Download {
         tx.commit()?;
         Ok((added, existing))
     }
-}
-
-/// The collection with the given collection ID, with `files` put in it:
-/// the one that has it, whatever it has been retitled or made into since,
-/// or a new one of the type given, with the title given if any.
-fn collection_of(
-    conn: &Connection,
-    collection_id: &str,
-    collection_type: &str,
-    title: Option<&str>,
-    ordered: bool,
-    files: &[i64],
-) -> Result<i64, ApiError> {
-    let made = conn
-        .query_row(
-            "SELECT entity_id FROM collection WHERE collection_id = ?1",
-            [collection_id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let collection = match made {
-        Some(collection) => {
-            // Like a file that arrives again, it comes back out of the trash.
-            conn.execute("UPDATE entity SET trashed = 0 WHERE id = ?1", [collection])?;
-            collection
-        }
-        None => {
-            conn.execute(
-                "INSERT INTO entity (kind, title) VALUES ('collection', ?1)",
-                [title],
-            )?;
-            let collection = conn.last_insert_rowid();
-            conn.execute(
-                "INSERT INTO collection (entity_id, collection_type, ordered, collection_id)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params![collection, collection_type, ordered, collection_id],
-            )?;
-            collection
-        }
-    };
-    collections::add_members(conn, collection, files)?;
-    Ok(collection)
 }
 
 /// An error in the words shown to the user.

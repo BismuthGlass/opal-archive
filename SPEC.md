@@ -46,11 +46,25 @@ The metastasis v1.0 format describes a system using sidecar files. This should n
 
 The format's `ai_content` field is left out. Whether a work is AI-made, and how far, is said with a `medium` tag like any other medium (`@me:ai`).
 
-Every file and collection records when it was added to the library, as a date and time to the second in ISO 8601 format, in UTC: `2026-10-03T12:20:37Z`. The application sets it; it is not editable. The interface shows it in local time.
+Every file records when it was added to the library, as a date and time to the second in ISO 8601 format, in UTC: `2026-10-03T12:20:37Z`. The application sets it; it is not editable. The interface shows it in local time.
 
-A collection has a title, like a file, which is for people and need not be unique. It may also have a collection ID, which no two collections share: that, and not the title, is what says for certain which collection is meant. It is shown with the collection's details and can be set, changed or cleared there; one that another collection has is refused. `collection_id=` searches for it, and by namespace as a tag is: `collection_id=pinterest:someone:*` finds every collection whose ID is under that.
+## Sets and variants
 
-Collections should behave as their own entities that may also be categorized and searched in the same way as files. The hierarchical directory concept of categories does not apply, as the system isn't directory based. Groups can still belong to other groups, however. A search can ask for what is directly in a collection (`in=`) or for everything inside it at any depth, through the collections it holds (`within=`).
+There are no collections. A file says itself what it belongs with, in three fields:
+
+- `set_id`: the set it is in. A file is in at most one.
+- `set_index`: where in the set it comes. A set is always in an order; files that give no index follow those that do.
+- `alt_group_id`: the group of variants it is one of. Files that share one are variants of each other. Nothing else is kept about a group: it is the ID alone.
+
+A set is not an entity. It has no tags, score, date or rating, it is not in the trash or out of it, and a search never finds it: it finds files. Tagging is done on the files, once.
+
+- A set is what its files share. Besides its set ID it has a title and a description, and the plain lists that say where it came from: source URLs, identifiers and references. These are kept apart from the files, by set ID, and are not fields of the files.
+- The set ID is what says for certain which set is meant, here and in another library: `pinterest:pin:924574998519073090`. No two sets share one, and every set has one: a set made by hand is given one (`set:3f9a1c2e`), which can be changed. The title is for people and need not be unique. A set with no title is called by its set ID.
+- A file shows the set it is in, by its title, and the set is opened from there: in the side panel, on the file's tile in the gallery (a badge with how many files the set holds), and in the viewer. That is the only way to a set.
+- What a set says of where it came from, its files are found by: `source_url~pinterest.com/pin/123` finds the files of the set with that address as well as files with it themselves. `set_id=`, `set_title~` and `alt_group_id=` find files by their set or group, and `set_id=pinterest:*` by namespace, as a tag is.
+- A file put in a set leaves the set it was in. A set left with no file is gone, and so is one taken apart on purpose, whose files stay in the library, in no set. Files in the trash still count as in their set.
+- Variants are grouped from a selection, which gives them a group ID made for them, or the one some of them already have. The field can also be written or cleared by hand, like any other.
+- Broad piles that a file can be in several of are not sets: they are `bucket` tags.
 
 Sidecar files are how metadata leaves the library and comes back into it: see Export and import.
 
@@ -59,27 +73,28 @@ Sidecar files are how metadata leaves the library and comes back into it: see Ex
 A selection can be downloaded or exported. A download is the files alone. An export is a zip of the files with their metadata, as sidecars in the format of `schema.md`, for keeping outside the library or for taking to another one.
 
 - Beside each file is its sidecar, `<name>.json`. Two files of one name are told apart in the zip, as in a download (`a.png`, `a (2).png`); the sidecar of each still has the name it had.
-- A collection selected stands for the files inside it, at any depth, as in a download. Every collection among what was selected or inside it has a sidecar, and so has every collection that any of it is in, however far up: a file exported by itself still says what it belongs to.
-- A collection is called by its collection ID. One that has none is called by the name of its sidecar (`collection-12.json` is `collection-12`), which means something inside that zip only.
+- A file's sidecar says which set it is in, where in it, and which variant group it is of. That is enough to put it back in its set.
+- A set that says something of itself (a title, a description, where it came from) has a sidecar of its own as well, named for its set ID: `pinterest_pin_123.json` for `pinterest:pin:123`. A set that is its ID and nothing more has none.
 - What the files are called, downloaded or exported, one or many, is a setting: the name each was uploaded under (the default), its title (its name, where it has no title), its hash, or random letters and digits that say nothing of it. Whichever it is, an export's sidecars have the name each file had, and an import gives it back.
-- The zip is flat: there are no folders in it. What is in which collection is said by the sidecars.
+- The zip is flat: there are no folders in it. What is in which set is said by the sidecars.
 
 Uploading a zip reads the sidecars in it: this is the import. It works for any zip with sidecars in the format, not only an export.
 
 - A file with a sidecar beside it is given what the sidecar says. A file the library did not have gets all of it, the name it had and when it was added included.
 - A file the library already had keeps what it has. Tags, source URLs, identifiers and references are added to; a field that holds one value (title, date, score, description…) is only filled in where the file has none. What the user wrote is never replaced.
 - What the file itself says (its hash, size, dimensions, length) is always worked out from the file, never read from a sidecar.
-- A collection with a collection ID is the one the library has by that ID, if it has one: it is added to, and never made twice. Otherwise it is made. A collection with no collection ID is always made anew, so importing the same export twice makes those a second time.
-- Members are put in a collection in the order their sidecars give. In a collection the library already had, they follow what was there.
-- A folder still becomes a set named for it. A `_collection.json` in the folder describes that collection: its type, its collection ID, its title and the rest.
-- The collections a zip's sidecars speak of are listed in the upload tab, beside the files.
+- A set is the one the library has by that set ID, if it has one: it is added to, and never made twice. Otherwise it is made. A set's own sidecar fills in its title and description where it has none, and adds to its lists.
+- Files are put in a set in the order their sidecars give. In a set the library already had, they follow what was there.
+- A file the library already had, and that is in a set there, stays in that set: an import fills in, and does not move.
+- A folder still becomes a set named for it, of the files directly in it. A `_set.json` in the folder says which set that is and what is known of it. A file whose own sidecar names a set goes in that one, whatever folder it is in.
+- Every file of the zip is listed in the upload tab.
 - A sidecar is used as far as it can be. A value that is not allowed is left out, and said with the uploads that failed, by the sidecar's name; a field the library has no place for is ignored. A `.json` that is the sidecar of nothing in the zip is said too.
 
 ## Gallery views
 
 What a view lists is decided when its search is calculated, and stays put after that: it is a snapshot, saved with its tab, so it is the same after switching tabs or reloading the page. Where a view was is kept as well: its page, how far it was scrolled, and what was selected in it, across switching tabs and reloading the page. Unlike what the view lists, this is remembered by the browser, not saved with the tab: another browser opens the same view at its top. The order results were dragged into and any that were taken out of the view are part of it. Editing, tagging, rating or trashing a file changes how it is shown, but it does not drop out of the view, and files that start matching do not appear. A Refresh button calculates the search again. A gallery tab opened with an empty query does not list the whole library by itself: it waits, listing nothing, until Search is pressed. The Search button is disabled while the query in the box is the one whose results are on show.
 
-The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab or downloaded into a download tab, a collection created inside the collection a tab shows).
+The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab or downloaded into a download tab, files put into the set a tab shows).
 
 ## Stacked and saved queries
 
@@ -89,16 +104,17 @@ A row can be saved under a name, to be used again: the + then offers the saved q
 
 The saved queries are a setting. The settings list them, to write, rename, delete and drag into the order they are offered in.
 
-## Going into a collection
+## Going into a set
 
-Double-clicking a collection among a view's results goes into it, in the same tab: the view becomes the collection's members, and a bar above it shows the way back. So does clicking a collection in the side panel: one of those the selection belongs to, or the selected collection's own count of members.
+Pressing the set badge on a file's tile goes into its set, in the same tab: the view becomes the set's files, and a bar above it shows the way back. So does clicking the set in the side panel or in the viewer.
 
-- The bar has a back arrow, the collections gone through to get here, and a button that opens the collection in a tab of its own. Going into a collection inside this one adds to the trail; any earlier point of it can be gone back to directly. Backspace goes back one.
+- The bar has a back arrow and a button that opens the set in a tab of its own. Backspace goes back.
 - Coming back out, the view outside is as it was left: the same results, order and page, scrolled as far, with the same selection.
-- Inside, the search box filters the collection, as it does in a collection's own tab. The tab's query is untouched and is there again on coming out.
-- An ordered collection is shown in its order, and a new order dragged into can be saved from here.
-- What the tab is for (its upload box, its download panel) gives way while it is inside a collection.
-- The trail is remembered by the browser, like the tab that is active: reloading the page leaves each tab inside the collection it was in, with its filter. A collection deleted meanwhile ends the trail there.
+- Inside, the search box filters the set, as it does in a set's own tab. The tab's query is untouched and is there again on coming out.
+- A set is shown in its order, and a new order dragged into can be saved from here.
+- With nothing selected, the side panel is about the set: its title, description, set ID and lists, to read and change, and a button to take it apart.
+- What the tab is for (its upload box, its download panel) gives way while it is inside a set.
+- The way in is remembered by the browser, like the tab that is active: reloading the page leaves each tab inside the set it was in, with its filter. A set gone meanwhile ends it.
 
 ## Playing a view
 
@@ -106,7 +122,7 @@ The viewer, opened on any result of a view, can play through the results by itse
 
 - In order, the last result is followed by the first. At random, no result comes twice before all have been shown.
 - The seconds count from when an image has loaded. Video and audio are not cut off: they play to their end, and then the next result comes.
-- What cannot be shown (a collection, a file with no preview) is passed over after a second.
+- What cannot be shown (a file with no preview) is passed over after a second.
 - Stepping by hand while it plays moves on, and the count starts again.
 - In the viewer, scrolling down steps to the next result and scrolling up to the one before, as the right and left arrows do.
 - A right click on a result offers to preview it, which opens the viewer on it as a double click on a file does. With several selected it also offers to preview the selected: the viewer then steps and plays through those alone, in the order the view lists them, and counts them as "2 / 5 selected".
@@ -119,16 +135,16 @@ A downloader fetches files from a website straight into the library. Each downlo
 - What an address can be is up to the downloader. For Pinterest: a pin, a board, a section of a board, or a profile; or the address of a picture itself, on `pinimg.com`, which is downloaded at its full size whatever size the address is of, and gets the `source` tag as any pin's file does. For 4chan: a thread. For Redgifs: a video's page, the address of the video file itself, or a user's page, which stands for everything the user has posted.
 - A downloader has options, set once for every tab and for the inbox, in a window of the settings of all the downloaders: each under its name, with its options and its login, one downloader after the other. An upload tab and the inbox each have a button that opens it. Pinterest has one: whether to go into what is inside (a board's sections, a profile's boards) or take only what sits directly in the board. 4chan has one: whether each file is described with the text of its post. Videos are always downloaded: there is no option to leave them out.
 - Everything downloaded gets the address it came from as a source URL (for Pinterest, the pin's; for 4chan, the post's), and a `source` tag naming the site. That tag is implied. What is downloaded also gets the tags the upload tab gives to everything that arrives in it.
-- What becomes a collection is up to the downloader: nothing is grouped unless it asks. It gives the collection a collection ID and says what type it is, and may give it a title, an address, a description and tags of its own. The collection gets the address as its source URL and, like the files, the `source` tag and the tab's tags. It is listed in the tab beside its files.
-- The collection ID is what a downloaded collection is found by: downloading more of the same thing, in any tab, adds to the collection that has the ID, and never makes a second. Its title is the user's to change, as is everything else about it.
-- A Pinterest pin of several images becomes a `set` holding them in order, with the collection ID `pinterest:pin:<number>`, the pin as its source URL and the pin's description.
+- What becomes a set is up to the downloader: nothing is grouped unless it asks. It gives the set a set ID, and may give it a title, an address, a description, a reference, and tags, which go to the set's files. The set gets the address as its source URL.
+- The set ID is what a downloaded set is found by: downloading more of the same thing, in any tab, adds to the set that has the ID, and never makes a second. Its title is the user's to change, as is everything else about it. A file that is in a set already, as the same picture posted twice is, stays in the set it is in.
+- A Pinterest pin of several images becomes a set holding them in order, with the set ID `pinterest:pin:<number>`, the pin as its source URL and the pin's description.
 - A Pinterest profile stands for the pins its owner created and, with going into what is inside turned on, for all its boards too. Its two tabs have addresses of their own, ending in `_created` and `_saved`, which stand for the one or the other alone. A created pin is given the reference `pinterest:<user>`.
-- What is downloaded from a Pinterest board or section is not put in a collection for it: that groups the pins more than is wanted. It is given a reference instead, `pinterest:<user>:<board>`, or `pinterest:<user>:<board>:<section>` for what is in a section: a pin of one image has it on its file, a pin of several on its set. A single pin downloaded by its own address has none.
-- A collection ID may be namespaced with colons in this way, as a tag is.
-- A 4chan thread does not become a collection. Each of its files is given the reference `4chan:<board>:<number>` instead, by which the files of a thread are found: a downloader may give what it fetches a reference to what it is part of, where a collection would group it too much.
-- A downloaded collection is titled only where the site has a title for it: the set of a pin by the pin's title. Without one it has no title, as a file has none; its collection ID is never used as its title.
+- What is downloaded from a Pinterest board or section is not put in a set for it: that groups the pins more than is wanted. It is given a reference instead, `pinterest:<user>:<board>`, or `pinterest:<user>:<board>:<section>` for what is in a section: a pin of one image has it on its file, a pin of several on its set. A single pin downloaded by its own address has none.
+- A set ID may be namespaced with colons in this way, as a tag is.
+- A 4chan thread does not become a set. Each of its files is given the reference `4chan:<board>:<number>` instead, by which the files of a thread are found: a downloader may give what it fetches a reference to what it is part of, where a set would group it too much.
+- A downloaded set is titled only where the site has a title for it: the set of a pin by the pin's title. Without one it has no title, as a file has none, and is called by its set ID.
 - What one site shows from another is fetched by that other site's downloader, where there is one: a Reddit post that links to a Redgifs video is given to the Redgifs downloader, and the file then has what both give. It has the `source` tags of both sites and of both posters, the address of the Reddit post and of the Redgifs video as source URLs, and the post's title.
-- A Redgifs video is tagged with its poster, as the source `redgifs:<username>`, as a Reddit post's files are with theirs. A post of several pictures becomes a `set`, with the collection ID `redgifs:gallery:<id>`.
+- A Redgifs video is tagged with its poster, as the source `redgifs:<username>`, as a Reddit post's files are with theirs. A post of several pictures becomes a set, with the set ID `redgifs:gallery:<id>`.
 - A downloader also passes on what the site says of each thing, where it says anything: its title and description, and any tags the downloader makes of it. Title and description only fill in where there is none; what the user wrote is never replaced. Pinterest gives the pin's title and description.
 - A file the library already has is not stored twice. It comes out of the trash if it was there, is listed in the tab, and is given the source URL and the tags like the rest.
 - A tab remembers what it has downloaded, by address, and skips it when it is met again, without fetching it. Downloading the same board a second time in the same tab therefore fetches only what is new, and something deleted from the library does not come back. The list can be read, and entries forgotten, one or all. It belongs to the tab: another tab starts with none.
@@ -137,7 +153,7 @@ A downloader fetches files from a website straight into the library. Each downlo
 
 ## Deleting
 
-Deleting is two steps. The first moves a file or collection to the trash: it keeps its file and all its metadata, but no longer shows up in searches. From the trash it can be restored, or deleted for good, which removes the file from storage. Uploading a trashed file again restores it.
+Deleting is two steps. The first moves a file to the trash: it keeps its file and all its metadata, but no longer shows up in searches. From the trash it can be restored, or deleted for good, which removes the file from storage. Uploading a trashed file again restores it.
 
 Being trashed is a state, not a tag. States are searched with an `@`: `@trashed` lists the trash. It is the only state for now.
 

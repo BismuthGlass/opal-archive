@@ -105,7 +105,7 @@ export function UploadBox() {
       </div>
       <p class="hint">
         Files can also be dropped anywhere on the window. A zip is unpacked: its files are added,
-        its folders become collections, and a sidecar beside a file (<code>name.json</code>, as an
+        its folders become sets, and a sidecar beside a file (<code>name.json</code>, as an
         export writes) gives it its metadata.
       </p>
       {/* A downloader at work for this tab: how far it has got, and a way
@@ -237,7 +237,7 @@ function UploadStatus() {
           </Show>
         </Show>
         {uploads.added} added
-        <Show when={uploads.collections > 0}>, in {plural(uploads.collections, "collection")}</Show>
+        <Show when={uploads.sets > 0}>, in {plural(uploads.sets, "set")}</Show>
         <Show when={uploads.duplicates > 0}>, {uploads.duplicates} already in the library</Show>
         <Show when={uploads.skipped > 0}>, {uploads.skipped} skipped as seen before</Show>
         <Show when={uploads.failures.length > 0}>

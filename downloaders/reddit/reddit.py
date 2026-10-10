@@ -328,9 +328,8 @@ def download() -> int:
     whole = {}
     if len(files) > 1:
         # A post of several files becomes a set, named for the post.
-        whole["collection"] = {
+        whole["set"] = {
             "id": f"reddit:post:{id}",
-            "type": "set",
             "url": address,
             "title": title,
             "description": description,

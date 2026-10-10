@@ -13,8 +13,8 @@ const [search, setSearch] = createStore({
   query: "",
   /** Upload tab the results are limited to, if any. */
   scope: null as number | null,
-  /** Collection whose members the results are limited to instead, if any. */
-  collection: null as number | null,
+  /** Set whose files the results are limited to instead, if any. */
+  set: null as number | null,
   /**
    * Whether what is in the trash is listed along with the rest, without
    * the query having to say `@trashed`.
@@ -90,7 +90,7 @@ let viewKey = "";
 let viewTab: number | null = null;
 /**
  * The views seen while the page is open, so that coming back to a tab, or
- * out of a collection, shows what it showed before without asking the
+ * out of a set, shows what it showed before without asking the
  * server again: on the page it was on, scrolled as far, with the same
  * selection.
  */
@@ -271,7 +271,7 @@ function calculate() {
   const current = (calculation += 1);
   // What the tab was left with is asked for only when the view is opened;
   // a refresh always runs the search.
-  const found = api.searchIds(search.query, seed, search.scope, search.collection, search.trashed);
+  const found = api.searchIds(search.query, seed, search.scope, search.set, search.trashed);
   calculated = found.then((found) => {
     if (current !== calculation) return;
     if (search.custom) {
@@ -297,8 +297,8 @@ export function runSearch(
   scope: number | null = null,
   key = "",
   tab: number | null = null,
-  /** A collection to show the members of, in place of what `scope` holds. */
-  collection: number | null = null,
+  /** A set to show the files of, in place of what `scope` holds. */
+  set: number | null = null,
   /** Whether to wait to be asked, if the tab has no view of this query yet. */
   wait = false,
   /**
@@ -331,7 +331,7 @@ export function runSearch(
   setSearch({
     query,
     scope,
-    collection,
+    set,
     trashed,
     page: left?.page ?? 0,
     custom: seen?.custom ?? false,

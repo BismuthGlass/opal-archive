@@ -73,7 +73,7 @@ The script answers on standard output, one JSON object per line:
 | Event     | Fields                       | Meaning                                                   |
 | --------- | ---------------------------- | --------------------------------------------------------- |
 | `found`   | `total`                      | How many things there are to download, as far as is known |
-| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `tags`, `reference`, `collection`, `delegate` | One thing has been fetched, as these files, in order |
+| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `tags`, `reference`, `set`, `delegate` | One thing has been fetched, as these files, in order |
 | `skipped` | `key`                        | One thing was passed over because its key is in `seen`    |
 | `error`   | `message`, optionally `key`  | Something failed; the download goes on                    |
 | `log`     | `message`                    | What the script is doing, shown while it runs             |
@@ -84,21 +84,21 @@ server takes in the files, lists them under the tab, adds `source_url` and
 the tags, and remembers the key.
 
 `reference` says what the files are part of on the site, where that is not
-something to make a collection of: 4chan gives each file of a thread
+something to make a set of: 4chan gives each file of a thread
 `4chan:<board>:<thread>`, Pinterest each pin of a board
 `pinterest:<user>:<board>`, or `pinterest:<user>:<board>:<section>` if it
 is in a section, and each pin a user created `pinterest:<user>`. It is kept as a reference of each file, by which the
 others are found (`reference=4chan:g:109956993`, or
 `reference=pinterest:someone:a-board*` for a board with its sections), and
 groups nothing. Start it with the downloader's name and namespace it with
-colons, as a collection's `id` below.
+colons, as a set's `id` below.
 
 The tags are the manifest's `source`, the ones the user gave the tab, and
 any the item brings itself in `tags`: an object of tag field to values,
 `{"creator": ["Someone"], "tags": ["cat"]}`. A file that already has a tag
 is left as it is, and a value that is not a valid tag is passed over.
-`title` and `description` are given to the files, and the set, that have
-none; one the user wrote is never replaced.
+`title` and `description` are given to the files that have none; one the
+user wrote is never replaced.
 
 An item may show something that is another site's: a Reddit post that
 links to a Redgifs video. If the address is of one of the `delegates` the
@@ -111,62 +111,51 @@ Reddit post has the source of both sites and the address on each. If no
 other downloader takes the address, or it brings nothing in, the item
 fails. An item with nothing but a `delegate` needs no `files`.
 
-Nothing is put in a collection unless the item asks. It asks with
-`collection`, which describes the collection its files go in:
+Nothing is put in a set unless the item asks. It asks with `set`, which
+describes the set its files go in:
 
 ```json
-"collection": {
+"set": {
   "id": "pinterest:pin:924574998519073090",
-  "type": "set",
   "url": "https://…",
   "title": "…",
   "description": "…",
   "tags": { "creator": ["Someone"] },
-  "reference": "pinterest:someone:a-board",
-  "ordered": true,
-  "collection": { "id": "pinterest:someone:a-board", "type": "sourceset" }
+  "reference": "pinterest:someone:a-board"
 }
 ```
 
 | Field         | Meaning                                                                  |
 | ------------- | ------------------------------------------------------------------------ |
-| `id`          | Required. Its collection ID, which no two collections in the library share. Start it with the downloader's name, so that it cannot meet another downloader's, and namespace it with colons: `pinterest:pin:…`, `4chan:<board>:…` |
-| `type`        | `set`, `sourceset`, `sequence`, `variant` or `usercollection`. A `set` if left out |
+| `id`          | Required. Its set ID, which no two sets in the library share. Start it with the downloader's name, so that it cannot meet another downloader's, and namespace it with colons: `pinterest:pin:…`, `reddit:post:…` |
 | `url`         | Its address on the site, kept as its source URL                          |
-| `title`       | What it is called. It has no title if this is left out or empty: the `id` is not shown in its place |
+| `title`       | What it is called. It has no title if this is left out or empty, and is then called by its `id` |
 | `description` | Given to it if it has none                                               |
-| `tags`        | Tags of its own, as an item's                                            |
+| `tags`        | Tags for its files, as an item's: a set has none of its own              |
 | `reference`   | What it is part of on the site, kept as a reference of its own, as an item's is of its files |
-| `ordered`     | Whether it keeps its members in the order they arrive. It does if left out |
-| `collection`  | The collection this one is itself to be put in, described the same way, and so on to any depth |
 
-The `id` is what the collection is found by. The first item to name one
-makes the collection, with that type, title and `ordered`; every later one,
-in any tab and after any restart, finds the collection that has the ID and
-adds its files to it, so no second collection is ever made of the same
-thing. The user is free to retitle it, change its type or take its source
-URL off: none of that is looked at again. If it is in the trash it comes
-back out. Only if it was deleted for good, or its ID was changed, is a new
-one made.
+The `id` is what the set is found by. The first item to name one makes the
+set, with that title; every later one, in any tab and after any restart,
+finds the set that has the ID and adds its files to it, in the order they
+arrive, so no second set is ever made of the same thing. The user is free
+to retitle it or take its source URL off: none of that is looked at again.
+Only if it is gone, or its ID was changed, is a new one made.
 
-The collection always gets the manifest's `source` and the tab's tags; it
-does not get the item's own tags, title, description or reference, only
-what `collection` says. It is listed in the tab, beside the files.
+A file is in one set. One that is in a set already when it arrives, as the
+same picture posted twice is, stays in the set it is in.
 
-A collection that names a `collection` of its own is put in that one, as a
-member like any other, and the files are not. Every collection named is
-made, found, tagged and listed as described above.
-
-IDs can be namespaced with colons, as tags are, to say what a collection is
-part of: `somesite:<user>:<album>:<part>`.
+A set is not an entity: it has no tags and is not listed in the tab. Its
+files are, and what the set says of where it came from (its `url`, its
+`reference`) they are found by too. Sets do not nest: what a set is part of
+is said with its `reference`.
 
 The downloaders here ask for one shape only: an item of several files asks
-for a `set` with an ID of its own, which makes one collection per post.
-Pinterest does this for a pin of several images, Reddit for a post of
-several. Items that all give the same `id` would gather in one collection,
-but a board or a thread is not grouped so: Pinterest and 4chan give a
-`reference` instead. Pinterest gives it to the file of a pin of one image,
-and to the set of a pin of several rather than to the files in it.
+for a set with an ID of its own, which makes one set per post. Pinterest
+does this for a pin of several images, Reddit for a post of several. Items
+that all give the same `id` would gather in one set, but a board or a
+thread is not grouped so: Pinterest and 4chan give a `reference` instead.
+Pinterest gives it to the file of a pin of one image, and to the set of a
+pin of several rather than to the files in it.
 
 Lines that are not one of these events are ignored. The script ends with
 status 0 when it is done. Any other status means the download failed, and

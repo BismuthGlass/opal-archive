@@ -2,7 +2,6 @@ import {
   createEffect,
   createResource,
   createSignal,
-  For,
   Match,
   on,
   onCleanup,
@@ -11,10 +10,10 @@ import {
   Switch,
 } from "solid-js";
 import { contentUrl, getMetadata } from "../api";
-import { collectionName } from "../format";
+import { setName } from "../format";
 import { ensureRange, itemAt, marks, search } from "../search";
 import { downloadNames, saveSetting, settings } from "../settings";
-import { enter, shownCollection } from "../tabs";
+import { enter, shownSet } from "../tabs";
 import Icon from "./Icon";
 import { modalOpen } from "./Modal";
 
@@ -45,23 +44,20 @@ export default function Viewer(props: {
 
   createEffect(() => ensureRange(props.index, props.index));
 
-  // The collections the result is in, named before its title.
-  const [memberships] = createResource(
-    () => item()?.id,
-    async (id) => ({ of: id, list: (await getMetadata([id])).memberships }),
+  // The set the result is in, named before its title.
+  const [sets] = createResource(
+    () => (item()?.set == null ? undefined : item()!.id),
+    async (id) => ({ of: id, set: (await getMetadata([id])).sets.at(0) }),
   );
-  const collections = () => {
-    const found = memberships.error ? undefined : memberships();
-    // Those of the result shown before are not this one's.
-    if (!found || found.of !== item()?.id) return [];
-    // The one on show comes first.
-    const here = shownCollection()?.id;
-    return [...found.list].sort((a, b) => Number(b.id === here) - Number(a.id === here));
+  const inSet = () => {
+    const found = sets.error ? undefined : sets();
+    // That of the result shown before is not this one's.
+    return found && found.of === item()?.id ? found.set : undefined;
   };
-  /** Leaves the viewer for the collection: the tab goes into it. */
-  const goInto = (collection: { id: number; title: string | null }) => {
+  /** Leaves the viewer for the set: the tab goes into it. */
+  const goInto = (set: { id: number }) => {
     props.onMove(null);
-    enter(collection);
+    enter(set);
   };
 
   const step = (delta: number) => {
@@ -113,10 +109,7 @@ export default function Viewer(props: {
   };
   const showable = () => {
     const current = item();
-    return (
-      current?.kind === "file" &&
-      (current.media_type === "image" || timed() || current.extension === "pdf")
-    );
+    return current?.media_type === "image" || timed() || current?.extension === "pdf";
   };
   createEffect(on(() => item()?.id, () => setShown(item()?.media_type !== "image")));
   // The clock starts once the result is on show, and again for each one.
@@ -149,31 +142,28 @@ export default function Viewer(props: {
     <div class="viewer" role="dialog" aria-modal="true" aria-label="Viewer" onWheel={onWheel}>
       <header>
         <span class="viewer-title">
-          <Show when={collections().length > 0}>
-            <span class="viewer-collection">
-              <For each={collections()}>
-                {(collection, index) => (
-                  <>
-                    {index() > 0 ? ", " : ""}
-                    <button
-                      title={
-                        collection.id === shownCollection()?.id
-                          ? "The collection on show: back to it"
-                          : "Go into this collection"
-                      }
-                      onClick={() => goInto(collection)}
-                    >
-                      {collectionName(collection)}
-                    </button>
-                  </>
-                )}
-              </For>
-            </span>
-            <Show when={item()?.title}>
-              <span class="viewer-inside" aria-hidden="true">
-                ›
-              </span>
-            </Show>
+          <Show when={inSet()}>
+            {(set) => (
+              <>
+                <span class="viewer-set">
+                  <button
+                    title={
+                      set().id === shownSet()?.id
+                        ? "The set on show: back to it"
+                        : "Go into this set"
+                    }
+                    onClick={() => goInto(set())}
+                  >
+                    {setName(set())}
+                  </button>
+                </span>
+                <Show when={item()?.title}>
+                  <span class="viewer-inside" aria-hidden="true">
+                    ›
+                  </span>
+                </Show>
+              </>
+            )}
           </Show>
           <span class="viewer-name">{item()?.title ?? ""}</span>
         </span>
@@ -223,8 +213,8 @@ export default function Viewer(props: {
             <Icon name="shuffle" />
           </button>
         </div>
-        <Show when={item()?.kind === "file"}>
-          <a href={contentUrl(item()!.id, downloadNames())}>Download</a>
+        <Show when={item()}>
+          {(current) => <a href={contentUrl(current().id, downloadNames())}>Download</a>}
         </Show>
         <button aria-label="Close" onClick={() => props.onMove(null)}>
           <Icon name="close" />
@@ -241,12 +231,6 @@ export default function Viewer(props: {
                 </p>
               }
             >
-              <Match when={current.kind === "collection"}>
-                <p class="viewer-note">
-                  Collection{current.title ? `: ${current.title}` : ""}. Double-click it in the
-                  grid to go into it.
-                </p>
-              </Match>
               <Match when={current.media_type === "image"}>
                 <img
                   src={contentUrl(current.id)}

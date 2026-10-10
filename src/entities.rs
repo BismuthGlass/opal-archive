@@ -9,17 +9,17 @@ use axum::{
 };
 use rusqlite::{
     Connection, OptionalExtension, params,
-    types::{FromSql, Value as SqlValue},
+    types::Value as SqlValue,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use crate::{
     AppState,
     error::ApiError,
     files::{stored_name, thumbnail_name},
-    query::{COLLECTION_TYPES, CONTENT_RATINGS, valid_date},
-    tags,
+    query::{CONTENT_RATINGS, valid_date},
+    sets, tags,
 };
 
 /// Single-valued metadata columns of `entity`.
@@ -125,11 +125,11 @@ pub fn tags_of(conn: &Connection, id: i64) -> rusqlite::Result<BTreeMap<String, 
     Ok(tags)
 }
 
-/// What is known of an entity as a file, if it is one.
+/// What is known of an entity as a file.
 pub fn file_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
     conn.query_row(
         "SELECT hash, extension, media_type, size, original_name, width, height,
-                page_count, length, looping, has_thumbnail
+                page_count, length, looping, has_thumbnail, alt_group_id
          FROM file WHERE entity_id = ?1",
         [id],
         |row| {
@@ -145,26 +145,25 @@ pub fn file_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value
                 "length": row.get::<_, Option<f64>>(8)?,
                 "looping": row.get::<_, Option<bool>>(9)?,
                 "has_thumbnail": row.get::<_, bool>(10)?,
+                "alt_group_id": row.get::<_, Option<String>>(11)?,
             }))
         },
     )
     .optional()
 }
 
-/// What is known of an entity as a collection, if it is one.
-pub fn collection_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
+/// The set a file is in, if it is in one, and where in it.
+pub fn set_of(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value>> {
     conn.query_row(
-        "SELECT collection_type,
-                (SELECT count(*) FROM membership WHERE collection_id = ?1), ordered,
-                collection_id
-         FROM collection WHERE entity_id = ?1",
+        "SELECT s.id, s.set_id, s.title, f.set_index
+         FROM file f JOIN file_set s ON s.id = f.set_key WHERE f.entity_id = ?1",
         [id],
         |row| {
             Ok(json!({
-                "collection_type": row.get::<_, String>(0)?,
-                "member_count": row.get::<_, i64>(1)?,
-                "ordered": row.get::<_, bool>(2)?,
-                "collection_id": row.get::<_, Option<String>>(3)?,
+                "id": row.get::<_, i64>(0)?,
+                "set_id": row.get::<_, String>(1)?,
+                "title": row.get::<_, Option<String>>(2)?,
+                "index": row.get::<_, Option<i64>>(3)?,
             }))
         },
     )
@@ -179,17 +178,16 @@ async fn entity(
     let conn = state.db.lock().unwrap();
     let mut result = conn.query_row(
         &format!(
-            "SELECT id, kind, date_added, {} FROM entity WHERE id = ?1",
+            "SELECT id, date_added, {} FROM entity WHERE id = ?1",
             SCALARS.join(", ")
         ),
         [id],
         |row| {
             let mut entity = Map::new();
             entity.insert("id".into(), json!(row.get::<_, i64>(0)?));
-            entity.insert("kind".into(), json!(row.get::<_, String>(1)?));
-            entity.insert("date_added".into(), json!(row.get::<_, String>(2)?));
+            entity.insert("date_added".into(), json!(row.get::<_, String>(1)?));
             for (i, field) in SCALARS.iter().enumerate() {
-                entity.insert(field.to_string(), to_json(row.get(3 + i)?));
+                entity.insert(field.to_string(), to_json(row.get(2 + i)?));
             }
             Ok(entity)
         },
@@ -205,7 +203,7 @@ async fn entity(
     );
     result.insert("reference".into(), json!(list_of(&conn, REFERENCES, id)?));
     result.insert("file".into(), json!(file_details(&conn, id)?));
-    result.insert("collection".into(), json!(collection_details(&conn, id)?));
+    result.insert("set".into(), json!(set_of(&conn, id)?));
     Ok(Json(Value::Object(result)))
 }
 
@@ -215,71 +213,41 @@ fn shared(value: Value, mixed: bool) -> Value {
     json!({ "value": if mixed { Value::Null } else { value }, "mixed": mixed })
 }
 
-/// How many entities there are, how many of them files, and what they share
-/// of each scalar field.
-fn shared_scalars(
-    conn: &Connection,
-    ids: &str,
-) -> rusqlite::Result<(i64, i64, Map<String, Value>)> {
-    let columns: Vec<String> = SCALARS
-        .iter()
-        .map(|field| format!("count(DISTINCT {field}), count({field}), min({field})"))
-        .collect();
-    let (count, files, mut scalars) = conn.query_row(
-        &format!(
-            "SELECT count(*), coalesce(sum(kind = 'file'), 0), {} FROM entity WHERE id {IN_IDS}",
-            columns.join(", ")
-        ),
-        [ids],
-        |row| {
-            let count: i64 = row.get(0)?;
-            let mut scalars = Map::new();
-            for (i, field) in SCALARS.iter().enumerate() {
-                let distinct: i64 = row.get(2 + i * 3)?;
-                let set: i64 = row.get(3 + i * 3)?;
-                // Mixed also covers "set on some, empty on others".
-                let mixed = distinct > 1 || (distinct == 1 && set < count);
-                scalars.insert(
-                    field.to_string(),
-                    shared(to_json(row.get(4 + i * 3)?), mixed),
-                );
-            }
-            Ok((count, row.get::<_, i64>(1)?, scalars))
-        },
-    )?;
+/// Single-valued metadata columns of `file`, edited like the others.
+const FILE_SCALARS: &[&str] = &["original_name", "alt_group_id"];
 
-    // Lives on `file`, but is edited like the other scalars.
-    let original_name = conn.query_row(
-        &format!(
-            "SELECT count(DISTINCT original_name), count(original_name), min(original_name)
-             FROM file WHERE entity_id {IN_IDS}"
-        ),
-        [ids],
-        |row| {
-            let (distinct, set): (i64, i64) = (row.get(0)?, row.get(1)?);
-            let mixed = distinct > 1 || (distinct == 1 && set < files);
-            Ok(shared(to_json(row.get(2)?), mixed))
-        },
-    )?;
-    scalars.insert("original_name".into(), original_name);
-    Ok((count, files, scalars))
-}
-
-/// What the collections among the entities share of a column of theirs.
-fn shared_of_collections<T: FromSql + Serialize>(
-    conn: &Connection,
-    ids: &str,
-    column: &str,
-) -> rusqlite::Result<Value> {
-    conn.query_row(
-        &format!(
-            "SELECT count(DISTINCT {column}), min({column})
-             FROM collection WHERE entity_id {IN_IDS}"
-        ),
-        [ids],
-        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<T>>(1)?)),
-    )
-    .map(|(distinct, value)| shared(json!(value), distinct > 1))
+/// How many entities there are, and what they share of each scalar field.
+fn shared_scalars(conn: &Connection, ids: &str) -> rusqlite::Result<(i64, Map<String, Value>)> {
+    let mut scalars = Map::new();
+    let mut count = 0;
+    for (table, key, fields) in [("entity", "id", SCALARS), ("file", "entity_id", FILE_SCALARS)] {
+        let columns: Vec<String> = fields
+            .iter()
+            .map(|field| format!("count(DISTINCT {field}), count({field}), min({field})"))
+            .collect();
+        conn.query_row(
+            &format!(
+                "SELECT count(*), {} FROM {table} WHERE {key} {IN_IDS}",
+                columns.join(", ")
+            ),
+            [ids],
+            |row| {
+                count = row.get(0)?;
+                for (i, field) in fields.iter().enumerate() {
+                    let distinct: i64 = row.get(1 + i * 3)?;
+                    let set: i64 = row.get(2 + i * 3)?;
+                    // Mixed also covers "set on some, empty on others".
+                    let mixed = distinct > 1 || (distinct == 1 && set < count);
+                    scalars.insert(
+                        field.to_string(),
+                        shared(to_json(row.get(3 + i * 3)?), mixed),
+                    );
+                }
+                Ok(())
+            },
+        )?;
+    }
+    Ok((count, scalars))
 }
 
 /// Each value the entities have in a list table, and how many have it.
@@ -315,22 +283,19 @@ fn counted_tags(conn: &Connection, ids: &str) -> rusqlite::Result<BTreeMap<Strin
     Ok(tags)
 }
 
-/// The collections any of the entities are in, and how many are in each.
-fn memberships(conn: &Connection, ids: &str) -> rusqlite::Result<Vec<Value>> {
+/// The sets any of the entities are in, and how many are in each.
+fn sets_of(conn: &Connection, ids: &str) -> rusqlite::Result<Vec<Value>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT c.entity_id, e.title, c.collection_type, count(*), c.collection_id
-         FROM membership m
-         JOIN collection c ON c.entity_id = m.collection_id
-         JOIN entity e ON e.id = c.entity_id
-         WHERE m.member_id {IN_IDS} GROUP BY c.entity_id ORDER BY e.title, c.entity_id"
+        "SELECT s.id, s.set_id, s.title, count(*)
+         FROM file f JOIN file_set s ON s.id = f.set_key
+         WHERE f.entity_id {IN_IDS} GROUP BY s.id ORDER BY s.title, s.set_id"
     ))?;
     stmt.query_map([ids], |row| {
         Ok(json!({
             "id": row.get::<_, i64>(0)?,
-            "title": row.get::<_, Option<String>>(1)?,
-            "collection_type": row.get::<_, String>(2)?,
+            "set_id": row.get::<_, String>(1)?,
+            "title": row.get::<_, Option<String>>(2)?,
             "count": row.get::<_, i64>(3)?,
-            "collection_id": row.get::<_, Option<String>>(4)?,
         }))
     })?
     .collect()
@@ -338,14 +303,14 @@ fn memberships(conn: &Connection, ids: &str) -> rusqlite::Result<Vec<Value>> {
 
 /// The metadata a set of entities has in common, for editing them together.
 /// Scalars report their shared value or that they are mixed; tags and
-/// collections report how many of the entities carry each.
+/// sets report how many of the entities carry each.
 async fn metadata(
     State(state): State<AppState>,
     Json(input): Json<Ids>,
 ) -> Result<Json<Value>, ApiError> {
     let conn = state.db.lock().unwrap();
     let ids = ids_json(&input.ids);
-    let (count, files, scalars) = shared_scalars(&conn, &ids)?;
+    let (count, scalars) = shared_scalars(&conn, &ids)?;
     let trashed: i64 = conn.query_row(
         &format!("SELECT count(*) FROM entity WHERE trashed = 1 AND id {IN_IDS}"),
         [&ids],
@@ -353,18 +318,13 @@ async fn metadata(
     )?;
     Ok(Json(json!({
         "count": count,
-        "files": files,
-        "collections": count - files,
         "trashed": trashed,
         "scalars": scalars,
-        "collection_type": shared_of_collections::<String>(&conn, &ids, "collection_type")?,
-        "ordered": shared_of_collections::<bool>(&conn, &ids, "ordered")?,
-        "collection_id": shared_of_collections::<String>(&conn, &ids, "collection_id")?,
         "tags": counted_tags(&conn, &ids)?,
         "source_url": counted(&conn, &ids, SOURCE_URLS)?,
         "identifier": counted(&conn, &ids, IDENTIFIERS)?,
         "reference": counted(&conn, &ids, REFERENCES)?,
-        "memberships": memberships(&conn, &ids)?,
+        "sets": sets_of(&conn, &ids)?,
     })))
 }
 
@@ -376,12 +336,6 @@ pub fn scalar_value(field: &str, value: &Value) -> Result<SqlValue, ApiError> {
             "`{field}` must be {expected}"
         )))
     };
-    if field == "ordered" {
-        return match value {
-            Value::Bool(ordered) => Ok(SqlValue::Integer(*ordered as i64)),
-            _ => invalid("true or false"),
-        };
-    }
     let text = match value {
         Value::Null => return Ok(SqlValue::Null),
         Value::String(text) if text.trim().is_empty() => return Ok(SqlValue::Null),
@@ -405,10 +359,6 @@ pub fn scalar_value(field: &str, value: &Value) -> Result<SqlValue, ApiError> {
         "original_name" => match text {
             Some(text) if !text.contains(['/', '\\']) => Ok(SqlValue::Text(text.to_string())),
             _ => invalid("a filename without a path"),
-        },
-        "collection_type" => match text {
-            Some(text) if COLLECTION_TYPES.contains(&text) => Ok(SqlValue::Text(text.to_string())),
-            _ => invalid(&format!("one of {}", COLLECTION_TYPES.join(", "))),
         },
         _ => match text {
             Some(text) => Ok(SqlValue::Text(text.to_string())),
@@ -480,72 +430,10 @@ fn prune_tags(conn: &Connection) -> rusqlite::Result<()> {
 /// The table a field that can be set lives on, and that table's ID column.
 fn home(field: &str) -> Option<(&'static str, &'static str)> {
     match field {
-        "collection_type" | "ordered" | "collection_id" => Some(("collection", "entity_id")),
-        "original_name" => Some(("file", "entity_id")),
+        field if FILE_SCALARS.contains(&field) => Some(("file", "entity_id")),
         field if SCALARS.contains(&field) => Some(("entity", "id")),
         _ => None,
     }
-}
-
-/// Checks that a collection ID can be given to the collections among `ids`:
-/// it is one collection's alone, so there can be only one of them, and no
-/// other collection may have it.
-pub fn claim_collection_id(conn: &Connection, ids: &[i64], wanted: &str) -> Result<(), ApiError> {
-    let json = ids_json(ids);
-    let collections: i64 = conn.query_row(
-        &format!("SELECT count(*) FROM collection WHERE entity_id {IN_IDS}"),
-        [&json],
-        |row| row.get(0),
-    )?;
-    if collections > 1 {
-        return Err(ApiError::bad_request(
-            "a collection ID is one collection's alone: it cannot be given to several",
-        ));
-    }
-    let taken: bool = conn.query_row(
-        &format!(
-            "SELECT EXISTS (SELECT 1 FROM collection
-                            WHERE collection_id = ?2 AND entity_id NOT {IN_IDS})"
-        ),
-        params![json, wanted],
-        |row| row.get(0),
-    )?;
-    if taken {
-        return Err(ApiError::BadRequest(format!(
-            "another collection already has the ID `{wanted}`"
-        )));
-    }
-    Ok(())
-}
-
-/// Gives positions to the members of ordered collections that have none,
-/// after any that already have one: for collections that have just become
-/// ordered.
-fn number_members(conn: &Connection, ids: &str) -> rusqlite::Result<()> {
-    conn.execute(
-        &format!(
-            "WITH numbered AS (
-                 SELECT m.collection_id, m.member_id,
-                        (SELECT coalesce(max(position), -1) FROM membership x
-                         WHERE x.collection_id = m.collection_id)
-                        + row_number() OVER (
-                            PARTITION BY m.collection_id ORDER BY m.member_id
-                        ) AS position
-                 FROM membership m JOIN collection c ON c.entity_id = m.collection_id
-                 WHERE m.position IS NULL AND c.ordered = 1 AND m.collection_id {IN_IDS}
-             )
-             UPDATE membership SET position = (
-                 SELECT n.position FROM numbered n
-                 WHERE n.collection_id = membership.collection_id
-                   AND n.member_id = membership.member_id
-             )
-             WHERE (collection_id, member_id) IN (
-                 SELECT collection_id, member_id FROM numbered
-             )"
-        ),
-        [ids],
-    )?;
-    Ok(())
 }
 
 /// Puts a tag on the entities, creating it if it is new.
@@ -617,9 +505,6 @@ async fn edit(
     // Everything is checked before anything is changed.
     let mut updates = Vec::new();
     for (field, value) in &input.set {
-        if field == "collection_type" && value.is_null() {
-            return Err(ApiError::bad_request("a collection must have a type"));
-        }
         let Some(home) = home(field) else {
             return Err(ApiError::BadRequest(format!("`{field}` cannot be set")));
         };
@@ -638,19 +523,11 @@ async fn edit(
 
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
-    for (field, _, value) in &updates {
-        if let ("collection_id", SqlValue::Text(wanted)) = (*field, value) {
-            claim_collection_id(&tx, &input.ids, wanted)?;
-        }
-    }
     for (field, (table, key), value) in updates {
         tx.execute(
             &format!("UPDATE {table} SET {field} = ?2 WHERE {key} {IN_IDS}"),
             params![ids, value],
         )?;
-        if field == "ordered" {
-            number_members(&tx, &ids)?;
-        }
     }
     for (field, value) in added {
         // Adding an alias adds the tag it defers to.
@@ -718,8 +595,8 @@ async fn restore(
 }
 
 /// The second step: deletes for good those of the entities that are in the
-/// trash. Any that are not are left alone. Files leave internal storage;
-/// deleting a collection leaves its members in place.
+/// trash. Any that are not are left alone. Files leave internal storage,
+/// and a set left with no files goes with them.
 async fn delete(
     State(state): State<AppState>,
     Json(input): Json<Ids>,
@@ -740,6 +617,7 @@ async fn delete(
         [&ids],
     )?;
     prune_tags(&tx)?;
+    sets::prune(&tx)?;
     tx.commit()?;
 
     // Only once the database no longer refers to them.

@@ -10,8 +10,8 @@
   --danger-bg: #ffe3e3;
   --danger-text: #a61e1e;
   --star: #e8a400;
-  --collection: #b7791f;
-  --on-collection: #ffffff;
+  --set: #b7791f;
+  --on-set: #ffffff;
   --mark-1: #e03131;
   --mark-2: #e8590c;
   --mark-3: #2f9e44;
@@ -32,8 +32,8 @@
     --danger-bg: #4a1c1c;
     --danger-text: #ffc9c9;
     --star: #f5c542;
-    --collection: #e0b04a;
-    --on-collection: #1c1503;
+    --set: #e0b04a;
+    --on-set: #1c1503;
   }
 }
 
@@ -425,7 +425,7 @@ button.primary {
   opacity: 0.6;
 }
 
-/* Above the toolbar while the tab is inside a collection: the way back. */
+/* Above the toolbar while the tab is inside a set: the way back. */
 .trail {
   display: flex;
   flex: none;
@@ -644,10 +644,18 @@ button.primary {
   background: var(--mark-5);
 }
 
-.badge {
+/* What a tile says of its file in the corner, one under the other. */
+.badges {
   position: absolute;
   top: 4px;
   right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-end;
+}
+
+.badge {
   padding: 0 5px;
   font-size: 11px;
   color: #fff;
@@ -655,38 +663,26 @@ button.primary {
   border-radius: 4px;
 }
 
-/* A collection: a stack of cards in a colour of its own, and its count on
-   a badge of that colour. */
-.tile.collection .thumb {
-  border-color: var(--collection);
-  box-shadow:
-    3px 3px 0 -1px var(--bg),
-    3px 3px 0 0 var(--collection),
-    6px 6px 0 -1px var(--bg),
-    6px 6px 0 0 var(--collection);
-}
-
-/* Over the image, which would cover a line drawn inside the frame. */
-.tile.collection .thumb::after {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  content: "";
-  border: 1px solid var(--collection);
-  border-radius: 5px;
-}
-
-.tile.collection .badge {
+/* A file of a set: how many the set holds, on a badge in the colour sets
+   have, that opens the set. */
+.tile .set-badge {
   display: inline-flex;
   gap: 3px;
   align-items: center;
   padding: 1px 6px 1px 4px;
   font-weight: 600;
-  color: var(--on-collection);
-  background: var(--collection);
+  line-height: inherit;
+  color: var(--on-set);
+  cursor: pointer;
+  background: var(--set);
+  border: 0;
 }
 
-.tile.collection .badge svg {
+.tile .set-badge:hover {
+  filter: brightness(1.1);
+}
+
+.tile .set-badge svg {
   width: 13px;
   height: 13px;
 }
@@ -1050,64 +1046,51 @@ button.primary {
   color: var(--muted);
 }
 
-/* Collections: a count that unfolds into the list, and a button to add. */
+/* The set the selection is in, and a button to put it in one. */
 
-.collections {
+.sets {
   margin-bottom: 12px;
   font-size: 13px;
 }
 
-.collections-head {
+.sets-head {
   display: flex;
   align-items: center;
 }
 
-.collections button:not(.chip button) {
+.sets-label {
+  flex: 1;
+  padding: 2px 0;
+}
+
+.sets-add {
+  padding: 1px 3px;
+  line-height: 1;
+  color: var(--accent);
   background: none;
   border: none;
   border-radius: 4px;
 }
 
-.collections-toggle {
-  flex: 1;
-  padding: 2px 0;
-  text-align: left;
-}
-
-.collections-toggle:disabled {
-  color: inherit;
-  cursor: default;
-}
-
-.collections-toggle .chevron {
-  margin: 0 2px 0 -4px;
-}
-
-.collections-toggle:disabled .chevron {
-  visibility: hidden;
-}
-
-.collections.open .chevron {
-  transform: rotate(90deg);
-}
-
-.collections-count {
-  color: var(--muted);
-}
-
-.collections-add {
-  padding: 1px 3px;
-  line-height: 1;
-  color: var(--accent);
-}
-
-.collections-add:hover {
+.sets-add:hover {
   color: var(--on-accent);
   background: var(--accent);
 }
 
-.collections .chips {
+.sets .chips {
   margin-top: 4px;
+}
+
+/* What can be done with the whole of what the panel is about. */
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.panel-actions button.danger {
+  color: var(--danger-text);
 }
 
 /* The plain lists (identifiers, references, source URLs): one value per
@@ -1793,14 +1776,14 @@ span.chip-label:hover {
 }
 
 .viewer-name,
-.viewer-collection {
+.viewer-set {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* A long collection title leaves the result's own half the room. */
-.viewer-collection {
+/* A long set title leaves the result's own half the room. */
+.viewer-set {
   flex: 0 1 auto;
   max-width: 50%;
   opacity: 0.7;
@@ -1811,7 +1794,7 @@ span.chip-label:hover {
 }
 
 /* A button does not pass on being cut short: a long title is cut here. */
-.viewer header .viewer-collection button {
+.viewer header .viewer-set button {
   display: inline-block;
   max-width: 100%;
   padding: 0;
@@ -1823,7 +1806,7 @@ span.chip-label:hover {
   cursor: pointer;
 }
 
-.viewer header .viewer-collection button:hover {
+.viewer header .viewer-set button:hover {
   text-decoration: underline;
 }
 
@@ -2377,7 +2360,7 @@ kbd {
   margin-top: 10px;
 }
 
-/* A list to pick one thing from, as in the collection dialog. */
+/* A list to pick one thing from, as in the set dialog. */
 .pick-list {
   max-height: 120px;
   margin: 4px 0 0;

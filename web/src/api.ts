@@ -1,4 +1,4 @@
-export type TabKind = "gallery" | "upload" | "collection" | "inbox" | "selection";
+export type TabKind = "gallery" | "upload" | "set" | "inbox" | "selection";
 
 export type Tab = {
   id: number;
@@ -7,14 +7,24 @@ export type Tab = {
   query: string;
   /** Chosen by the user; empty if the tab goes by its query. */
   name: string;
-  /** The collection a collection tab shows. */
-  collection: {
-    id: number;
-    title: string | null;
-    ordered: boolean;
-    /** Its identifier, if it has one. */
-    collection_id: string | null;
-  } | null;
+  /** The set a set tab shows. */
+  set: SetName | null;
+};
+
+/** Which set, and what it is called: its title, or failing that its set ID. */
+export type SetName = { id: number; set_id: string; title: string | null };
+
+/**
+ * Files that belong together, in an order. A file is in at most one, and a
+ * set is not searched for: it is opened from one of its files.
+ */
+export type FileSet = SetName & {
+  description: string | null;
+  /** How many files it holds that are not in the trash. */
+  files: number;
+  source_url: string[];
+  identifier: string[];
+  reference: string[];
 };
 
 /** A downloader, as its manifest describes it. */
@@ -90,7 +100,7 @@ export type InboxState = {
   queue: InboxRequest[];
   /** How the request being run is going. */
   job: DownloadJob | null;
-  /** How many files and collections its tab lists. */
+  /** How many files its tab lists. */
   listed: number;
   /** Every downloader, and the tags it gives to what it downloads here. */
   downloaders: {
@@ -100,8 +110,8 @@ export type InboxState = {
   }[];
 };
 
-/** Files and collections not in the trash, and how many entities are in it. */
-export type Stats = { files: number; collections: number; trashed: number };
+/** Files not in the trash, and how many are in it. */
+export type Stats = { files: number; trashed: number };
 
 export type MediaType = "image" | "video" | "audio" | "book" | "other";
 
@@ -118,24 +128,23 @@ export type FileEntity = {
   page_count: number | null;
   length: number | null;
   has_thumbnail: boolean;
+  /** What it shares with the files it is a variant of. */
+  alt_group_id: string | null;
 };
 
 /** One entry of the results grid. */
 export type Item = {
   id: number;
-  kind: "file" | "collection";
   title: string | null;
-  media_type: MediaType | null;
-  extension: string | null;
+  media_type: MediaType;
+  extension: string;
   length: number | null;
-  collection_type: string | null;
-  /** A collection's identifier, if it has one. */
-  collection_id: string | null;
-  /** File whose thumbnail stands for this entry, if any. */
-  thumbnail: number | null;
-  /** Which file that thumbnail is of, for its address. */
+  /** The set it is in, and how many files not in the trash that holds. */
+  set: number | null;
+  set_files: number | null;
+  has_thumbnail: boolean;
+  /** Which file its thumbnail is of, for its address. */
   thumbnail_version: string | null;
-  member_count: number | null;
   /** In the trash: deleted once, not yet for good. */
   trashed: boolean;
 };
@@ -144,17 +153,11 @@ export type SearchPage = { total: number; offset: number; items: Item[] };
 
 export type Entity = {
   id: number;
-  kind: "file" | "collection";
   date_added: string;
   title: string | null;
-  file: Omit<FileEntity, "id" | "date_added"> | null;
-  collection: {
-    collection_type: string;
-    member_count: number;
-    ordered: boolean;
-    /** Its identifier, which no other collection has. */
-    collection_id: string | null;
-  } | null;
+  file: Omit<FileEntity, "id" | "date_added">;
+  /** The set it is in, and where in it. */
+  set: (SetName & { index: number | null }) | null;
 };
 
 export type Scalar = { value: string | number | null; mixed: boolean };
@@ -162,28 +165,15 @@ export type Scalar = { value: string | number | null; mixed: boolean };
 /** What a set of entities has in common. */
 export type Metadata = {
   count: number;
-  files: number;
-  collections: number;
   /** How many of them are in the trash. */
   trashed: number;
   scalars: Record<string, Scalar>;
-  collection_type: { value: string | null; mixed: boolean };
-  /** Whether the selected collections keep their members in order. */
-  ordered: { value: boolean | null; mixed: boolean };
-  /** The identifier of the selected collection: one collection's alone. */
-  collection_id: { value: string | null; mixed: boolean };
   tags: Record<string, { value: string; count: number; description: string | null }[]>;
   source_url: { value: string; count: number }[];
   identifier: { value: string; count: number }[];
   reference: { value: string; count: number }[];
-  memberships: {
-    id: number;
-    title: string | null;
-    collection_type: string;
-    count: number;
-    /** Its identifier, if it has one. */
-    collection_id: string | null;
-  }[];
+  /** The sets any of them are in, and how many are in each. */
+  sets: (SetName & { count: number })[];
 };
 
 export type Changes = {
@@ -218,7 +208,6 @@ export const TAG_FIELDS = [
   "bucket",
 ] as const;
 
-export const COLLECTION_TYPES = ["usercollection", "set", "sequence", "variant", "sourceset"];
 export const CONTENT_RATINGS = ["safe", "risky", "nsfw"];
 
 export class ApiError extends Error {
@@ -261,10 +250,10 @@ export const listTabs = () => request<Tab[]>("GET", "/tabs");
 export const createTab = (
   kind: TabKind,
   query: string,
-  collection?: number,
+  set?: number,
   /** For a selection tab, the entities it is to hold. */
   ids?: number[],
-) => request<Tab>("POST", "/tabs", { kind, query, collection, ids });
+) => request<Tab>("POST", "/tabs", { kind, query, set, ids });
 
 export const listDownloaders = () => request<Downloader[]>("GET", "/downloaders");
 /** Reads the downloader's login from a browser and keeps it. */
@@ -324,12 +313,12 @@ export const orderTabs = (ids: number[]) => request<Tab[]>("PUT", "/tabs/order",
 export const deleteTab = (id: number) => request<void>("DELETE", `/tabs/${id}`);
 
 /**
- * `tab` narrows a search to what an upload or collection tab holds, and
- * `collection` to the members of a collection instead.
+ * `tab` narrows a search to what an upload or set tab holds, and `set` to
+ * the files of a set instead.
  */
-const scoped = (tab: number | null, collection: number | null = null): Record<string, number> => ({
+const scoped = (tab: number | null, set: number | null = null): Record<string, number> => ({
   ...(tab === null ? {} : { tab }),
-  ...(collection === null ? {} : { collection }),
+  ...(set === null ? {} : { set }),
 });
 
 export const search = (
@@ -349,13 +338,13 @@ export const searchIds = (
   q: string,
   seed: number,
   tab: number | null,
-  collection: number | null = null,
+  set: number | null = null,
   /** Without this, trashed entities only match a query with `@trashed`. */
   withTrashed = false,
 ) =>
   request<{ ids: number[] }>(
     "GET",
-    `/search/ids?${params({ q, seed, ...scoped(tab, collection), ...(withTrashed ? { trashed: 1 } : {}) })}`,
+    `/search/ids?${params({ q, seed, ...scoped(tab, set), ...(withTrashed ? { trashed: 1 } : {}) })}`,
   ).then((r) => r.ids);
 
 export const getEntity = (id: number) => request<Entity>("GET", `/entities/${id}`);
@@ -366,20 +355,6 @@ export const edit = (ids: number[], changes: Changes) =>
 /** Moves entities to the trash: out of searches, but not yet gone. */
 export const trashEntities = (ids: number[]) =>
   request<{ changed: number }>("POST", "/entities/trash", { ids });
-/**
- * What is inside these collections, at any depth: what of it is not in the
- * trash or, with `trashed`, what of it is.
- */
-export async function insideOf(ids: number[], trashed = false): Promise<number[]> {
-  const found = new Set<number>();
-  // In batches, to keep each address a reasonable length.
-  for (let at = 0; at < ids.length; at += 200) {
-    const batch = ids.slice(at, at + 200).join(",");
-    const query = `within=(id=${batch})${trashed ? " @trashed" : ""}`;
-    for (const id of await searchIds(query, 0, null)) found.add(id);
-  }
-  return [...found];
-}
 export const restoreEntities = (ids: number[]) =>
   request<{ changed: number }>("POST", "/entities/restore", { ids });
 /** Deletes trashed entities for good; any not in the trash are left alone. */
@@ -428,19 +403,35 @@ export const setAlias = (field: string, alias: string, target: string) =>
 export const applyAliases = () =>
   request<{ updated: number }>("POST", "/tags/aliases/apply", {});
 
-export const createCollection = (
-  collection_type: string,
-  title: string,
-  members: number[],
-  /** `parent` is a collection to put the new one into. */
-  options: { ordered?: boolean; parent?: number } = {},
-) =>
-  request<{ id: number }>("POST", "/collections", { collection_type, title, members, ...options });
-/** Sets the order of an ordered collection's members. */
+/**
+ * What can be changed of a set, written as an edit of entities is: its
+ * `set_id`, `title` and `description`, and its plain lists. It has no tags.
+ */
+export type SetChanges = Omit<Changes, "add" | "remove">;
+
+/**
+ * Makes a set of the files, in the order given. Any of them in another set
+ * leave it. It is given a set ID if `set_id` is empty.
+ */
+export const createSet = (files: number[], title: string, set_id = "") =>
+  request<{ id: number; set_id: string }>("POST", "/sets", { files, title, set_id });
+export const getSet = (id: number) => request<FileSet>("GET", `/sets/${id}`);
+/** The sets whose title or set ID contains the text, for picking one. */
+export const listSets = (q: string) =>
+  request<(SetName & { files: number })[]>("GET", `/sets?${params({ q })}`);
+export const changeSet = (id: number, changes: SetChanges) =>
+  request<FileSet>("PATCH", `/sets/${id}`, changes);
+/** Takes a set apart: its files stay, in no set. */
+export const deleteSet = (id: number) => request<void>("DELETE", `/sets/${id}`);
+/** Puts files in a set, out of any other, or takes them out of it. */
+export const changeSetFiles = (id: number, changes: { add?: number[]; remove?: number[] }) =>
+  request<{ files: number }>("POST", `/sets/${id}/files`, changes);
+/** Sets the order of a set's files. */
 export const setOrder = (id: number, ids: number[]) =>
-  request<void>("PUT", `/collections/${id}/order`, { ids });
-export const changeMembers = (id: number, changes: { add?: number[]; remove?: number[] }) =>
-  request<{ member_count: number }>("POST", `/collections/${id}/members`, changes);
+  request<void>("PUT", `/sets/${id}/order`, { ids });
+/** Makes files variants of each other: they share the group answered. */
+export const groupVariants = (ids: number[]) =>
+  request<{ alt_group_id: string }>("POST", "/variants", { ids });
 
 /**
  * With the version a search result gives, the address is of that one
@@ -460,12 +451,12 @@ export const contentUrl = (fileId: number, names?: Naming) =>
   `/api/files/${fileId}/content${names ? `?download=1&names=${names}` : ""}`;
 
 /**
- * Downloads the files behind `ids` (collections included, at any depth) as
- * one zip. Submitted as a form so the browser handles it as a download.
- * With `sidecars` it is an export: each file has its metadata beside it,
- * as `<name>.json`, and each collection a sidecar of its own, for a zip
- * that gives a library all of it back when it is uploaded. `names` is what
- * the files are called in it.
+ * Downloads the files as one zip. Submitted as a form so the browser
+ * handles it as a download. With `sidecars` it is an export: each file has
+ * its metadata beside it, as `<name>.json`, and each set that says
+ * something of itself a sidecar of its own, for a zip that gives a library
+ * all of it back when it is uploaded. `names` is what the files are called
+ * in it.
  */
 export function exportZip(ids: number[], names: Naming, sidecars = false) {
   const form = document.createElement("form");
@@ -555,8 +546,8 @@ export type Unpacked = {
   /** Files that were new to the library, and ones it already had. */
   added: number;
   duplicates: number;
-  /** Collections made of its folders, and for its sidecars. */
-  collections: number;
+  /** Sets made of its folders, and for its sidecars. */
+  sets: number;
   /**
    * The files in it that were not taken in, by where they are in it, and
    * the sidecars some of which could not be used.
@@ -566,8 +557,8 @@ export type Unpacked = {
 
 /**
  * Uploads a zip to be unpacked: its files go into the library, its folders
- * become collections, its sidecars give both their metadata, and the
- * archive itself is not kept.
+ * become sets, its sidecars give both their metadata, and the archive
+ * itself is not kept.
  */
 export const uploadArchive = (file: File, tab: number, onProgress: (fraction: number) => void) =>
   sendFile("/files/archive", file, tab, onProgress).then(({ answer }) => answer as Unpacked);
