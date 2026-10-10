@@ -16,6 +16,10 @@ also takes the address of a picture or video itself, on `pinimg.com`, which
 it downloads at its full size: that says nothing of the pin it is of. Public
 boards need no login, but Pinterest hides some pins, and every secret board, from visitors
 who are logged out.
+
+A pin that Pinterest labels "AI modified" gets the tag `ai_generated`, as
+its medium. Pinterest says so with every pin it lists, so nothing more is
+read for it.
 """
 from __future__ import annotations
 
@@ -233,6 +237,15 @@ def media_urls(pin: dict) -> list[str]:
     return [u for u in urls if u]
 
 
+def pin_tags(pin: dict) -> dict:
+    """The tags a pin brings itself: what Pinterest says of how it was made."""
+    # A number for what kind of AI had a hand in it, which is what the
+    # "AI modified" label is shown for. Other pins have none.
+    if pin.get("digital_media_source_type"):
+        return {"medium": ["ai_generated"]}
+    return {}
+
+
 def pin_title(pin: dict) -> str:
     """The title a pin shows on its page, if it has one."""
     # Pins made in Pinterest's own editor ("story pins") keep theirs apart.
@@ -434,6 +447,7 @@ def download() -> int:
                 files=files,
                 title=pin_title(pin),
                 description=description,
+                tags=pin_tags(pin),
                 **whole,
             )
     return 0
