@@ -106,6 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let conn = db::open(&database)?;
+    sets::prune(&conn)?;
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
         storage,

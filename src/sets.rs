@@ -161,6 +161,8 @@ pub fn add_files(conn: &Connection, set: i64, files: &[i64], free: bool) -> rusq
 }
 
 /// Deletes the sets that hold no file: there is no way left to open one.
+/// Done when the server starts, and whenever files leave the library or
+/// sets are made for what arrives.
 pub fn prune(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute(
         "DELETE FROM file_set WHERE id NOT IN (SELECT set_key FROM set_file)",
@@ -388,8 +390,9 @@ async fn dissolve(
     }
 }
 
-/// Puts files in the set, or takes them out of it. A set left with none is
-/// gone.
+/// Puts files in the set, or takes them out of it. A set left with none
+/// stays for now, so that what was taken out by mistake can be put back:
+/// it goes the next time empty sets are cleared away.
 async fn change_files(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -404,7 +407,6 @@ async fn change_files(
         params![id, ids_json(&input.remove)],
     )?;
     add_files(&tx, id, &input.add, false)?;
-    prune(&tx)?;
     let count: i64 = tx.query_row(
         "SELECT count(*) FROM set_file WHERE set_key = ?1",
         [id],

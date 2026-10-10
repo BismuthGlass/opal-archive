@@ -58,6 +58,16 @@ const placeholder = (item: Item) =>
 const stoodFor = (item: Item | undefined) =>
   search.collapsed ? item?.sets.find((set) => set.files > 1) : undefined;
 
+/**
+ * Whether a result is no longer in the set on show: taken out of it since
+ * the view was listed. It stays listed, as what is trashed does, to be put
+ * back if that was a mistake.
+ */
+const takenOut = (item: Item | undefined) => {
+  const shown = shownSet();
+  return shown !== undefined && item !== undefined && !item.sets.some((set) => set.id === shown.id);
+};
+
 /** The sets a result is in, but for the one on show. */
 const otherSets = (item: Item) => item.sets.filter((set) => set.id !== shownSet()?.id);
 
@@ -286,6 +296,7 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                   selected: item() !== undefined && selected().has(item()!.id),
                   stack: stoodFor(item()) !== undefined,
                   trashed: item()?.trashed ?? false,
+                  out: takenOut(item()),
                   moving: item() !== undefined && (drag()?.ids.includes(item()!.id) ?? false),
                 }}
                 style={{
@@ -347,6 +358,14 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                         <Show when={current().trashed}>
                           <span class="trash-mark" title="In the trash">
                             <Icon name="delete-outline" />
+                          </span>
+                        </Show>
+                        <Show when={takenOut(current())}>
+                          <span
+                            class="out-mark"
+                            title="No longer in this set. Right click to put it back."
+                          >
+                            <Icon name="do-not-disturb-on-outline" />
                           </span>
                         </Show>
                         <Show when={marks().get(current().id)}>

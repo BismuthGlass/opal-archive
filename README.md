@@ -143,7 +143,7 @@ is on, for a query of several lines).
 | `GET /sets/{id}`                 | Everything about one set: `set_id`, `title`, `description`, how many files it holds, and its `source_url`, `identifier`, `reference` and `collection` lists |
 | `PATCH /sets/{id}`               | `{set, add_source_url, remove_source_url, …}` as an edit of entities is written → change it, all or nothing. `set` takes `set_id`, `title` and `description`. A set has no tags |
 | `DELETE /sets/{id}`              | Take the set apart: its files stay in the library               |
-| `POST /sets/{id}/files`          | `{add, remove}` → put files in it, or take them out. A set left with none is gone |
+| `POST /sets/{id}/files`          | `{add, remove}` → put files in it, or take them out. A set left with none stays until empty sets are next cleared away, so that a file can be put back |
 | `PUT /sets/{id}/order`           | `{ids}` → set the order of its files; those left out follow    |
 | `POST /variants`                 | `{ids}` → make those files variants of each other: they get the `alt_group_id` one of them has, or a new one |
 | `POST /export`                   | Form field `ids=1,2,3` → zip of those files. With `sidecars=1` it is an export: each file has a sidecar with its metadata beside it (`<name>.json`), and each set that says something of itself one of its own, in the format of `schema.md`. `names=` says what the files are called in the zip, as for one file |

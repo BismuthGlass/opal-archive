@@ -314,6 +314,8 @@ function Menu(props: {
   };
   /** The set on show, which the selection can be taken out of. */
   const set = shownSet();
+  /** How many of the selection are in it. */
+  const inShown = () => state()?.sets.find((held) => held.id === set?.id)?.count ?? 0;
   /** Says what was done to the selection's sets or variants, once it is. */
   const group = async (action: () => Promise<string>) => {
     close();
@@ -408,23 +410,47 @@ function Menu(props: {
           Put in a set…
         </button>
       </li>
+      {/* In a set: what of the selection is in it can be taken out, and
+          what was taken out, and is still listed, put back. */}
       <Show when={set}>
         {(shown) => (
-          <li role="none">
-            <button
-              role="menuitem"
-              title="Take out of the set on show. The files stay in the library."
-              onClick={() =>
-                group(async () => {
-                  await api.changeSetFiles(shown().id, { remove: ids });
-                  return `Took ${plural(ids.length, "file")} out of the set`;
-                })
-              }
-            >
-              <Icon name="close" />
-              Take out of this set
-            </button>
-          </li>
+          <>
+            <Show when={inShown() > 0}>
+              <li role="none">
+                <button
+                  role="menuitem"
+                  title="Take out of the set on show. The files stay in the library, and stay listed here, marked, until the view is refreshed."
+                  onClick={() =>
+                    group(async () => {
+                      await api.changeSetFiles(shown().id, { remove: ids });
+                      return `Took ${plural(inShown(), "file")} out of the set`;
+                    })
+                  }
+                >
+                  <Icon name="do-not-disturb-on-outline" />
+                  Take out of this set
+                </button>
+              </li>
+            </Show>
+            <Show when={state() !== undefined && inShown() < ids.length}>
+              <li role="none">
+                <button
+                  role="menuitem"
+                  title="Put back in the set on show, after the files it holds"
+                  onClick={() =>
+                    group(async () => {
+                      const back = ids.length - inShown();
+                      await api.changeSetFiles(shown().id, { add: ids });
+                      return `Put ${plural(back, "file")} back in the set`;
+                    })
+                  }
+                >
+                  <Icon name="add" />
+                  Put back in this set
+                </button>
+              </li>
+            </Show>
+          </>
         )}
       </Show>
       <Show when={grouped()}>

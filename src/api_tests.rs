@@ -603,15 +603,17 @@ async fn sets_hold_files_in_order() {
         StatusCode::NOT_FOUND
     );
 
-    // A set left with no file is gone, and its tab with it; so is one
-    // that is taken apart, whose files stay.
-    api.post(&format!("/sets/{other}/files"), json!({ "remove": [b] }))
+    // A file taken out of a set can be put back, even the last of it: the
+    // set is not gone at once. One that is taken apart is, and its tab
+    // with it; its files stay.
+    let emptied = api
+        .post(&format!("/sets/{other}/files"), json!({ "remove": [b] }))
         .await;
-    assert_eq!(
-        api.call("GET", &format!("/sets/{other}"), None).await.0,
-        StatusCode::NOT_FOUND
-    );
+    assert_eq!(emptied["files"], 0);
     assert_eq!(api.sets_of(b).await.as_array().unwrap().len(), 1);
+    api.post(&format!("/sets/{other}/files"), json!({ "add": [b] })).await;
+    assert_eq!(api.members(other), [(b, Some(0))]);
+    api.post(&format!("/sets/{other}/files"), json!({ "remove": [b] })).await;
     let (status, _) = api.call("DELETE", &format!("/sets/{set}"), None).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(api.found("has=set_id").await, [] as [i64; 0]);
@@ -619,17 +621,20 @@ async fn sets_hold_files_in_order() {
     let tabs = api.get("/tabs").await;
     assert!(tabs.as_array().unwrap().iter().all(|tab| tab["kind"] != "set"));
 
-    // Deleting the last file of a set for good takes the set with it.
+    // Deleting the last file of a set for good takes the set with it, and
+    // any set left empty before.
     let last = api.post("/sets", json!({ "files": [d] })).await["id"]
         .as_i64()
         .unwrap();
     api.post("/entities/trash", json!({ "ids": [d] })).await;
     assert_eq!(api.get(&format!("/sets/{last}")).await["files"], 0);
     api.post("/entities/delete", json!({ "ids": [d] })).await;
-    assert_eq!(
-        api.call("GET", &format!("/sets/{last}"), None).await.0,
-        StatusCode::NOT_FOUND
-    );
+    for gone in [last, other] {
+        assert_eq!(
+            api.call("GET", &format!("/sets/{gone}"), None).await.0,
+            StatusCode::NOT_FOUND
+        );
+    }
 }
 
 #[tokio::test]

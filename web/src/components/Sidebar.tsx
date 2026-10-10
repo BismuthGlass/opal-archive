@@ -114,7 +114,8 @@ export default function Sidebar(props: {
     ),
   );
   const pick = (field: string) => {
-    if (PLAIN_LISTS.some((list) => list.field === field)) setEditingList(field);
+    if (field === "sets") props.onGroup(ids());
+    else if (PLAIN_LISTS.some((list) => list.field === field)) setEditingList(field);
     else setAdding(field);
   };
   /** What is shown, for a modal's title. */
@@ -144,14 +145,13 @@ export default function Sidebar(props: {
 
   return (
     <>
-      {/* From the top: the score, the set, then the tags, the
+      {/* From the top: the score, then the tags, the
           aggregated ones first and each other type under them. What is
           about the file itself comes after. */}
       <Show when={meta()}>
         {(data) => (
           <>
             <Stars scalar={data().scalars.score} onChange={set("score")} />
-            <Sets data={data()} onAdd={() => props.onGroup(ids())} onLeave={leave} />
             <Show when={aggregatedTypes().length > 0}>
               <AggregatedTags data={data()} apply={apply} onEdit={() => setEditingTags("")} />
             </Show>
@@ -240,32 +240,6 @@ export default function Sidebar(props: {
                     </Show>
                     <dt>On disk</dt>
                     <dd>{fileSize(current().file.size)}</dd>
-                    <Show when={current().file.alt_group_id}>
-                      {(group) => (
-                        <>
-                          <dt>Variants</dt>
-                          <dd>
-                            <Show when={group() !== shownVariants()} fallback="on show">
-                              <button
-                                class="link"
-                                title="Show the files of this variant group, in this tab"
-                                onClick={() => enter({ variants: group() })}
-                              >
-                                show them
-                              </button>
-                            </Show>
-                            {", "}
-                            <button
-                              class="link"
-                              title="Take this file out of its variant group. The others stay grouped."
-                              onClick={() => apply({ set: { alt_group_id: null } })}
-                            >
-                              ungroup
-                            </button>
-                          </dd>
-                        </>
-                      )}
-                    </Show>
                     <dt>Added</dt>
                     <dd title={current().date_added}>{dateTime(current().date_added)}</dd>
                     <dt>ID</dt>
@@ -273,16 +247,43 @@ export default function Sidebar(props: {
                   </>
                 )}
               </Show>
+              {/* The plain lists, with what a file belongs with among them:
+                  its variants and its sets, above its collections. */}
               <For each={PLAIN_LISTS}>
                 {(list) => (
-                  <Show when={listed(list, data())}>
-                    <PlainListRow
-                      list={list}
-                      data={data()}
-                      apply={apply}
-                      onEdit={() => setEditingList(list.field)}
-                    />
-                  </Show>
+                  <>
+                    <Show when={list.field === "collection"}>
+                      <Show when={variantGroup(data())}>
+                        {(group) => (
+                          <>
+                            <dt>Variants</dt>
+                            <dd>
+                              <Show when={group() !== shownVariants()} fallback="on show">
+                                <button
+                                  class="link"
+                                  title="Show the files of this variant group, in this tab"
+                                  onClick={() => enter({ variants: group() })}
+                                >
+                                  show
+                                </button>
+                              </Show>
+                            </dd>
+                          </>
+                        )}
+                      </Show>
+                      <Show when={data().sets.length > 0}>
+                        <SetsRow data={data()} onAdd={() => props.onGroup(ids())} onLeave={leave} />
+                      </Show>
+                    </Show>
+                    <Show when={listed(list, data())}>
+                      <PlainListRow
+                        list={list}
+                        data={data()}
+                        apply={apply}
+                        onEdit={() => setEditingList(list.field)}
+                      />
+                    </Show>
+                  </>
                 )}
               </For>
             </dl>
@@ -295,9 +296,12 @@ export default function Sidebar(props: {
                     !isSet(data().scalars[detail.field]) &&
                     adding() !== detail.field,
                 ),
-                PLAIN_LISTS.filter((list) => !listed(list, data())).map(
-                  ({ field, label }) => ({ field, label }),
-                ),
+                [
+                  ...(data().sets.length === 0 ? [{ field: "sets", label: "Sets" }] : []),
+                  ...PLAIN_LISTS.filter((list) => !listed(list, data())).map(
+                    ({ field, label }) => ({ field, label }),
+                  ),
+                ],
               ]}
               onPick={pick}
             />
@@ -336,34 +340,42 @@ export default function Sidebar(props: {
   );
 }
 
+/** The variant group the whole selection is of, if it is of one. */
+const variantGroup = (data: Metadata) => {
+  const group = data.scalars.alt_group_id;
+  return !group.mixed && typeof group.value === "string" ? group.value : undefined;
+};
+
 /**
- * The set the selection is in, or the sets its files are: each opens when
- * pressed, and the selection can be taken out of it. The button puts the
- * selection into a set, new or existing.
+ * The sets the selection is in, as a row of the details list: each opens
+ * when its name is pressed, and the selection can be taken out of it. The
+ * label puts the selection into a set, new or existing.
  */
-function Sets(props: { data: Metadata; onAdd: () => void; onLeave: (set: number) => void }) {
-  const count = () => props.data.sets.length;
+function SetsRow(props: { data: Metadata; onAdd: () => void; onLeave: (set: number) => void }) {
   return (
-    <div class="sets">
-      <div class="sets-head">
-        <span class="sets-label">{count() === 0 ? "In no set" : count() === 1 ? "Set" : "Sets"}</span>
+    <>
+      <dt>
         <button
-          class="sets-add"
-          aria-label="Put in a set"
+          class="label list-label"
           title="Put in a set, new or existing"
           onClick={props.onAdd}
         >
-          <Icon name="add" />
+          Sets
+          <Icon name="edit-outline" />
         </button>
-      </div>
-      <Show when={count() > 0}>
-        <div class="chips">
+      </dt>
+      <dd>
+        <ul class="links">
           <For each={props.data.sets}>
             {(set) => (
-              <span class="chip" classList={{ partial: set.count < props.data.count }}>
+              <li>
                 <button
-                  class="chip-label"
-                  title={set.id === shownSet()?.id ? "The set on show" : `Open this set (${set.set_id})`}
+                  class="link link-text"
+                  title={
+                    set.id === shownSet()?.id
+                      ? `${setName(set)}: the set on show`
+                      : `${setName(set)} (${set.set_id}): open this set`
+                  }
                   onClick={() => enter(set)}
                 >
                   {setName(set)}
@@ -379,19 +391,19 @@ function Sets(props: { data: Metadata; onAdd: () => void; onLeave: (set: number)
                 <span class="chip-actions">
                   <button
                     class="chip-remove"
-                    aria-label="Take out of the set"
-                    title="Take out of the set"
+                    aria-label={`Take out of ${setName(set)}`}
+                    title="Take out of this set"
                     onClick={() => props.onLeave(set.id)}
                   >
                     <Icon name="close" />
                   </button>
                 </span>
-              </span>
+              </li>
             )}
           </For>
-        </div>
-      </Show>
-    </div>
+        </ul>
+      </dd>
+    </>
   );
 }
 

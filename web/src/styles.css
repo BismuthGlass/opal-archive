@@ -556,13 +556,16 @@ button.primary {
   color: var(--muted);
 }
 
-/* In the trash: faded, with a mark. */
+/* In the trash, or taken out of the set on show: faded, with a mark. */
 .tile.trashed .thumb img,
-.tile.trashed .placeholder {
+.tile.trashed .placeholder,
+.tile.out .thumb img,
+.tile.out .placeholder {
   opacity: 0.45;
 }
 
-.trash-mark {
+.trash-mark,
+.out-mark {
   position: absolute;
   top: 4px;
   left: 4px;
@@ -571,6 +574,11 @@ button.primary {
   color: #fff;
   background: rgb(0 0 0 / 0.65);
   border-radius: 4px;
+}
+
+/* Beside the trash mark, where a result has both. */
+.tile.trashed .out-mark {
+  left: 30px;
 }
 
 /* A marked result: a ribbon of the mark's colour, hung from the top. */
@@ -1079,40 +1087,6 @@ button.primary {
   color: var(--muted);
 }
 
-/* The set the selection is in, and a button to put it in one. */
-
-.sets {
-  margin-bottom: 12px;
-  font-size: 13px;
-}
-
-.sets-head {
-  display: flex;
-  align-items: center;
-}
-
-.sets-label {
-  flex: 1;
-  padding: 2px 0;
-}
-
-.sets-add {
-  padding: 1px 3px;
-  line-height: 1;
-  color: var(--accent);
-  background: none;
-  border: none;
-  border-radius: 4px;
-}
-
-.sets-add:hover {
-  color: var(--on-accent);
-  background: var(--accent);
-}
-
-.sets .chips {
-  margin-top: 4px;
-}
 
 /* What can be done with the whole of what the panel is about. */
 .panel-actions {
