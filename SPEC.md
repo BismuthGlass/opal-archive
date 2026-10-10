@@ -87,6 +87,7 @@ The viewer, opened on any result of a view, can play through the results by itse
 - The seconds count from when an image has loaded. Video and audio are not cut off: they play to their end, and then the next result comes.
 - What cannot be shown (a collection, a file with no preview) is passed over after a second.
 - Stepping by hand while it plays moves on, and the count starts again.
+- In the viewer, scrolling down steps to the next result and scrolling up to the one before, as the right and left arrows do.
 - A right click on a result offers to preview it, which opens the viewer on it as a double click on a file does. With several selected it also offers to preview the selected: the viewer then steps and plays through those alone, in the order the view lists them, and counts them as "2 / 5 selected".
 
 ## Downloaders

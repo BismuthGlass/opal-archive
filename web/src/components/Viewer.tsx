@@ -22,10 +22,14 @@ import { modalOpen } from "./Modal";
 const DEFAULT_SECONDS = 5;
 /** What cannot be shown is passed over this quickly while playing. */
 const SKIP_SECONDS = 1;
+/** How far the wheel has to turn, in pixels, to step to another result. */
+const WHEEL_NOTCH = 50;
+/** After a step, how long further scrolling is let pass, in milliseconds. */
+const WHEEL_PAUSE = 250;
 
 /**
  * Full-window view of one result. Left / right step through the results,
- * Escape closes. It can also play through them by itself: each stays up
+ * as scrolling down / up does, and Escape closes. It can also play through them by itself: each stays up
  * for a set number of seconds, in order or at random. Given `only`, the
  * indexes of some of the results, it steps and plays through those alone.
  */
@@ -65,6 +69,30 @@ export default function Viewer(props: {
   const step = (delta: number) => {
     const next = place() + delta;
     if (next >= 0 && next < count()) props.onMove(at(next));
+  };
+
+  // Scrolling steps too: down to the next, up to the one before. A wheel
+  // turns in notches and a trackpad sends a stream of small moves that goes
+  // on after the fingers have left, so moves are added up, one step is taken
+  // when they come to a notch's worth, and what follows closely is let pass.
+  let scrolled = 0;
+  let scrolledAt = 0;
+  let steppedAt = 0;
+  const onWheel = (event: WheelEvent) => {
+    // Pinching to zoom arrives as a wheel with Control held.
+    if (event.ctrlKey || event.deltaY === 0 || modalOpen()) return;
+    if ((event.target as HTMLElement).matches?.("input")) return;
+    const now = performance.now();
+    if (now - steppedAt < WHEEL_PAUSE) return;
+    // Lines or pages, as some mice report, are a notch each.
+    const moved = event.deltaMode === 0 ? event.deltaY : Math.sign(event.deltaY) * WHEEL_NOTCH;
+    if (now - scrolledAt > WHEEL_PAUSE || Math.sign(moved) !== Math.sign(scrolled)) scrolled = 0;
+    scrolled += moved;
+    scrolledAt = now;
+    if (Math.abs(scrolled) < WHEEL_NOTCH) return;
+    step(Math.sign(scrolled));
+    scrolled = 0;
+    steppedAt = now;
   };
 
   const [playing, setPlaying] = createSignal(false);
@@ -129,7 +157,7 @@ export default function Viewer(props: {
   onCleanup(() => window.removeEventListener("keydown", onKeyDown, true));
 
   return (
-    <div class="viewer" role="dialog" aria-modal="true" aria-label="Viewer">
+    <div class="viewer" role="dialog" aria-modal="true" aria-label="Viewer" onWheel={onWheel}>
       <header>
         <span class="viewer-title">
           <Show when={collections().length > 0}>
