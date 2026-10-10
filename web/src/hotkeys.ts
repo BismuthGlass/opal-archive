@@ -36,6 +36,18 @@ export const ACTIONS = [
     key: "ctrl+x",
   },
   {
+    id: "moveToStart",
+    label: "Move to start",
+    description: "Puts at the start of this view. In the gallery only.",
+    key: "ctrl+arrowleft",
+  },
+  {
+    id: "moveToEnd",
+    label: "Move to end",
+    description: "Puts at the end of this view. In the gallery only.",
+    key: "ctrl+arrowright",
+  },
+  {
     id: "hide",
     label: "Remove from view",
     description: "Takes out of this view only. Nothing is trashed, and Refresh brings it back.",
@@ -72,11 +84,18 @@ export function keyOf(event: KeyboardEvent): string | null {
   return parts.join("+");
 }
 
+const ARROWS: Record<string, string> = {
+  arrowleft: "←",
+  arrowright: "→",
+  arrowup: "↑",
+  arrowdown: "↓",
+};
+
 /** A key name as shown to the user: `Ctrl + Shift + T`. */
 export function keyLabel(name: string): string {
   return name
     .split("+")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map((part) => ARROWS[part] ?? part.charAt(0).toUpperCase() + part.slice(1))
     .join(" + ");
 }
 

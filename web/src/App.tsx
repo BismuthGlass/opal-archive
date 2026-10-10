@@ -35,6 +35,7 @@ import {
   search,
   deleted,
   invertSelection,
+  moveItems,
   removeFromView,
   selectAll,
   selected,
@@ -333,7 +334,10 @@ export default function App() {
     }
 
     const action = actionFor(event);
-    if (action) {
+    // Where a file stands in the view is the gallery's to change: in the
+    // viewer those keys are left to it.
+    const moves = action === "moveToStart" || action === "moveToEnd";
+    if (action && !(moves && viewing() !== null)) {
       event.preventDefault();
       event.stopImmediatePropagation();
       const on = hotkeyTarget();
@@ -348,6 +352,11 @@ export default function App() {
           `Mark ${on.name}: press 1 to ${MARKS}, which the mark key then gives too, or 0 to take the mark off`,
           true,
         );
+      } else if (action === "moveToStart" || action === "moveToEnd") {
+        const end = action === "moveToEnd";
+        moveItems(on.ids, end ? search.total : 0)
+          .then(() => showToast(`Moved ${on.name} to the ${end ? "end" : "start"}`))
+          .catch((err) => showToast(errorMessage(err)));
       } else if (action === "hide") {
         hide(on);
       } else if (action === "trash" || action === "restore") {
