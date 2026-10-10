@@ -57,7 +57,7 @@ const normalized = (name: string) =>
  * not exist yet can be created. While only `@…` is typed the list is of the
  * types.
  */
-export default function TagEditor(props: {
+export default function TagManager(props: {
   /** A tag to open on: the list is narrowed to it, and it is selected. */
   initial?: { field: string; value: string };
   onClose: () => void;
@@ -185,7 +185,7 @@ export default function TagEditor(props: {
 
   return (
     <Modal title="Tags" wide tall onClose={props.onClose}>
-      <div class="tag-editor-bar">
+      <div class="tag-manager-bar">
         <input
           type="text"
           autofocus
@@ -219,7 +219,7 @@ export default function TagEditor(props: {
           {error()}
         </p>
       </Show>
-      <div class="tag-editor">
+      <div class="tag-manager">
         <ul class="tag-list" role="listbox" aria-label="Tags">
           <For each={types()}>
             {(type) => (

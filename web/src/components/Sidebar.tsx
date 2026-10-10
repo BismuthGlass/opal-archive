@@ -17,7 +17,7 @@ import Detail, { isSet } from "./Detail";
 import Icon from "./Icon";
 import Modal from "./Modal";
 import PlainList, { PLAIN_LISTS, PlainListRow } from "./PlainList";
-import { AggregatedTags, filled, TagField, TagsModal } from "./Tags";
+import { AggregatedTags, filled, TagField, TaggerModal } from "./Tags";
 
 const SCORES = [1, 2, 3, 4, 5, 6, 7];
 
@@ -69,7 +69,7 @@ export default function Sidebar() {
    */
   const [editingList, setEditingList] = createSignal<string | null>(null);
   /**
-   * While the tag editor is open, what its box started with: a type,
+   * While the tagger is open, what its box started with: a type,
    * written out, or nothing.
    */
   const [editingTags, setEditingTags] = createSignal<string | null>(null);
@@ -150,7 +150,7 @@ export default function Sidebar() {
                       field={field}
                       data={data()}
                       apply={apply}
-                      // The editor opens ready for a tag of this type.
+                      // The tagger opens ready for a tag of this type.
                       onEdit={() => setEditingTags(`@${prefixOf(field)}:`)}
                     />
                   </Show>
@@ -310,7 +310,7 @@ export default function Sidebar() {
         )}
       </Show>
       <Show when={editingTags() !== null}>
-        <TagsModal
+        <TaggerModal
           ids={ids()}
           target={target()}
           initial={editingTags() ?? ""}

@@ -135,7 +135,7 @@ let opalAsking = null;
 
 /**
  * Opens a small box under `anchor` asking for tags to give the download,
- * entered as in OpalArchive's own tag editor: typing suggests the tags
+ * entered as in OpalArchive's own tagger: typing suggests the tags
  * there are, Enter adds one, and Shift+Enter downloads. `submit` is handed
  * the tags, as typed, and answers with what went wrong, if anything: the
  * box stays open to say so. It closes once the download is on its way, or

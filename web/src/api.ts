@@ -412,7 +412,7 @@ export type Suggestion = {
   description?: string;
 };
 
-/** A tag in the tag editor, with the aliases that defer to it. */
+/** A tag in the tag manager, with the aliases that defer to it. */
 export type TagEntry = {
   value: string;
   count: number;

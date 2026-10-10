@@ -8,7 +8,7 @@ export const ACTIONS = [
   {
     id: "quickTag",
     label: "Edit tags",
-    description: "Opens the tag editor for the selected items, or for the file open in the viewer.",
+    description: "Opens the tagger for the selected items, or for the file open in the viewer.",
     key: "t",
   },
   {

@@ -27,7 +27,7 @@ const MIN_TYPED = 2;
 
 export const filled = (data: Metadata, field: string) => (data.tags[field]?.length ?? 0) > 0;
 
-/** One row of the tag editor's suggestions: a type, or a tag. */
+/** One row of the tagger's suggestions: a type, or a tag. */
 type Option =
   | { kind: "type"; field: string }
   | {
@@ -42,7 +42,7 @@ type Option =
     };
 
 /**
- * The tag editor's text box and its list of suggestions, as two pieces to
+ * The tagger's text box and its list of suggestions, as two pieces to
  * be placed apart: the list has a section of its own rather than dropping
  * down from the box.
  *
@@ -153,7 +153,7 @@ function createTagBox(props: FieldProps & { initial?: string }) {
       setActive((i) => (i < 0 ? count - 1 : i - 1));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      // With Shift it saves the editor's changes, which is the editor's
+      // With Shift it saves the tagger's changes, which is the tagger's
       // to do: with nothing typed, that is all it does.
       if (event.shiftKey && text().trim() === "") return;
       if (active() >= 0) {
@@ -286,17 +286,17 @@ function createTagBox(props: FieldProps & { initial?: string }) {
 }
 
 /**
- * A tag of the selection. In the editor, where changes wait to be saved,
+ * A tag of the selection. In the tagger, where changes wait to be saved,
  * `pending` says what is to become of it: put on everything selected, or
  * taken off.
  */
 type Tag = Metadata["tags"][string][number] & { pending?: "added" | "removed" };
 
-/** The tags of a type the selection carries, or will once the editor is saved. */
+/** The tags of a type the selection carries, or will once the tagger is saved. */
 const carriedTags = (data: Metadata, field: string): Tag[] =>
   (data.tags[field] ?? []).filter((tag: Tag) => tag.pending !== "removed");
 
-/** The changes to tags waiting in the editor: tag field to values. */
+/** The changes to tags waiting in the tagger: tag field to values. */
 type Staged = { add: Record<string, string[]>; remove: Record<string, string[]> };
 
 const sameTag = (a: string) => (b: string) => a.toLowerCase() === b.toLowerCase();
@@ -315,7 +315,7 @@ function withValue(
 }
 
 /**
- * Takes a change asked for in the editor into those waiting. Asking for
+ * Takes a change asked for in the tagger into those waiting. Asking for
  * the opposite of one that waits calls it off: a tag to be taken off is
  * kept as it was, and one to be put on is not.
  */
@@ -361,7 +361,7 @@ function staged(base: Metadata, changes: Staged): Metadata {
 
 /**
  * One tag as a pill in its type's colours. In the panel a click adds the
- * tag to the search, and a right click offers more; in the editor it has the buttons that take it off, or put it
+ * tag to the search, and a right click offers more; in the tagger it has the buttons that take it off, or put it
  * on the rest of the selection.
  */
 function TagChip(
@@ -391,7 +391,7 @@ function TagChip(
     >
       <button
         class="chip-label"
-        // In the editor a pill is just a value; in the panel it searches.
+        // In the tagger a pill is just a value; in the panel it searches.
         disabled={props.editing}
         title={
           props.editing
@@ -462,14 +462,14 @@ function TagChip(
  * suggestions for what is being typed. `initial` starts the box with a
  * type already written.
  */
-export function TagsEditor(props: FieldProps & { initial?: string }) {
+export function Tagger(props: FieldProps & { initial?: string }) {
   const box = createTagBox(props);
   const untagged = () => orderedTypes().every((field) => !filled(props.data, field));
   return (
-    <div class="tags-editor">
+    <div class="tagger">
       {box.input()}
-      <div class="tags-editor-body">
-        <div class="tags-editor-tags">
+      <div class="tagger-body">
+        <div class="tagger-tags">
           <Show when={untagged()}>
             <p class="hint">No tags yet.</p>
           </Show>
@@ -489,14 +489,14 @@ export function TagsEditor(props: FieldProps & { initial?: string }) {
 }
 
 /**
- * The tag editor in a modal of its own, for the given entities: what the
+ * The tagger in a modal of its own, for the given entities: what the
  * tagging hotkey opens, on the selection or on the file in the viewer.
  *
  * Nothing is changed as the tags are put on and taken off: the changes
  * wait, shown as they will be, until they are saved, with the button or
  * with Shift and Enter. Closing the modal with changes waiting asks first.
  */
-export function TagsModal(props: {
+export function TaggerModal(props: {
   ids: number[];
   /** What the tags are of, for the title: "3 items", "this file". */
   target: string;
@@ -554,7 +554,7 @@ export function TagsModal(props: {
       >
         {/* `latest` keeps the tags on screen while they are read again. */}
         <Show when={shown()} fallback={<div class="field" />}>
-          {(data) => <TagsEditor data={data()} apply={apply} initial={props.initial} />}
+          {(data) => <Tagger data={data()} apply={apply} initial={props.initial} />}
         </Show>
       </div>
       <Show when={error()}>
@@ -588,7 +588,7 @@ export function TagsModal(props: {
 
 /**
  * The tags of one type that is not aggregated, in a section of their own.
- * In the panel the label opens the tag editor.
+ * In the panel the label opens the tagger.
  */
 export function TagField(props: FieldProps & ListMode & { field: string }) {
   const values = () => props.data.tags[props.field] ?? [];
@@ -630,7 +630,7 @@ export function TagField(props: FieldProps & ListMode & { field: string }) {
 /**
  * The tags of every aggregated type in one list with no heading, told
  * apart by the colour of their pills. In the panel it ends in the button
- * that opens the tag editor; in the editor each pill can be taken off.
+ * that opens the tagger; in the tagger each pill can be taken off.
  */
 export function AggregatedTags(props: FieldProps & ListMode) {
   const entries = () =>

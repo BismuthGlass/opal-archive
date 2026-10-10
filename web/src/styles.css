@@ -1304,9 +1304,9 @@ button.primary {
   opacity: 1;
 }
 
-/* The tag editor: the box, then the tags beside the suggestions. It keeps
+/* The tagger: the box, then the tags beside the suggestions. It keeps
    its height whatever it holds. */
-.tags-editor {
+.tagger {
   display: flex;
   flex-direction: column;
   height: 380px;
@@ -1317,7 +1317,7 @@ button.primary {
   font-size: 12px;
 }
 
-.tags-editor-body {
+.tagger-body {
   display: flex;
   flex: 1;
   gap: 14px;
@@ -1325,13 +1325,13 @@ button.primary {
   margin-top: 12px;
 }
 
-.tags-editor-tags {
+.tagger-tags {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
 }
 
-.tags-editor-tags .aggregate {
+.tagger-tags .aggregate {
   margin-bottom: 0;
 }
 
@@ -1390,7 +1390,7 @@ button.primary {
 
 @media (max-width: 560px) {
   /* Too narrow for two columns: suggestions go above the tags. */
-  .tags-editor-body {
+  .tagger-body {
     flex-direction: column-reverse;
   }
 
@@ -1412,7 +1412,7 @@ button.primary {
 }
 
 /* Everything in the pill takes the type's text colour, whether its label
-   is a button or, as in the quick tagger, plain text. */
+   is a button or, as in the tagger, plain text. */
 .chip.tinted button,
 .chip.tinted .chip-label,
 .chip.tinted .chip-count {
@@ -1432,7 +1432,7 @@ button.primary {
   background: color-mix(in srgb, currentColor 18%, transparent);
 }
 
-/* In the editor a pill's label is a disabled button; it should not fade. */
+/* In the tagger a pill's label is a disabled button; it should not fade. */
 .dialog .chip-label:disabled {
   opacity: 1;
 }
@@ -1727,7 +1727,7 @@ span.chip-label:hover {
   border-style: dashed;
 }
 
-/* In the tag editor, changes that wait to be saved: a tag to be put on
+/* In the tagger, changes that wait to be saved: a tag to be put on
    stands out, one to be taken off is struck through. */
 .chip.added {
   box-shadow: 0 0 0 1px currentColor;
@@ -2357,26 +2357,26 @@ kbd {
   border-radius: 5px;
 }
 
-/* Tag editor. */
+/* Tag manager. */
 
-.tag-editor-bar {
+.tag-manager-bar {
   display: flex;
   flex: none;
   gap: 8px;
   align-items: center;
 }
 
-.tag-editor-bar input {
+.tag-manager-bar input {
   flex: 1;
   min-width: 0;
 }
 
-.tag-editor-bar button {
+.tag-manager-bar button {
   flex: none;
 }
 
 /* The list of tags beside the details of the one selected. */
-.tag-editor {
+.tag-manager {
   display: flex;
   /* Takes what is left of the modal's fixed height. */
   flex: 1;
@@ -2538,7 +2538,7 @@ kbd {
 
 @media (max-width: 720px) {
   /* Too narrow for two columns: the details go under the list. */
-  .tag-editor {
+  .tag-manager {
     flex-direction: column;
   }
 

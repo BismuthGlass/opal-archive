@@ -157,7 +157,7 @@ impl Api {
         ids
     }
 
-    /// The tags of a field as the tag editor lists them: value and count.
+    /// The tags of a field as the tag manager lists them: value and count.
     async fn tags(&self, field: &str) -> Vec<(String, i64)> {
         let answer = self.get(&format!("/tags/all?field={field}")).await;
         answer["tags"]

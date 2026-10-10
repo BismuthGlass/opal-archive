@@ -6,7 +6,7 @@ an address, which goes into Opal Drop's queue (see `downloaders/README.md`).
 
 - On Reddit, a small button at the end of each post's title. Pressing it
   asks for tags to give what is downloaded, entered as in OpalArchive's own
-  tag editor: typing suggests the tags there are, `@cr:name` is a tag of
+  tagger: typing suggests the tags there are, `@cr:name` is a tag of
   another type, Enter adds one, and Shift+Enter (or Download) sends the
   post. Shift-click on the button sends it at once, with no tags. The
   button turns into a spinner while the post waits and downloads, then a

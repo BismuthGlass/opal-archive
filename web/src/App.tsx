@@ -15,8 +15,8 @@ import SearchHelp from "./components/SearchHelp";
 import SettingsModal from "./components/SettingsModal";
 import Sidebar from "./components/Sidebar";
 import TabBar from "./components/TabBar";
-import { TagsModal } from "./components/Tags";
-import TagEditor from "./components/TagEditor";
+import { TaggerModal } from "./components/Tags";
+import TagManager from "./components/TagManager";
 import Toolbar from "./components/Toolbar";
 import Tooltip from "./components/Tooltip";
 import { DropTarget, UploadBox } from "./components/Upload";
@@ -45,7 +45,7 @@ import {
 } from "./search";
 import { collapsesSets, loadSettings } from "./settings";
 import { watchInbox } from "./inbox";
-import { closeTagEditor, openTagEditor, tagEditor } from "./tagEditing";
+import { closeTagManager, openTagManager, tagManager } from "./tagManaging";
 import { refreshStats, stats } from "./stats";
 import { hideToast, showToast, toast } from "./toast";
 import {
@@ -84,7 +84,7 @@ export default function App() {
   const shownCollection = () => (selected().size === 0 ? collectionShown() : undefined);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [helpOpen, setHelpOpen] = createSignal(false);
-  /** What the tagging hotkey applies to, while the tag editor it opens is up. */
+  /** What the tagging hotkey applies to, while the tagger it opens is up. */
   const [tagging, setTagging] = createSignal<{ ids: number[]; name: string } | null>(null);
   /** What the next digit scores, after the score key. */
   const [scoring, setScoring] = createSignal<{ ids: number[]; name: string } | null>(null);
@@ -456,7 +456,7 @@ export default function App() {
           class="icon-button"
           aria-label="Tags"
           title="Tags: rename, merge and alias"
-          onClick={openTagEditor}
+          onClick={openTagManager}
         >
           <Icon name="label-outline" />
         </button>
@@ -596,7 +596,7 @@ export default function App() {
       </Show>
       <Show when={tagging()} keyed>
         {(target) => (
-          <TagsModal ids={target.ids} target={target.name} onClose={() => setTagging(null)} />
+          <TaggerModal ids={target.ids} target={target.name} onClose={() => setTagging(null)} />
         )}
       </Show>
       <ContextMenu onPreview={view} onGroup={(kind, ids) => setGrouping({ kind, ids })} />
@@ -606,8 +606,8 @@ export default function App() {
           {toast()}
         </div>
       </Show>
-      <Show when={tagEditor()} keyed>
-        {(opened) => <TagEditor initial={opened.tag} onClose={closeTagEditor} />}
+      <Show when={tagManager()} keyed>
+        {(opened) => <TagManager initial={opened.tag} onClose={closeTagManager} />}
       </Show>
       <Show when={helpOpen()}>
         <SearchHelp onClose={() => setHelpOpen(false)} />

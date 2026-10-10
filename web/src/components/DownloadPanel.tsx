@@ -8,7 +8,7 @@ import { dateTime, errorMessage, fieldLabel, plural } from "../format";
 import { pillStyle } from "../tagTypes";
 import Icon from "./Icon";
 import Modal from "./Modal";
-import { TagsEditor } from "./Tags";
+import { Tagger } from "./Tags";
 
 /** How a download went, or is going, in a sentence. */
 function summary(job: DownloadJob) {
@@ -91,7 +91,7 @@ export function BaseTags(props: {
       values.map((value) => ({ field, value })),
     );
 
-  /** The tab's tags as the editor reads a selection's: one item with them all. */
+  /** The tab's tags as the tagger reads a selection's: one item with them all. */
   const asSelection = (): Metadata => ({
     count: 1,
     trashed: 0,
@@ -110,7 +110,7 @@ export function BaseTags(props: {
     set: [],
   });
 
-  /** The editor's changes, made to the tab's tags. */
+  /** The tagger's changes, made to the tab's tags. */
   const apply = (changes: Changes) => {
     const tags = { ...props.data.tags };
     const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -165,7 +165,7 @@ export function BaseTags(props: {
           onClose={() => setEditing(false)}
         >
           <div class="field-editor">
-            <TagsEditor data={asSelection()} apply={apply} />
+            <Tagger data={asSelection()} apply={apply} />
           </div>
           <Show when={props.error}>
             <p class="form-error" role="alert">

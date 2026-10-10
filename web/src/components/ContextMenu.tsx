@@ -17,7 +17,7 @@ import {
   selected,
 } from "../search";
 import { open as openTab, openSelection, shownSet } from "../tabs";
-import { editTag } from "../tagEditing";
+import { manageTag } from "../tagManaging";
 import { fieldLabel, tagQuery } from "../format";
 import { showToast } from "../toast";
 import type { GroupKind } from "./GroupDialog";
@@ -165,11 +165,11 @@ function TagMenu(props: { at: Opened; tag: MenuTag }) {
             title="Rename, merge, describe or alias it"
             onClick={() => {
               close();
-              editTag(tag);
+              manageTag(tag);
             }}
           >
             <Icon name="label-outline" />
-            Open in the tag editor
+            Open in the tag manager
           </button>
         </li>
       </Show>
