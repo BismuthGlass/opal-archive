@@ -203,8 +203,6 @@ function TagTypes() {
       report,
     );
 
-  /** Whether the long account of what all this is has been asked for. */
-  const [explained, setExplained] = createSignal(false);
   /** The theme the types are shown on: the one that is on, to begin with. */
   const [theme, setTheme] = createSignal<Theme>(
     window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
@@ -214,30 +212,26 @@ function TagTypes() {
 
   return (
     <>
-      <h3 class="with-help">
-        Tag types
-        <button
-          class="help-button"
-          aria-label="About tag types"
-          aria-expanded={explained()}
-          title="About tag types"
-          onClick={() => setExplained((shown) => !shown)}
-        >
-          <Icon name="help-outline" />
-        </button>
-      </h3>
-      <Show when={explained()}>
-        <p class="hint">
-          A tag is of a type, written in front of it wherever tags are typed:{" "}
-          <code>@cr:name</code> is a creator, and a tag with no @ is a plain one. A tag is written
-          in the colour of its type, which has one for the light theme and one for the dark, and
-          in bold if its type is. The list is shown on one theme at a time, whichever is on:
-          switch it to see and set the colours of the other. The × beside a colour drops it, and
-          the type is then written as the rest of the text is. The types ticked as aggregated
-          share one list in the side panel; the others each get a section of their own. Drag a
-          row by its handle to change the order the types are listed in.
-        </p>
-      </Show>
+      <h3>Tag types</h3>
+      <p class="hint">
+        A tag is of a type, written in front of it wherever tags are typed: <code>@cr:name</code>{" "}
+        is a creator, and a tag with no @ is a plain one. A tag is written in the colour of its
+        type, which has one for the light theme and one for the dark, and in bold if its type is.
+        The list is shown on one theme at a time, whichever is on: switch it to see and set the
+        colours of the other. The × beside a colour drops it, and the type is then written as the
+        rest of the text is. The types ticked as aggregated share one list in the side panel; the
+        others each get a section of their own. Drag a row by its handle to change the order the
+        types are listed in.
+        <Show when={isCustomOrder()}>
+          {" "}
+          <button
+            class="link"
+            onClick={() => setTagTypeOrder(null).then(() => setError(null), report)}
+          >
+            Reset the order
+          </button>
+        </Show>
+      </p>
       <div class="theme-switch">
         <span class="hint">Show on</span>
         <div class="segmented" role="radiogroup" aria-label="Theme to show the types on">
@@ -255,14 +249,6 @@ function TagTypes() {
             )}
           </For>
         </div>
-        <Show when={isCustomOrder()}>
-          <button
-            class="link"
-            onClick={() => setTagTypeOrder(null).then(() => setError(null), report)}
-          >
-            Reset the order
-          </button>
-        </Show>
       </div>
       {/* The list is of the theme on show, whichever theme is on. */}
       <ul class="setting-rows tag-type-rows theme-preview" classList={{ [theme()]: true }} ref={list}>

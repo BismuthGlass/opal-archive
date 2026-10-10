@@ -1526,25 +1526,6 @@ button.primary {
   font-size: 13px;
 }
 
-.theme-switch .link {
-  margin-left: auto;
-}
-
-/* A heading with the button that explains it beside it. */
-.with-help {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-/* In a modal the button keeps its own look, not that of the modal's buttons. */
-.dialog .help-button:not(.primary) {
-  padding: 2px;
-  background: none;
-  border: none;
-  border-radius: 50%;
-}
-
 .setting-rows .check {
   flex: none;
   font-size: 13px;
