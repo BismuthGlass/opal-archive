@@ -107,6 +107,11 @@ export default function TabBar() {
   /** The tab whose name is being typed. */
   const [renaming, setRenaming] = createSignal<number | null>(null);
 
+  /** Closes a tab once the user has said they mean it: it is easily hit. */
+  const askToClose = (tab: (typeof tabs)[number]) => {
+    if (confirm(`Close the tab "${tab.name || described(tab)}"?`)) close(tab.id);
+  };
+
   // Tabs are dragged along the strip to reorder them. The tab moves in the
   // list as the pointer passes its neighbours, and the order is saved on
   // release.
@@ -149,7 +154,7 @@ export default function TabBar() {
               classList={{ active: tab.id === activeId(), dragging: tab.id === dragging() }}
               onPointerDown={(event) => startDrag(tab.id, event)}
               // Middle click closes, as in a browser.
-              onAuxClick={(event) => event.button === 1 && close(tab.id)}
+              onAuxClick={(event) => event.button === 1 && askToClose(tab)}
             >
               <Show
                 when={renaming() === tab.id}
@@ -190,7 +195,7 @@ export default function TabBar() {
                   }}
                 />
               </Show>
-              <button class="tab-close" aria-label="Close tab" onClick={() => close(tab.id)}>
+              <button class="tab-close" aria-label="Close tab" onClick={() => askToClose(tab)}>
                 <Icon name="close" />
               </button>
             </div>
