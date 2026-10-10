@@ -69,7 +69,7 @@ The script answers on standard output, one JSON object per line:
 | Event     | Fields                       | Meaning                                                   |
 | --------- | ---------------------------- | --------------------------------------------------------- |
 | `found`   | `total`                      | How many things there are to download, as far as is known |
-| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `tags`, `collection` | One thing has been fetched, as these files, in order |
+| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `tags`, `reference`, `collection` | One thing has been fetched, as these files, in order |
 | `skipped` | `key`                        | One thing was passed over because its key is in `seen`    |
 | `error`   | `message`, optionally `key`  | Something failed; the download goes on                    |
 | `log`     | `message`                    | What the script is doing, shown while it runs             |
@@ -78,6 +78,13 @@ A `key` is whatever tells one thing on the site from another, and is what
 the tab remembers; for Pinterest it is the pin's URL. For each `item` the
 server takes in the files, lists them under the tab, adds `source_url` and
 the tags, and remembers the key.
+
+`reference` says what the files are part of on the site, where that is not
+something to make a collection of: 4chan gives each file of a thread
+`4chan:<board>:<thread>`. It is kept as a reference of each file, by which
+the others are found (`reference=4chan:g:109956993`), and groups nothing.
+Start it with the downloader's name and namespace it with colons, as a
+collection's `id` below.
 
 The tags are the manifest's `source`, the ones the user gave the tab, and
 any the item brings itself in `tags`: an object of tag field to values,
@@ -123,23 +130,23 @@ back out. Only if it was deleted for good, or its ID was changed, is a new
 one made.
 
 The collection always gets the manifest's `source` and the tab's tags; it
-does not get the item's own tags, title or description, only what
-`collection` says. It is listed in the tab, beside the files.
+does not get the item's own tags, title, description or reference, only
+what `collection` says. It is listed in the tab in place of its files: they
+are one thing, and the tab shows it as one.
 
 A collection that names a `collection` of its own is put in that one, as a
-member like any other, and the files are not: a board then holds the files
-of its posts of one file and the sets of its posts of several. Every
-collection named is made, found, tagged and listed as described above.
+member like any other, and the files are not. Every collection named is
+made, found, tagged and listed as described above.
 
 IDs can be namespaced with colons, as tags are, to say what a collection is
-part of: `pinterest:<user>:<board>:<section>`.
+part of: `somesite:<user>:<album>:<part>`.
 
-Three shapes come of this. Pinterest puts what it downloads from a board in
-a `sourceset` for the board, and from a section in one for the section,
-which is in the board's. An item of several files that asks for a `set`
-with an ID of its own makes one collection per post: Pinterest does this
-for a pin of several images. Items that all give the same `id` gather in
-one collection: 4chan does this with a `sourceset` for the thread.
+The downloaders here ask for one shape only: an item of several files asks
+for a `set` with an ID of its own, which makes one collection per post.
+Pinterest does this for a pin of several images, Reddit for a post of
+several. Items that all give the same `id` would gather in one collection,
+but a board or a thread is not grouped so: Pinterest groups nothing by
+board, and 4chan gives a `reference` instead.
 
 Lines that are not one of these events are ignored. The script ends with
 status 0 when it is done. Any other status means the download failed, and

@@ -844,9 +844,9 @@ async fn a_bad_query_says_where() {
     assert_eq!(page["items"][0]["trashed"], false);
 }
 
-/// A downloader that fetches from nowhere: two things, the first put in a
-/// collection for its board and the second, of two files, in a set of its
-/// own that is in the board's collection too, and a complaint.
+/// A downloader that fetches from nowhere: two things, the first with a
+/// reference to its board and the second, of two files, in a set of its
+/// own that is in a collection for the board, and a complaint.
 const FAKE_DOWNLOADER: &str = r#"
 [ "$1" = download ] || exit 2
 input=$(cat)
@@ -867,9 +867,11 @@ for n in 1 2; do
   fi
   whole='"id":"fake:board","type":"sourceset","url":"https://example.test/board","title":"Board"'
   if [ "$n" = 2 ]; then
-    whole='"id":"fake#2","url":"'$key'","description":" A pair ","tags":{"genre":["Twos"],"nonsense":["x"]},"collection":{'$whole'}'
+    part='"collection":{"id":"fake#2","url":"'$key'","description":" A pair ","tags":{"genre":["Twos"],"nonsense":["x"]},"collection":{'$whole'}}'
+  else
+    part='"reference":" fake:board "'
   fi
-  more='"title":" Thing '$n' ","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]},"collection":{'$whole'}'
+  more='"title":" Thing '$n' ","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]},'$part
   echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":\"$key\",\"files\":[$files],$more}"
 done
 echo '{"event":"error","message":"one thing could not be had"}'
@@ -985,8 +987,11 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     };
     assert_eq!(counts(&job), [2, 2, 3, 0, 0, 1]);
     assert_eq!(job["errors"], json!(["one thing could not be had"]));
-    let files = api.in_tab(tab, "file").await;
+    let files = api.found("kind=file sort=id").await;
     assert_eq!(files.len(), 3);
+    // The tab lists the file that is in no collection; the other two are
+    // listed as their set.
+    assert_eq!(api.in_tab(tab, "file").await, files[..1]);
     // A view saved before the files came does not outlast them.
     assert_eq!(api.get(&format!("/tabs/{tab}/view")).await, Value::Null);
     let all = api.metadata(&files).await;
@@ -1022,6 +1027,10 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         ]
     );
 
+    // The first said what it is part of, which is kept as a reference.
+    assert_eq!(carried(&all, "reference"), [tag("fake:board", 1)]);
+    assert_eq!(api.found("reference=fake:board").await, files[..1]);
+
     // The second thing asked for a set of its own: it holds its files in
     // order, under the ID, description and tags given for it, with the
     // tab's tags but not those of the thing. Given no title, it has none:
@@ -1045,15 +1054,11 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         [tag("https://example.test/item/2", 1)]
     );
 
-    // The first asked for a collection of another type and address, and
-    // the second for its set to be put in the same one: it holds the file
-    // of the one and the set of the other.
+    // It asked for its set to be put in a collection of another type and
+    // address, which holds the set and not its files.
     let wholes = api.found("type=sourceset").await;
     assert_eq!(wholes.len(), 1);
-    assert_eq!(
-        api.members(wholes[0]),
-        [(files[0], Some(0)), (sets[0], Some(1))]
-    );
+    assert_eq!(api.members(wholes[0]), [(sets[0], Some(0))]);
     let whole = api.metadata(&wholes).await;
     assert_eq!(whole["scalars"]["title"]["value"], "Board");
     assert_eq!(carried(&whole, "source"), [tag("fakesite", 1)]);
@@ -1063,7 +1068,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         [tag("https://example.test/board", 1)]
     );
 
-    // Both collections are listed in the tab, beside the files.
+    // Both collections are listed in the tab, beside the first thing's file.
     let mut made = [sets[0], wholes[0]];
     made.sort();
     assert_eq!(api.in_tab(tab, "collection").await, made);
@@ -1102,12 +1107,12 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         "Mine"
     );
     assert_eq!(counts(&third), [2, 1, 0, 2, 1, 1]);
-    assert_eq!(api.in_tab(tab, "file").await, files);
+    assert_eq!(api.in_tab(tab, "file").await, files[..1]);
     assert_eq!(api.in_tab(tab, "collection").await.len(), 2);
     assert_eq!(api.found("type=set").await, sets);
     assert_eq!(api.found("type=sourceset").await, wholes);
     assert_eq!(api.members(sets[0]).len(), 2);
-    assert_eq!(api.members(wholes[0]).len(), 2);
+    assert_eq!(api.members(wholes[0]).len(), 1);
     assert_eq!(
         api.metadata(&sets).await["scalars"]["title"]["value"],
         "A pair of mine"
@@ -1319,13 +1324,14 @@ async fn the_inbox_downloads_what_it_is_sent() {
         (&json!("done"), &json!(0), &json!(3))
     );
 
-    // It is all listed under the inbox's tab: the files and their collections.
+    // It is all listed under the inbox's tab: the file that is in no
+    // collection, and the collections in place of the files in them.
     let inbox = api.get("/inbox").await;
     let tab = inbox["tab"].as_i64().unwrap();
-    assert_eq!(inbox["listed"], 5);
+    assert_eq!(inbox["listed"], 3);
     assert_eq!(inbox["queue"].as_array().unwrap().len(), 2);
     assert_eq!(inbox["downloaders"][0]["tags"], json!({ "tags": ["sent"] }));
-    assert_eq!(api.in_tab(tab, "file").await.len(), 3);
+    assert_eq!(api.in_tab(tab, "file").await.len(), 1);
     assert_eq!(api.in_tab(tab, "collection").await.len(), 2);
     assert_eq!(api.found("sent kind=file").await.len(), 3);
     // The request's own tags are given too, beside the downloader's.
@@ -1342,7 +1348,7 @@ async fn the_inbox_downloads_what_it_is_sent() {
     api.ok("DELETE", &format!("/tabs/{tab}"), None).await;
     assert_eq!(api.get("/tabs").await, json!([]));
     let inbox = api.get("/inbox").await;
-    assert_eq!((&inbox["tab"], &inbox["listed"]), (&Value::Null, &json!(5)));
+    assert_eq!((&inbox["tab"], &inbox["listed"]), (&Value::Null, &json!(3)));
     let (_, third) = send("https://example.test/board").await;
     assert_eq!(ended(&api, &third["id"]).await["status"], "done");
     assert_eq!(api.get("/tabs").await, json!([]));
@@ -1350,7 +1356,7 @@ async fn the_inbox_downloads_what_it_is_sent() {
     let again = api.post("/tabs", json!({ "kind": "inbox" })).await;
     assert_eq!(again["id"], tab);
     assert_eq!(api.get("/tabs").await[0]["id"], tab);
-    assert_eq!(api.in_tab(tab, "file").await.len(), 3);
+    assert_eq!(api.in_tab(tab, "file").await.len(), 1);
 
     // Only clearing empties it, and that takes nothing out of the library.
     api.post("/inbox/clear", json!({})).await;

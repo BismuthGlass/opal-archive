@@ -7,15 +7,16 @@
 
     4chan.py download < request.json
 
-It takes a thread URL and downloads the files posted in it, into a collection
-named for the thread, through 4chan's
+It takes a thread URL and downloads the files posted in it, through 4chan's
 read-only JSON API (https://github.com/4chan/4chan-API). A thread still on
 the board or in its archive can be read; one that has been pruned is gone.
+The files are not put in a collection: each is given a reference to its
+thread, `4chan:<board>:<thread>`, by which the files of a thread are found.
 
 It also takes the address of one post, a thread URL ending in `#p` and the
-post's number, and downloads that post's file alone, into the thread's
-collection all the same; and the address of a file itself, which it
-downloads as it is, into no collection: it does not say what thread it is of.
+post's number, and downloads that post's file alone, with the reference to
+its thread all the same; and the address of a file itself, which it
+downloads as it is, with no reference: it does not say what thread it is of.
 """
 from __future__ import annotations
 
@@ -196,7 +197,6 @@ def download() -> int:
     emit("log", message="Reading the thread")
     board, thread, only = thread_of(request["url"])
     posts = posts_of(board, thread)
-    subject = html.unescape(posts[0].get("sub") or "").strip() if posts else ""
     if only is not None:
         posts = [post for post in posts if post["no"] == only]
         if not posts:
@@ -216,21 +216,9 @@ def download() -> int:
     def post_url(post: dict) -> str:
         return POST.format(board=board, thread=thread, no=post["no"])
 
-    # The thread becomes a collection holding its files, in the order posted:
-    # one post's file goes in it as the files of the whole thread would.
-    whole = {}
-    if options.get("collection", True):
-        address = THREAD.format(board=board, thread=thread)
-        # Thread numbers are a board's own, so the board is part of the ID.
-        whole = {
-            "collection": {
-                "id": f"4chan:{board}:{thread}",
-                "type": "sourceset",
-                "url": address,
-                # Titled with the thread's subject, and not at all without one.
-                "title": subject,
-            }
-        }
+    # Each file refers to its thread, and is in no collection for it. Thread
+    # numbers are a board's own, so the board is part of the reference.
+    reference = f"4chan:{board}:{thread}"
 
     todo = []
     for post in posts:
@@ -252,7 +240,7 @@ def download() -> int:
                 emit("error", key=key, message=f"{key}: {err}")
                 continue
             comment = text_of(post.get("com") or "") if options.get("comments") else ""
-            emit("item", key=key, source_url=key, files=[file], description=comment, **whole)
+            emit("item", key=key, source_url=key, files=[file], description=comment, reference=reference)
     return 0
 
 

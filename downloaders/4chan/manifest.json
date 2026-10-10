@@ -6,11 +6,6 @@
   "sites": ["4chan.org", "4channel.org", "4cdn.org"],
   "options": [
     {
-      "key": "collection",
-      "label": "Put the files in a collection for their thread",
-      "default": true
-    },
-    {
       "key": "video",
       "label": "Download videos",
       "default": true

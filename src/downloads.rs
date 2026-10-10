@@ -37,7 +37,7 @@ use tokio::{
 
 use crate::{
     AppState, collections,
-    entities::{self, SOURCE_URLS},
+    entities::{self, REFERENCES, SOURCE_URLS},
     error::ApiError,
     files,
     query::{COLLECTION_TYPES, tag_type},
@@ -156,6 +156,9 @@ struct Item {
     /// What tells it from everything else on the site.
     key: String,
     source_url: Option<String>,
+    /// What its files are part of on the site, as a thread: kept as a
+    /// reference of theirs, where a collection would group them too much.
+    reference: Option<String>,
     /// Its files, in order, in the folder the script was given.
     #[serde(default)]
     files: Vec<PathBuf>,
@@ -783,11 +786,12 @@ impl Download {
         }
     }
 
-    /// Takes one downloaded thing into the library: its files go in, are
-    /// listed under the tab, and get the source URL, the tags, and the
-    /// title and description where they have none; they are also put in
-    /// the collection it asks for. Then the thing is remembered as seen. Returns how many
-    /// files were new, and how many the library had.
+    /// Takes one downloaded thing into the library: its files go in and get
+    /// the source URL, the reference, the tags, and the title and
+    /// description where they have none. They are listed under the tab,
+    /// unless the thing asks for a collection: then they are put in it, and
+    /// it is listed in their place. Then the thing is remembered as seen.
+    /// Returns how many files were new, and how many the library had.
     async fn take_in(&self, item: &Item) -> Result<(u64, u64), ApiError> {
         let source_url = item.source_url.as_deref();
         let text = |text: &Option<String>| {
@@ -798,6 +802,11 @@ impl Download {
             text.map(str::to_string)
         };
         let (title, description) = (text(&item.title), text(&item.description));
+        let whole = item.collection.as_ref();
+        let whole = whole.filter(|whole| !whole.id.trim().is_empty());
+        // Files that go in a collection are one thing, and the collection
+        // is what the tab lists.
+        let tab = whole.is_none().then_some(self.tab);
         let mut ids = Vec::new();
         let (mut added, mut existing) = (0, 0);
         for path in &item.files {
@@ -810,7 +819,6 @@ impl Download {
             }
             let (hash, size) = files::hash_file(path).await?;
             let name = path.file_name().and_then(|name| name.to_str());
-            let tab = Some(self.tab);
             let (file, created) = files::ingest(&self.state, path, &hash, size, name, tab).await?;
             let _ = tokio::fs::remove_file(path).await;
             if created {
@@ -830,7 +838,7 @@ impl Download {
         // the one that collection is in holds it, and so on outwards.
         let mut wholes = Vec::new();
         let mut members = ids.clone();
-        let mut next = item.collection.as_ref().filter(|_| !ids.is_empty());
+        let mut next = whole.filter(|_| !ids.is_empty());
         while let Some(whole) = next.filter(|whole| !whole.id.trim().is_empty()) {
             let kind = whole.kind.as_deref().unwrap_or("set");
             if !COLLECTION_TYPES.contains(&kind) {
@@ -846,7 +854,7 @@ impl Download {
             if let Some(url) = text(&whole.url) {
                 entities::add_to_list(&tx, &json, SOURCE_URLS, &url)?;
             }
-            // It is listed under the tab beside its files.
+            // It is listed under the tab, where its files are not.
             tx.execute(
                 "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
                  SELECT id, ?2 FROM tab WHERE id = ?1",
@@ -874,6 +882,9 @@ impl Download {
         }
         if let Some(url) = source_url {
             entities::add_to_list(&tx, &tagged, SOURCE_URLS, url)?;
+        }
+        if let Some(reference) = text(&item.reference) {
+            entities::add_to_list(&tx, &tagged, REFERENCES, &reference)?;
         }
         let source = [("source".to_string(), self.manifest.source.clone())];
         let each = |tags: &BaseTags| {

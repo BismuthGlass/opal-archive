@@ -100,7 +100,7 @@ pub fn ids_json(ids: &[i64]) -> String {
 pub type List = (&'static str, &'static str);
 pub const SOURCE_URLS: List = ("source_url", "url");
 const IDENTIFIERS: List = ("identifier", "value");
-const REFERENCES: List = ("reference", "value");
+pub const REFERENCES: List = ("reference", "value");
 
 /// An entity's values in a list.
 fn list_of(conn: &Connection, list: List, id: i64) -> rusqlite::Result<Vec<String>> {
