@@ -325,7 +325,8 @@ function stage(staged: Staged, base: Metadata, changes: Changes): Staged {
     for (const value of values) {
       const carried = (base.tags[field] ?? []).find((tag) => sameTag(value)(tag.value));
       if (remove[field]?.some(sameTag(value))) remove = withValue(remove, field, value, false);
-      else if (carried?.count !== base.count) add = withValue(add, field, carried?.value ?? value, true);
+      else if (carried?.count !== base.count)
+        add = withValue(add, field, carried?.value ?? value, true);
     }
   }
   for (const [field, values] of Object.entries(changes.remove ?? {})) {
@@ -360,11 +361,12 @@ function staged(base: Metadata, changes: Staged): Metadata {
 }
 
 /**
- * One tag as a pill in its type's colours. In the panel a click adds the
- * tag to the search, and a right click offers more; in the tagger it has the buttons that take it off, or put it
- * on the rest of the selection.
+ * One tag as a line of a list, its name in its type's colours. In the
+ * panel a click adds the tag to the search, and a right click offers
+ * more; in the tagger it has the buttons that take it off, or put it on
+ * the rest of the selection.
  */
-function TagChip(
+function TagLine(
   props: FieldProps & {
     field: string;
     tag: Tag;
@@ -377,41 +379,43 @@ function TagChip(
   const namespace = () => props.tag.value.slice(0, props.tag.value.lastIndexOf(":") + 1);
   const name = () => props.tag.value.slice(namespace().length);
   return (
-    <span
-      class="chip tinted"
-      classList={{ partial: partial(), added: props.tag.pending === "added", removed: removed() }}
-      title={
-        removed()
-          ? "Taken off when the changes are saved"
-          : props.tag.pending === "added"
-            ? "Put on when the changes are saved"
-            : undefined
-      }
-      style={pillStyle(props.field)}
-    >
-      <button
-        class="chip-label"
-        // In the tagger a pill is just a value; in the panel it searches.
-        disabled={props.editing}
+    <li class="tag-line">
+      <span
+        class="chip tinted"
+        classList={{ partial: partial(), added: props.tag.pending === "added", removed: removed() }}
         title={
-          props.editing
-            ? undefined
-            : [
-                `${fieldLabel(props.field)}: ${props.tag.value}`,
-                ...(props.tag.description ? [props.tag.description] : []),
-                "Click to add it to the search; right click for more",
-              ].join("\n")
+          removed()
+            ? "Taken off when the changes are saved"
+            : props.tag.pending === "added"
+              ? "Put on when the changes are saved"
+              : undefined
         }
-        onClick={() => addToQuery(tagQuery(props.field, props.tag.value))}
-        onContextMenu={(event) =>
-          props.editing || openTagMenu(event, { field: props.field, value: props.tag.value })
-        }
+        style={pillStyle(props.field)}
       >
-        <Show when={namespace()}>
-          <span class="chip-namespace">{namespace()}</span>
-        </Show>
-        {name()}
-      </button>
+        <button
+          class="chip-label"
+          // In the tagger a tag is just a value; in the panel it searches.
+          disabled={props.editing}
+          title={
+            props.editing
+              ? undefined
+              : [
+                  `${fieldLabel(props.field)}: ${props.tag.value}`,
+                  ...(props.tag.description ? [props.tag.description] : []),
+                  "Click to add it to the search; right click for more",
+                ].join("\n")
+          }
+          onClick={() => addToQuery(tagQuery(props.field, props.tag.value))}
+          onContextMenu={(event) =>
+            props.editing || openTagMenu(event, { field: props.field, value: props.tag.value })
+          }
+        >
+          <Show when={namespace()}>
+            <span class="chip-namespace">{namespace()}</span>
+          </Show>
+          {name()}
+        </button>
+      </span>
       <Show when={partial()}>
         <span class="chip-count" title={`On ${props.tag.count} of ${props.data.count} selected`}>
           ({props.tag.count})
@@ -451,7 +455,7 @@ function TagChip(
           </button>
         </span>
       </Show>
-    </span>
+    </li>
   );
 }
 
@@ -610,10 +614,10 @@ export function TagField(props: FieldProps & ListMode & { field: string }) {
       >
         <span class="label">{fieldLabel(props.field)}</span>
       </Show>
-      <div class="chips">
+      <ul class="tag-lines">
         <For each={sorted()}>
           {(tag) => (
-            <TagChip
+            <TagLine
               field={props.field}
               tag={tag}
               data={props.data}
@@ -622,15 +626,15 @@ export function TagField(props: FieldProps & ListMode & { field: string }) {
             />
           )}
         </For>
-      </div>
+      </ul>
     </div>
   );
 }
 
 /**
  * The tags of every aggregated type in one list with no heading, told
- * apart by the colour of their pills. In the panel it ends in the button
- * that opens the tagger; in the tagger each pill can be taken off.
+ * apart by their colours. In the panel it ends in the button that opens
+ * the tagger; in the tagger each tag can be taken off.
  */
 export function AggregatedTags(props: FieldProps & ListMode) {
   const entries = () =>
@@ -639,10 +643,10 @@ export function AggregatedTags(props: FieldProps & ListMode) {
     );
   return (
     <div class="aggregate">
-      <div class="chips aggregate-chips">
+      <ul class="tag-lines">
         <For each={entries()}>
           {(entry) => (
-            <TagChip
+            <TagLine
               field={entry.field}
               tag={entry.tag}
               data={props.data}
@@ -652,17 +656,19 @@ export function AggregatedTags(props: FieldProps & ListMode) {
           )}
         </For>
         <Show when={!props.editing}>
-          <button
-            class="chip chip-edit"
-            aria-label="Edit tags"
-            title="Add or remove tags"
-            onClick={props.onEdit}
-          >
-            <Icon name="add" />
-            <Show when={entries().length === 0}>Tags</Show>
-          </button>
+          <li class="tag-line">
+            <button
+              class="chip chip-edit"
+              aria-label="Edit tags"
+              title="Add or remove tags"
+              onClick={props.onEdit}
+            >
+              <Icon name="add" />
+              <Show when={entries().length === 0}>Tags</Show>
+            </button>
+          </li>
         </Show>
-      </div>
+      </ul>
     </div>
   );
 }

@@ -1402,7 +1402,7 @@ button.primary {
   }
 }
 
-/* A pill in its tag type's colours, which come inline from the settings. */
+/* A tag in its type's colours, which come inline from the settings. */
 .chip.tinted {
   border-color: transparent;
 }
@@ -1411,28 +1411,14 @@ button.primary {
   border-color: currentColor;
 }
 
-/* Everything in the pill takes the type's text colour, whether its label
-   is a button or, as in the tagger, plain text. */
+/* Its label takes the type's text colour, whether it is a button or, as
+   in the tagger, plain text. */
 .chip.tinted button,
-.chip.tinted .chip-label,
-.chip.tinted .chip-count {
+.chip.tinted .chip-label {
   color: inherit;
 }
 
-.chip.tinted .chip-count {
-  opacity: 0.7;
-}
-
-.chip.tinted .chip-actions {
-  border-left-color: color-mix(in srgb, currentColor 30%, transparent);
-}
-
-.chip.tinted .chip-actions button:hover {
-  color: inherit;
-  background: color-mix(in srgb, currentColor 18%, transparent);
-}
-
-/* In the tagger a pill's label is a disabled button; it should not fade. */
+/* In the tagger a tag's label is a disabled button; it should not fade. */
 .dialog .chip-label:disabled {
   opacity: 1;
 }
@@ -1455,7 +1441,7 @@ button.primary {
   margin-bottom: 12px;
 }
 
-/* The pill that ends the list and opens its editor. */
+/* The button that ends the list and opens the tagger. */
 .chip-edit {
   gap: 2px;
   padding: 1px 6px;
@@ -1503,11 +1489,6 @@ button.primary {
 .setting-rows .check {
   flex: none;
   font-size: 13px;
-}
-
-/* With nothing after it, as in the panel, the label fills the chip. */
-.chip-label:last-child {
-  padding-right: 8px;
 }
 
 /* A label that is not a button does not search, so it has no underline. */
@@ -1614,8 +1595,44 @@ span.chip-label:hover {
   align-items: center;
 }
 
+/* Tags one to a line, each no wider than what it holds: its name, then
+   how many of the selection carry it and its buttons. */
+.tag-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.tag-line {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.tag-line .chip {
+  min-width: 0;
+}
+
+.tag-line .chip-count {
+  padding-left: 5px;
+}
+
+.tag-line .chip-actions {
+  margin-left: 0;
+  border-left: none;
+}
+
+.tag-line .chip-actions button {
+  border-radius: 4px;
+}
+
 /* The input sits above its chips, so it stays put as values come and go. */
 .list-label + .chips,
+.list-label + .tag-lines,
 .list-label + .links {
   margin-top: 4px;
 }
@@ -1651,6 +1668,7 @@ span.chip-label:hover {
 /* Inside a modal, chips and link rows keep their own
    look rather than taking that of the modal's buttons. */
 .dialog .chip button:not(.primary),
+.dialog .tag-line button:not(.primary),
 .dialog .links button:not(.primary) {
   background: none;
   border: none;
@@ -1658,8 +1676,7 @@ span.chip-label:hover {
 }
 
 .dialog .chip .chip-label:not(.primary) {
-  padding: 1px 4px 1px 8px;
-  border-radius: 12px 0 0 12px;
+  padding: 1px 8px;
 }
 
 .dialog .chip-actions button:not(.primary),
@@ -1667,8 +1684,8 @@ span.chip-label:hover {
   padding: 1px 3px;
 }
 
-.dialog .chip-actions button:last-child:not(.primary) {
-  border-radius: 0 12px 12px 0;
+.dialog .tag-line .chip-actions button:not(.primary) {
+  border-radius: 4px;
 }
 
 .dialog .chip-add:hover:not(.primary) {
@@ -1712,15 +1729,14 @@ span.chip-label:hover {
   align-items: center;
 }
 
-/* A chip has three parts in three colours: the value, how many of the
-   selection carry it, and the buttons. */
+/* A chip is a tag's name as a label, in a box with square corners. */
 .chip {
   display: inline-flex;
   align-items: center;
   max-width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 3px;
 }
 
 .chip.partial {
@@ -1757,7 +1773,7 @@ span.chip-label:hover {
 
 .chip-label {
   min-width: 0;
-  padding: 1px 4px 1px 8px;
+  padding: 1px 8px;
   overflow: hidden;
   color: var(--text);
   text-overflow: ellipsis;
@@ -1785,10 +1801,6 @@ span.chip-label:hover {
 .chip-actions button {
   padding: 1px 3px;
   line-height: 1;
-}
-
-.chip-actions button:last-child {
-  border-radius: 0 12px 12px 0;
 }
 
 .chip-add {
@@ -2925,10 +2937,6 @@ kbd {
   flex-wrap: wrap;
   gap: 6px 8px;
   align-items: center;
-}
-
-.download-tags .chip.tinted .chip-label {
-  padding-right: 8px;
 }
 
 /* A downloader at work for an upload tab: its progress, and a way to stop it. */
