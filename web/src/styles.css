@@ -2479,6 +2479,16 @@ kbd {
   color: var(--muted);
 }
 
+/* The alias a tag was found by, struck out, in front of the tag. */
+.tag-alias-found {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* How many items carry the tag, at the end of its row. */
 .tag-row .tag-uses {
   margin-left: auto;

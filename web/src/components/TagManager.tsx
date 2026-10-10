@@ -103,6 +103,15 @@ export default function TagManager(props: {
       (tag) => has(tag.value) || has(tag.description) || tag.aliases.some((a) => has(a.value)),
     );
   });
+  /**
+   * The alias that brought a tag into the list: one that has what is typed
+   * when the tag's own name does not.
+   */
+  const aliasFound = (tag: TagEntry) => {
+    const text = typed().toLowerCase();
+    if (!text || tag.value.toLowerCase().includes(text)) return undefined;
+    return tag.aliases.find((alias) => alias.value.toLowerCase().includes(text));
+  };
   /** Whether what is typed names no tag or alias yet, and so could be one. */
   const creatable = () => {
     const name = normalized(typed());
@@ -258,6 +267,15 @@ export default function TagManager(props: {
                       aria-selected={selected() === tag}
                       onClick={() => select(tag)}
                     >
+                      {/* Found by an alias: the alias, struck out, then
+                          the tag it stands for. */}
+                      <Show when={aliasFound(tag)}>
+                        {(alias) => (
+                          <span class="tag-alias-found">
+                            <s>{alias().value}</s> →
+                          </span>
+                        )}
+                      </Show>
                       <span class="tag-name" style={tagTextStyle(field())}>
                         {tag.value}
                       </span>

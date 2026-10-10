@@ -262,7 +262,9 @@ function createTagBox(props: FieldProps & { initial?: string }) {
                   <>
                     <span class="suggestion-value">
                       <Show when={tag().alias}>
-                        <span class="suggestion-alias">{tag().alias} → </span>
+                        <span class="suggestion-alias">
+                          <s>{tag().alias}</s> →{" "}
+                        </span>
                       </Show>
                       {tag().value}
                     </span>
