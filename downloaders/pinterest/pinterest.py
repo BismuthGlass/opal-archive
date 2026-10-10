@@ -9,8 +9,10 @@
     pinterest.py cookies --file cookies.txt --out FILE
     pinterest.py download < request.json
 
-It takes pin, board, board section and profile URLs. Public boards need no
-login, but Pinterest hides some pins, and every secret board, from visitors
+It takes pin, board, board section and profile URLs. A profile stands for
+the pins its owner created and, going into what is inside, for its boards;
+its `_created` and `_saved` addresses stand for the one or the other. Public
+boards need no login, but Pinterest hides some pins, and every secret board, from visitors
 who are logged out.
 """
 from __future__ import annotations
@@ -158,6 +160,24 @@ def board_pins(user: str, slug: str, only_section: str | None, recursive: bool) 
     return pins
 
 
+def created_pins(user: str) -> list[dict]:
+    """The pins a user made themselves, as their profile lists under "Created"."""
+    emit("log", message=f"Listing what {user} created")
+    options = {
+        "username": user,
+        "field_set_key": "grid_item",
+        "exclude_add_pin_rep": True,
+        "is_own_profile_pins": False,
+    }
+    pins = list_pins("UserActivityPins", options)
+    # They refer to the user, named as Pinterest names them, as a board's
+    # pins refer to the board.
+    return [
+        {**p, "_in": f"pinterest:{(p.get('pinner') or {}).get('username') or user}"}
+        for p in pins
+    ]
+
+
 # --- media extraction --------------------------------------------------------
 
 
@@ -264,9 +284,19 @@ def collect(url: str, recursive: bool) -> list[dict]:
     user, rest = parts[0], [p for p in parts[1:] if not p.startswith("_")]
     if rest:
         return board_pins(user, rest[0], rest[1] if len(rest) > 1 else None, recursive)
-    if not recursive:
-        raise RuntimeError("a profile holds only boards: turn on going into what is inside")
+    # A profile: what its owner created, and the boards they saved to. Its
+    # two tabs have addresses of their own, each for the one alone.
+    tab = parts[1] if len(parts) > 1 else None
     pins: list[dict] = []
+    if tab != "_saved":
+        pins += created_pins(user)
+        emit("found", total=len(pins))
+    if tab == "_created":
+        return pins
+    if not recursive:
+        if tab == "_saved":
+            raise RuntimeError("the boards of a profile are inside it: turn on going into what is inside")
+        return pins
     for board in list_boards(user):
         slug = unquote(board["url"].strip("/").split("/")[-1])
         try:

@@ -83,7 +83,7 @@ the tags, and remembers the key.
 something to make a collection of: 4chan gives each file of a thread
 `4chan:<board>:<thread>`, Pinterest each pin of a board
 `pinterest:<user>:<board>`, or `pinterest:<user>:<board>:<section>` if it
-is in a section. It is kept as a reference of each file, by which the
+is in a section, and each pin a user created `pinterest:<user>`. It is kept as a reference of each file, by which the
 others are found (`reference=4chan:g:109956993`, or
 `reference=pinterest:someone:a-board*` for a board with its sections), and
 groups nothing. Start it with the downloader's name and namespace it with
