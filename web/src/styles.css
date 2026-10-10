@@ -628,9 +628,11 @@ button.primary {
   font-size: 11px;
   line-height: 0;
   color: #fff;
-  background: rgb(0 0 0 / 0.4);
+  background: rgb(0 0 0 / 0.5);
   border-radius: 4px;
   opacity: 0.8;
+  /* Over the title, which lies along the same edge. */
+  z-index: 1;
 }
 
 .tile:hover .new-mark {
