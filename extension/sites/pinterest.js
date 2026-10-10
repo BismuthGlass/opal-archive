@@ -31,21 +31,81 @@ const byTestId = (within, names) => {
 const PIN_ACTIONS = ["more-actions-button", "ellipsis-button", "share-button", "react-button"];
 
 /**
- * Puts the pin's button in the row of Pinterest's own, after the last of
- * them, and answers with it; `null` if the row was not found.
+ * The last two of Pinterest's own buttons over the pin, found by their
+ * names; `null` if fewer than two are named as expected.
  */
-function pinterestInBar(within) {
+function pinterestNamedActions(within) {
+  const found = PIN_ACTIONS.map((name) => within.querySelector(`[data-test-id="${name}"]`)).filter(Boolean);
+  const other = found.find((action) => !found[0].contains(action) && !action.contains(found[0]));
+  return other ? [found[0], other] : null;
+}
+
+/**
+ * The same, found by what they look like where their names are not known:
+ * a line of at least three icons, in the nearest thing around the pin's
+ * picture that has one. Answers with the last of the line, and the one
+ * before it.
+ */
+function pinterestIconRow(shown) {
+  // The picture itself, the largest there: what is laid over it, as a
+  // video's controls are, is not the row.
+  const area = (box) => box.width * box.height;
+  const picture = [...(shown?.querySelectorAll("img, video") ?? [])]
+    .map((media) => media.getBoundingClientRect())
+    .sort((a, b) => area(b) - area(a))[0];
+  const over = (icon) => {
+    if (!picture) return shown.contains(icon);
+    const box = icon.getBoundingClientRect();
+    const [x, y] = [box.left + box.width / 2, box.top + box.height / 2];
+    return x > picture.left && x < picture.right && y > picture.top && y < picture.bottom;
+  };
+  const cell = (icon) => icon.closest('[data-grid-item], [data-test-id="pin"], [data-test-id="pinWrapper"]');
+  for (let around = shown; around && around !== document.body; around = around.parentElement) {
+    const icons = [...around.querySelectorAll('button, [role="button"], a[href]')].filter(
+      (icon) =>
+        icon.querySelector("svg") &&
+        // One with a button inside it is not the button.
+        !icon.querySelector('button, [role="button"]') &&
+        !over(icon) &&
+        !icon.closest(".opalarchive-button") &&
+        // Not the buttons of another pin, in a grid beside this one. The
+        // pin on show can sit in a cell of a grid itself.
+        !(cell(icon) && !cell(icon).contains(shown)) &&
+        pinterestVisible(icon),
+    );
+    // A line of them: those whose middles are level, within a few pixels.
+    const middle = (icon) => {
+      const box = icon.getBoundingClientRect();
+      return box.top + box.height / 2;
+    };
+    for (const first of icons) {
+      const line = icons
+        .filter((icon) => Math.abs(middle(icon) - middle(first)) < 8)
+        .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+      if (line.length >= 3) return [line[line.length - 1], line[line.length - 2]];
+    }
+  }
+  return null;
+}
+
+/**
+ * Puts the pin's button in the row of Pinterest's own, after the last of
+ * them, and answers with it; `null` if the row was not found. The row is
+ * not always inside what Pinterest calls the pin, so the whole page is
+ * looked through for it too.
+ */
+function pinterestInBar(main, shown) {
   const had = document.querySelector(".opalarchive-button.opalarchive-bar");
   // One left from another pin, when the page went on to this one, would
   // still say what became of that one.
   if (had?.dataset.pin === pinId(location.pathname)) return had;
   had?.remove();
-  const found = PIN_ACTIONS.map((name) => within.querySelector(`[data-test-id="${name}"]`)).filter(Boolean);
-  // Two of them say where the row is: it is what holds them both.
-  const other = found.find((action) => !found[0].contains(action) && !action.contains(found[0]));
-  if (!other) return null;
-  // The last of the row is the part of it that holds the first one found.
-  let last = found[0];
+  const actions =
+    (main && pinterestNamedActions(main)) ?? pinterestNamedActions(document) ?? pinterestIconRow(shown);
+  if (!actions) return null;
+  // Two of them say where the row is: it is what holds them both, and its
+  // last part is the one holding the last of them.
+  let [last, other] = actions;
   while (last.parentElement && !last.parentElement.contains(other)) last = last.parentElement;
   if (!last.parentElement) return null;
   const button = opalButton(() => pinUrl(pinId(location.pathname)));
@@ -96,7 +156,7 @@ function pinterestScan() {
   while (shown && /^(IMG|VIDEO|PICTURE)$/.test(shown.tagName)) shown = shown.parentElement;
   // Among Pinterest's own buttons if they are found, and on the picture
   // if not.
-  let placed = here ? pinterestInBar(main ?? document) : null;
+  let placed = here ? pinterestInBar(main, shown) : null;
   if (placed) {
     shown?.querySelector(":scope > .opalarchive-button")?.remove();
   } else if (shown && here) {
