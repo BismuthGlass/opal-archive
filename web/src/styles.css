@@ -1149,22 +1149,17 @@ button.primary {
   border-left: none;
 }
 
-/* In the details list they are rows like the rest. One with several
-   values has them under its label, across the panel. */
-.facts .wide {
-  grid-column: 1 / -1;
-}
-
+/* In the details list they are rows like the rest, the values beside the
+   label, spaced as the rows are. */
 .facts .links {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
   margin: 0;
 }
 
 .facts .links li {
   padding: 0;
-}
-
-.facts dd.wide .links li {
-  padding: 1px 0;
 }
 
 .facts .list-label {

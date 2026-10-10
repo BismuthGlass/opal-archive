@@ -112,17 +112,16 @@ function Values(props: ListProps) {
 }
 
 /**
- * A plain list as a row of the details list. A single value is beside the
- * label, as any other detail is; several are under it, across the panel.
+ * A plain list as a row of the details list: its values beside the label,
+ * as any other detail is, one to a line.
  */
 export function PlainListRow(props: ListProps) {
-  const several = () => props.list.values(props.data).length > 1;
   return (
     <>
-      <dt classList={{ wide: several() }}>
+      <dt>
         <ListLabel label={props.list.label} onEdit={props.onEdit} />
       </dt>
-      <dd classList={{ wide: several() }}>
+      <dd>
         <Values {...props} />
       </dd>
     </>
