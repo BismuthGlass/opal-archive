@@ -1452,47 +1452,45 @@ button.primary {
   opacity: 0.6;
 }
 
-/* A type's colour on one theme, in the settings: a box that is that theme
-   whichever one is on, so the colour is seen as it will be. The theme's
-   colours are set again inside it, for what it holds to take. */
-.theme-sample {
-  display: flex;
-  flex: 0 0 176px;
-  gap: 6px;
-  align-items: center;
-  min-width: 0;
-  padding: 4px 4px 4px 10px;
+/* The list of types in the settings is drawn as one theme, whichever is
+   on, so the colours are seen as they will be there. That theme's colours
+   are set again inside it, for what it holds to take. */
+.theme-preview {
   color: var(--text);
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
 }
 
-.theme-sample.light {
+.theme-preview.light {
   --surface: #ffffff;
   --bg: #f4f4f6;
   --border: #d8d8de;
   --text: #1b1b1f;
   --muted: #6b6b76;
+  --accent: #3b5bdb;
+  color-scheme: light;
 }
 
-.theme-sample.dark {
+.theme-preview.dark {
   --surface: #1c1c20;
   --bg: #131315;
   --border: #2f2f36;
   --text: #e8e8ec;
   --muted: #9a9aa6;
+  --accent: #8098f9;
+  color-scheme: dark;
 }
 
-.theme-sample.light .tag-name {
+.theme-preview.light .tag-name {
   color: var(--tag-on-light, inherit);
 }
 
-.theme-sample.dark .tag-name {
+.theme-preview.dark .tag-name {
   color: var(--tag-on-dark, inherit);
 }
 
-.theme-sample .tag-name {
+/* A type's row: its name as its tags are written, taking the room left,
+   then what it goes by, its colour, and the rest. */
+.tag-type-rows .tag-name {
   display: block;
   flex: 1;
   overflow: hidden;
@@ -1500,7 +1498,11 @@ button.primary {
   white-space: nowrap;
 }
 
-.theme-sample input {
+.tag-type-rows .type-prefix {
+  flex: 0 0 44px;
+}
+
+.tag-type-rows input[type="color"] {
   flex: none;
   width: 28px;
   height: 22px;
@@ -1511,27 +1513,36 @@ button.primary {
   cursor: pointer;
 }
 
-.theme-sample button {
+.tag-type-rows button {
   flex: none;
 }
 
-/* Over the rows of types, what each of the two boxes is. */
-.theme-heads {
+/* Over the list: which theme it is shown on. */
+.theme-switch {
   display: flex;
   gap: 12px;
-  /* As far in as the boxes: past the row's edge and its handle. */
-  padding: 0 0 0 45px;
-  margin: 12px 0 -8px;
-  font-size: 12px;
-  color: var(--muted);
+  align-items: center;
+  margin-top: 10px;
+  font-size: 13px;
 }
 
-.theme-heads span {
-  flex: 0 0 176px;
+.theme-switch .link {
+  margin-left: auto;
 }
 
-.tag-type-rows .type-prefix {
-  flex: 1;
+/* A heading with the button that explains it beside it. */
+.with-help {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* In a modal the button keeps its own look, not that of the modal's buttons. */
+.dialog .help-button:not(.primary) {
+  padding: 2px;
+  background: none;
+  border: none;
+  border-radius: 50%;
 }
 
 .setting-rows .check {
@@ -1700,6 +1711,12 @@ span.chip-label:hover {
    stands out, one to be taken off is struck through. */
 .tag-name.added {
   font-weight: 600;
+}
+
+/* Underlined as well: a type may be bold of itself. */
+.tag-name.added .chip-label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .tag-name.removed {

@@ -12,7 +12,14 @@ export type Settings = {
    */
   tagTypes?: Record<
     string,
-    { light?: string | null; dark?: string | null; aggregate?: boolean; bg?: string; fg?: string }
+    {
+      light?: string | null;
+      dark?: string | null;
+      bold?: boolean;
+      aggregate?: boolean;
+      bg?: string;
+      fg?: string;
+    }
   >;
   /** The tag types in the order they are listed, if not the default one. */
   tagTypeOrder?: string[];

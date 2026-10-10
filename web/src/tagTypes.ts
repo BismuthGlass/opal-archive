@@ -9,6 +9,8 @@ export type TagType = {
    */
   light: string | null;
   dark: string | null;
+  /** Whether its tags are written in bold. */
+  bold: boolean;
   /**
    * Whether its tags are shown with those of the other aggregated types,
    * in one list told apart by colour, or in a section of their own.
@@ -21,20 +23,20 @@ export type TagType = {
 // (flaws, language, where it came from, what it is for) apart, as they do
 // the bucket a file is kept in.
 const DEFAULTS: Record<(typeof TAG_FIELDS)[number], TagType> = {
-  tags: { light: null, dark: null, aggregate: true }, // the neutral ones: as the text is
-  creator: { light: "#a85400", dark: "#ffd8a8", aggregate: true }, // amber: a signature
-  character: { light: "#1a7a35", dark: "#c5efcf", aggregate: true }, // green: the living
-  source_work: { light: "#3040b0", dark: "#d5dbff", aggregate: true }, // indigo: a book spine
-  person: { light: "#b0204f", dark: "#ffd2df", aggregate: true }, // rose: real people
-  genre: { light: "#6a2bc0", dark: "#e5d3ff", aggregate: true }, // violet: mood
-  style: { light: "#0a777d", dark: "#c6f0f1", aggregate: true }, // teal: the brush
-  medium: { light: "#7d5a0a", dark: "#f2e2c2", aggregate: true }, // canvas
-  flaws: { light: "#b3261e", dark: "#ffd0cb", aggregate: false }, // red: a warning
-  language: { light: "#1565a8", dark: "#d1ebff", aggregate: false }, // sky
-  source: { light: "#556b0f", dark: "#e2e8c6", aggregate: false }, // olive: provenance
-  usage_tags: { light: "#8a6500", dark: "#ffe8a3", aggregate: false }, // sticky note
-  ai_usage_tags: { light: "#54497f", dark: "#d8d5e8", aggregate: false }, // machine grey
-  bucket: { light: "#3b4252", dark: "#f1f3f7", aggregate: false }, // a label on a box
+  tags: { light: null, dark: null, bold: false, aggregate: true }, // the neutral ones: as the text is
+  creator: { light: "#a85400", dark: "#ffd8a8", bold: false, aggregate: true }, // amber: a signature
+  character: { light: "#1a7a35", dark: "#c5efcf", bold: false, aggregate: true }, // green: the living
+  source_work: { light: "#3040b0", dark: "#d5dbff", bold: false, aggregate: true }, // indigo: a book spine
+  person: { light: "#b0204f", dark: "#ffd2df", bold: false, aggregate: true }, // rose: real people
+  genre: { light: "#6a2bc0", dark: "#e5d3ff", bold: false, aggregate: true }, // violet: mood
+  style: { light: "#0a777d", dark: "#c6f0f1", bold: false, aggregate: true }, // teal: the brush
+  medium: { light: "#7d5a0a", dark: "#f2e2c2", bold: false, aggregate: true }, // canvas
+  flaws: { light: "#b3261e", dark: "#ffd0cb", bold: false, aggregate: false }, // red: a warning
+  language: { light: "#1565a8", dark: "#d1ebff", bold: false, aggregate: false }, // sky
+  source: { light: "#556b0f", dark: "#e2e8c6", bold: false, aggregate: false }, // olive: provenance
+  usage_tags: { light: "#8a6500", dark: "#ffe8a3", bold: false, aggregate: false }, // sticky note
+  ai_usage_tags: { light: "#54497f", dark: "#d8d5e8", bold: false, aggregate: false }, // machine grey
+  bucket: { light: "#3b4252", dark: "#f1f3f7", bold: false, aggregate: false }, // a label on a box
 };
 
 /**
@@ -143,11 +145,16 @@ export const isCustom = (field: string) => settings.tagTypes?.[field] !== undefi
 /**
  * Inline style for a tag's name, which is written in its type's colour:
  * the type's two colours, for the stylesheet to take the one for the
- * theme. A type with no colour of its own leaves the text as it is.
+ * theme. A type with no colour of its own leaves the text as it is. A
+ * bold type's weight is set outright.
  */
 export const tagTextStyle = (field: string) => {
-  const { light, dark } = tagType(field);
-  return { "--tag-on-light": light ?? "initial", "--tag-on-dark": dark ?? "initial" };
+  const { light, dark, bold } = tagType(field);
+  return {
+    "--tag-on-light": light ?? "initial",
+    "--tag-on-dark": dark ?? "initial",
+    "font-weight": bold ? 700 : undefined,
+  };
 };
 
 /**

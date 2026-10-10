@@ -232,7 +232,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 
 ### Showing tags
 
-- A tag is written in the colour of its type, with no background. Each type has two colours, one for the light theme and one for the dark, both configurable in the settings; either can be left out, and the type is then written as the rest of the text is. The settings show each type as it looks on both themes, whichever is on.
+- A tag is written in the colour of its type, with no background. Each type has two colours, one for the light theme and one for the dark, both configurable in the settings; either can be left out, and the type is then written as the rest of the text is. A type can also be bold. The settings list the types as they look on one theme, and can be switched to the other without changing the theme that is on.
 - Clicking a tag in the side panel adds the tag to the query in the search box, without searching. A right click on it offers to search for the tag in a new tab, or to open it in the tag manager. The heading of a namespace does the same for everything in the namespace, without the tag manager.
 - The settings also say which types are aggregated. The aggregated types share one list on a file, told apart only by colour; each of the others has a section of its own.
 - By default the types that describe the work are aggregated (tags, creator, character, source work, person, genre, style, medium) and the rest are not (bucket, flaws, language, source, usage tags, AI usage tags).
@@ -243,7 +243,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - Wherever a tag is typed, to add it or to search for it, its type is written in front of it: `@cr:name` is the creator `name`. A tag with nothing in front is a plain tag.
 - Each type has a two-letter name: `@cr:` creator, `@ch:` character, `@sw:` source work, `@pe:` person, `@ge:` genre, `@st:` style, `@me:` medium, `@fl:` flaws, `@la:` language, `@so:` source, `@us:` usage tags, `@ai:` AI usage tags, `@bu:` bucket, and `@ta:` for plain tags. The full name works too (`@creator:`). Only the first colon ends the type; any after it belong to the tag's namespaces.
 - There is one place to add and remove tags, for every type: the tagger. Typing `@` suggests the types; after the colon the suggestions are that type's tags.
-- Tags put on and taken off there change nothing until they are saved: they wait, shown as they will be, a tag to be put on standing out and one to be taken off struck through, and each can be called off. They are saved with the Save button or with Shift and Enter, which also takes in a tag still typed in the box. Closing the window with changes waiting asks first; the Discard button drops them without asking.
+- Tags put on and taken off there change nothing until they are saved: they wait, shown as they will be, a tag to be put on in bold and underlined and one to be taken off struck through, and each can be called off. They are saved with the Save button or with Shift and Enter, which also takes in a tag still typed in the box. Closing the window with changes waiting asks first; the Discard button drops them without asking.
 - The same goes for searching: `@us:wallpaper` finds that usage tag, `@us:*` everything with a usage tag. There is no other way to search tags by type.
 - No tag can start with `@`.
 - `@` is also how other things are told apart from plain tags. `@trashed` is the first: a state rather than a tag.

@@ -203,19 +203,59 @@ function TagTypes() {
       report,
     );
 
+  /** Whether the long account of what all this is has been asked for. */
+  const [explained, setExplained] = createSignal(false);
+  /** The theme the types are shown on: the one that is on, to begin with. */
+  const [theme, setTheme] = createSignal<Theme>(
+    window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+  );
+  /** A type's colour on the theme on show. */
+  const colour = (field: string) => tagType(field)[theme()];
+
   return (
     <>
-      <h3>Tag types</h3>
-      <p class="hint">
-        A tag is of a type, written in front of it wherever tags are typed: <code>@cr:name</code>{" "}
-        is a creator, and a tag with no @ is a plain one. A tag is written in the colour of its
-        type, which has one for the light theme and one for the dark: each row shows its type as
-        it looks on both, whichever theme is on. A type with no colour is written as the rest of
-        the text is. The types ticked as aggregated share one list in the side panel; the others
-        each get a section of their own. Drag a row by its handle to change the order the types
-        are listed in.
+      <h3 class="with-help">
+        Tag types
+        <button
+          class="help-button"
+          aria-label="About tag types"
+          aria-expanded={explained()}
+          title="About tag types"
+          onClick={() => setExplained((shown) => !shown)}
+        >
+          <Icon name="help-outline" />
+        </button>
+      </h3>
+      <Show when={explained()}>
+        <p class="hint">
+          A tag is of a type, written in front of it wherever tags are typed:{" "}
+          <code>@cr:name</code> is a creator, and a tag with no @ is a plain one. A tag is written
+          in the colour of its type, which has one for the light theme and one for the dark, and
+          in bold if its type is. The list is shown on one theme at a time, whichever is on:
+          switch it to see and set the colours of the other. The × beside a colour drops it, and
+          the type is then written as the rest of the text is. The types ticked as aggregated
+          share one list in the side panel; the others each get a section of their own. Drag a
+          row by its handle to change the order the types are listed in.
+        </p>
+      </Show>
+      <div class="theme-switch">
+        <span class="hint">Show on</span>
+        <div class="segmented" role="radiogroup" aria-label="Theme to show the types on">
+          <For each={THEMES}>
+            {(option) => (
+              <label class="check">
+                <input
+                  type="radio"
+                  name="type-theme"
+                  checked={theme() === option}
+                  onChange={() => setTheme(option)}
+                />
+                {option === "light" ? "Light" : "Dark"}
+              </label>
+            )}
+          </For>
+        </div>
         <Show when={isCustomOrder()}>
-          {" "}
           <button
             class="link"
             onClick={() => setTagTypeOrder(null).then(() => setError(null), report)}
@@ -223,12 +263,9 @@ function TagTypes() {
             Reset the order
           </button>
         </Show>
-      </p>
-      <div class="theme-heads" aria-hidden="true">
-        <span>On the light theme</span>
-        <span>On the dark theme</span>
       </div>
-      <ul class="setting-rows tag-type-rows" ref={list}>
+      {/* The list is of the theme on show, whichever theme is on. */}
+      <ul class="setting-rows tag-type-rows theme-preview" classList={{ [theme()]: true }} ref={list}>
         <For each={drag.order()}>
           {(field) => (
             <li classList={{ dragging: drag.dragging() === field }}>
@@ -239,16 +276,36 @@ function TagTypes() {
               >
                 <Icon name="drag-indicator" />
               </span>
-              <For each={THEMES}>
-                {(theme) => (
-                  <ThemeColour
-                    field={field}
-                    theme={theme}
-                    onChange={(colour) => change(field, { [theme]: colour })}
-                  />
-                )}
-              </For>
+              <span class="tag-name" style={tagTextStyle(field)}>
+                {fieldLabel(field)}
+              </span>
               <code class="hint type-prefix">@{prefixOf(field)}:</code>
+              <input
+                type="color"
+                aria-label={`Colour of ${fieldLabel(field)} on the ${theme()} theme`}
+                title={`Colour on the ${theme()} theme`}
+                value={colour(field) ?? THEME_TEXT[theme()]}
+                onChange={(event) => change(field, { [theme()]: event.currentTarget.value })}
+              />
+              <button
+                class="plain"
+                aria-label={`No colour for ${fieldLabel(field)} on the ${theme()} theme`}
+                title="No colour: write it as the rest of the text is"
+                // Kept in its place when there is no colour to drop, so the rows line up.
+                style={{ visibility: colour(field) === null ? "hidden" : "visible" }}
+                onClick={() => change(field, { [theme()]: null })}
+              >
+                <Icon name="close" />
+              </button>
+              <label class="check" title="Write its tags in bold">
+                <input
+                  type="checkbox"
+                  aria-label={`Bold ${fieldLabel(field)}`}
+                  checked={tagType(field).bold}
+                  onChange={(event) => change(field, { bold: event.currentTarget.checked })}
+                />
+                Bold
+              </label>
               <label class="check" title="Show with the other aggregated types in one list">
                 <input
                   type="checkbox"
@@ -281,46 +338,9 @@ function TagTypes() {
 }
 
 const THEMES = ["light", "dark"] as const;
+type Theme = (typeof THEMES)[number];
 /** The text colour of each theme, which a type with no colour is written in. */
 const THEME_TEXT = { light: "#1b1b1f", dark: "#e8e8ec" };
-
-/**
- * A type's colour on one theme: the type's name as it looks there, on
- * that theme's own background whichever theme is on, with the colour to
- * pick and a button to go without one.
- */
-function ThemeColour(props: {
-  field: string;
-  theme: (typeof THEMES)[number];
-  onChange: (colour: string | null) => void;
-}) {
-  const colour = () => tagType(props.field)[props.theme];
-  const what = () => `${fieldLabel(props.field)} on the ${props.theme} theme`;
-  return (
-    <div class="theme-sample" classList={{ [props.theme]: true }}>
-      <span class="tag-name" style={tagTextStyle(props.field)}>
-        {fieldLabel(props.field)}
-      </span>
-      <input
-        type="color"
-        aria-label={`Colour of ${what()}`}
-        title={`Colour of ${what()}`}
-        value={colour() ?? THEME_TEXT[props.theme]}
-        onChange={(event) => props.onChange(event.currentTarget.value)}
-      />
-      <button
-        class="plain"
-        aria-label={`No colour for ${what()}`}
-        title="No colour: write it as the rest of the text is"
-        // Kept in its place when there is no colour to drop, so the boxes line up.
-        style={{ visibility: colour() === null ? "hidden" : "visible" }}
-        onClick={() => props.onChange(null)}
-      >
-        <Icon name="close" />
-      </button>
-    </div>
-  );
-}
 
 /** The queries kept to be used again: their names, text and order. */
 function SavedQueries() {
