@@ -1,13 +1,13 @@
-import { createResource, createSignal, For, onMount, Show } from "solid-js";
+// The parts a panel that downloads is made of: how a download is going,
+// the tags given to what arrives, a downloader's login, and what a tab has
+// downloaded before. The upload tab's panel and the inbox's are made of them.
+import { createResource, createSignal, For, Show } from "solid-js";
 import * as api from "../api";
-import type { Changes, DownloadJob, DownloadState, Metadata } from "../api";
-import { downloadState, loadDownload, startDownload } from "../downloads";
-import type { PanelProps } from "../downloaders";
+import type { Changes, DownloadJob, Downloader, Metadata } from "../api";
 import { dateTime, errorMessage, fieldLabel, plural } from "../format";
 import { pillStyle } from "../tagTypes";
 import Icon from "./Icon";
 import Modal from "./Modal";
-import { createStoredFlag } from "./Panel";
 import { TagsEditor } from "./Tags";
 
 /** How a download went, or is going, in a sentence. */
@@ -21,148 +21,6 @@ function summary(job: DownloadJob) {
     ...(job.skipped > 0 ? [`${job.skipped} skipped as seen before`] : []),
     ...(job.failed > 0 ? [`${job.failed} failed`] : []),
   ].join(", ");
-}
-
-/**
- * The panel at the top of a download tab, built from the downloader's
- * manifest: the box an address is pasted into, and under it the settings
- * of this tab (the downloader's options, the tags given to everything
- * downloaded, the login, and what has been downloaded before).
- */
-export default function DownloadPanel(props: PanelProps) {
-  const [url, setUrl] = createSignal("");
-  const [error, setError] = createSignal<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = createStoredFlag("opalarchive.download.settings", true);
-  const [showSeen, setShowSeen] = createSignal(false);
-  const state = () => downloadState(props.tab);
-  const running = () => state()?.job?.running ?? false;
-
-  /** Does something, shows what went wrong if anything, and reads the state again. */
-  const attempt = async (action: () => Promise<unknown>) => {
-    try {
-      await action();
-      setError(null);
-    } catch (err) {
-      setError(errorMessage(err));
-    }
-    await loadDownload(props.tab).catch(() => {});
-  };
-  onMount(() => attempt(async () => {}));
-
-  const start = () => {
-    const address = url().trim();
-    if (!address || running()) return;
-    attempt(async () => {
-      await startDownload(props.tab, address);
-      setUrl("");
-    });
-  };
-
-  return (
-    <Show when={state()}>
-      {(data) => (
-        <section class="download-panel" aria-label={`${data().downloader.title} downloader`}>
-          <div class="download-row">
-            <input
-              type="text"
-              class="download-url"
-              aria-label="Address to download"
-              placeholder={data().downloader.url_hint || "An address to download"}
-              autocomplete="off"
-              spellcheck={false}
-              value={url()}
-              onInput={(event) => setUrl(event.currentTarget.value)}
-              onKeyDown={(event) => event.key === "Enter" && start()}
-            />
-            <Show
-              when={running()}
-              fallback={
-                <button class="primary" disabled={!url().trim()} onClick={start}>
-                  Download
-                </button>
-              }
-            >
-              <button onClick={() => attempt(() => api.cancelDownload(props.tab))}>Cancel</button>
-            </Show>
-            <button
-              class="icon-button"
-              aria-pressed={settingsOpen()}
-              aria-label="Settings of this downloader"
-              title={settingsOpen() ? "Hide the settings" : "Show the settings"}
-              onClick={() => setSettingsOpen(!settingsOpen())}
-            >
-              <Icon name="settings-outline" />
-            </button>
-          </div>
-          <Show when={error()}>
-            <p class="form-error" role="alert">
-              {error()}
-            </p>
-          </Show>
-          <Show when={data().job}>{(job) => <Progress job={job()} />}</Show>
-          <Show when={settingsOpen()}>
-            {/* A label beside each setting. */}
-            <div class="download-settings">
-              <Show when={data().downloader.options.length > 0}>
-                <span class="label">Options</span>
-              </Show>
-              <div class="download-options">
-                <For each={data().downloader.options}>
-                  {(option) => (
-                    <label class="download-option">
-                      <input
-                        type="checkbox"
-                        checked={data().options[option.key] ?? option.default}
-                        onChange={(event) => {
-                          const value = event.currentTarget.checked;
-                          attempt(() =>
-                            api.configureDownload(props.tab, { options: { [option.key]: value } }),
-                          );
-                        }}
-                      />
-                      {option.label}
-                    </label>
-                  )}
-                </For>
-              </div>
-              <BaseTags
-                data={data()}
-                error={error()}
-                onChange={(tags) => attempt(() => api.configureDownload(props.tab, { tags }))}
-              />
-              <Show when={data().downloader.cookies}>
-                <Login data={data()} attempt={attempt} />
-              </Show>
-              <span class="label">Seen before</span>
-              <div>
-                <Show
-                  when={data().seen > 0}
-                  fallback={
-                    <span class="hint">
-                      Nothing yet. What this tab downloads is skipped the next time.
-                    </span>
-                  }
-                >
-                  <button class="link" onClick={() => setShowSeen(true)}>
-                    {plural(data().seen, "item")}, skipped when met again
-                  </button>
-                </Show>
-              </div>
-            </div>
-          </Show>
-          <Show when={showSeen()}>
-            <SeenList
-              tab={props.tab}
-              onClose={() => {
-                setShowSeen(false);
-                attempt(async () => {});
-              }}
-            />
-          </Show>
-        </section>
-      )}
-    </Show>
-  );
 }
 
 /** How the tab's download is going, or how the last one went. */
@@ -220,7 +78,7 @@ export function Progress(props: { job: DownloadJob }) {
  */
 export function BaseTags(props: {
   /** The tags, and the downloader if they are a downloader's. */
-  data: Pick<DownloadState, "tags"> & { downloader?: DownloadState["downloader"] };
+  data: { tags: Record<string, string[]>; downloader?: Downloader };
   /** What went wrong with the last change, if anything. */
   error: string | null;
   onChange: (tags: Record<string, string[]>) => void;
@@ -325,10 +183,10 @@ export function BaseTags(props: {
 
 /**
  * The downloader's login to its site, read from a browser and kept by the
- * server. It is shared by every tab of the downloader.
+ * server, for every download it does.
  */
 export function Login(props: {
-  data: Pick<DownloadState, "downloader">;
+  data: { downloader: Downloader };
   attempt: (action: () => Promise<unknown>) => void;
 }) {
   const downloader = () => props.data.downloader;
@@ -427,7 +285,7 @@ export function Login(props: {
 }
 
 /** What the tab has downloaded before; forgetting one has it fetched again. */
-function SeenList(props: { tab: number; onClose: () => void }) {
+export function SeenList(props: { tab: number; onClose: () => void }) {
   const [seen, { refetch }] = createResource(() => props.tab, api.seenDownloads);
   const [error, setError] = createSignal<string | null>(null);
   const forget = async (keys?: string[]) => {

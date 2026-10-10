@@ -1,25 +1,27 @@
-import { createResource, createSignal, For, Show } from "solid-js";
-import * as api from "../api";
+import { createSignal, For, Show } from "solid-js";
 import type { Tab, TabKind } from "../api";
-import { fieldLabel } from "../format";
 import { activeId, close, move, open, rename, saveOrder, select, tabs } from "../tabs";
 
 const ICONS: Record<TabKind, IconName> = {
   gallery: "photo-library-outline",
   upload: "upload",
   collection: "folder-outline",
-  download: "download",
   inbox: "inbox-outline",
   selection: "select-all",
 };
 import type { IconName } from "./Icon";
 import Icon from "./Icon";
 
-/** The kinds of tab the + button offers, before one for each downloader.
-    A collection tab is opened from its collection instead. */
+/** The kinds of tab the + button offers. A collection tab is opened from
+    its collection instead. A downloader has none of its own: an upload tab
+    takes the addresses of every downloader's site. */
 const KINDS: { kind: TabKind; label: string; title?: string }[] = [
   { kind: "gallery", label: "Gallery" },
-  { kind: "upload", label: "Upload" },
+  {
+    kind: "upload",
+    label: "Upload",
+    title: "Upload files, or download what is at a web address",
+  },
   {
     kind: "inbox",
     label: "Inbox",
@@ -39,8 +41,6 @@ function described(tab: Tab) {
         ? "Inbox"
         : tab.kind === "selection"
           ? "Selection"
-        : tab.kind === "download"
-        ? fieldLabel(tab.downloader ?? "download")
         : tab.collection?.title ||
           tab.collection?.collection_id ||
           `Collection #${tab.collection?.id}`;
@@ -50,9 +50,6 @@ function described(tab: Tab) {
 /** The + button, and the menu of tab kinds it opens. */
 function NewTab() {
   const [menu, setMenu] = createSignal(false);
-  // Read each time the menu opens: a downloader is a folder on the server,
-  // and one may have been added.
-  const [downloaders] = createResource(menu, (open) => (open ? api.listDownloaders() : []));
   return (
     <div
       class="tab-new"
@@ -93,26 +90,6 @@ function NewTab() {
                 >
                   <Icon name={ICONS[entry.kind]} />
                   {entry.label}
-                </button>
-              </li>
-            )}
-          </For>
-          <Show when={(downloaders.latest ?? []).length > 0}>
-            <li class="menu-divider" role="separator" />
-          </Show>
-          <For each={downloaders.latest ?? []}>
-            {(downloader) => (
-              <li role="none">
-                <button
-                  role="menuitem"
-                  title={`Download from ${downloader.title} into a tab`}
-                  onClick={() => {
-                    setMenu(false);
-                    open("download", "", downloader.name);
-                  }}
-                >
-                  <Icon name={ICONS.download} />
-                  {downloader.title}
                 </button>
               </li>
             )}

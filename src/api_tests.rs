@@ -891,7 +891,9 @@ impl Api {
             "title": "Fake",
             "source": "fakesite",
             "command": ["sh", "fake.sh"],
-            "sites": ["example.test"],
+            // Each is found by a site of its own: the fake one's, or one
+            // named for it.
+            "sites": [if name == "fake" { "example.test".to_string() } else { format!("{name}.test") }],
             "options": [{ "key": "deep", "label": "Go deep", "default": true }],
         });
         std::fs::write(folder.join("manifest.json"), manifest.to_string()).unwrap();
@@ -926,44 +928,65 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     let api = Api::new();
     api.fake_downloader();
     assert_eq!(api.get("/downloaders").await[0]["name"], "fake");
+    // A downloader has no tab of its own: an upload tab takes its addresses.
     api.refused(
         "/tabs",
-        json!({ "kind": "download", "downloader": "nothing" }),
+        json!({ "kind": "download", "downloader": "fake" }),
     )
     .await;
-    api.refused("/tabs", json!({ "kind": "download" })).await;
-    let tab = api
-        .post("/tabs", json!({ "kind": "download", "downloader": "fake" }))
-        .await["id"]
+    let tab = api.post("/tabs", json!({ "kind": "upload" })).await["id"]
         .as_i64()
         .unwrap();
     let path = format!("/tabs/{tab}/download");
 
+    // What is downloaded gets the tags the tab gives what is uploaded.
     let (status, _) = api
         .call(
             "PATCH",
-            &path,
+            &format!("/tabs/{tab}/upload"),
             Some(json!({ "tags": { "tags": [" wall : paper ", "wall:paper"], "creator": ["Someone"] } })),
         )
         .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     let before = api.get(&path).await;
-    assert_eq!(before["options"], json!({ "deep": true }));
+    assert_eq!(before, json!({ "seen": 0, "job": null }));
+
+    // A downloader's options are set once, for every tab.
     assert_eq!(
-        before["tags"],
-        json!({ "creator": ["Someone"], "tags": ["wall:paper"] })
+        api.get("/downloaders").await[0]["settings"],
+        json!({ "deep": true })
     );
-    assert_eq!(before["job"], Value::Null);
+    let shallow = json!({ "options": { "deep": false } });
+    api.ok("PATCH", "/downloaders/fake", Some(shallow)).await;
+    assert_eq!(
+        api.get("/downloaders").await[0]["settings"],
+        json!({ "deep": false })
+    );
     for bad in [
         json!({ "options": { "shallow": true } }),
         json!({ "tags": { "tags": ["@x"] } }),
     ] {
         assert_eq!(
-            api.call("PATCH", &path, Some(bad)).await.0,
+            api.call("PATCH", "/downloaders/fake", Some(bad)).await.0,
             StatusCode::BAD_REQUEST
         );
     }
     api.refused(&format!("{path}/start"), json!({ "url": "not an address" }))
+        .await;
+    // An address that is of no downloader's site starts nothing, and says
+    // so: it may be a file's, to be fetched as one.
+    let other = json!({ "url": "https://elsewhere.test/picture.png" });
+    assert_eq!(
+        api.post(&format!("{path}/start"), other).await,
+        json!({ "downloader": null })
+    );
+    assert_eq!(api.get(&path).await["job"], Value::Null);
+    // Nothing is downloaded into a tab that takes no uploads.
+    let gallery = api.post("/tabs", json!({ "kind": "gallery" })).await["id"]
+        .as_i64()
+        .unwrap();
+    let board = json!({ "url": "https://example.test/board" });
+    api.refused(&format!("/tabs/{gallery}/download/start"), board)
         .await;
 
     let stale = json!({ "query": "", "ids": [], "custom": false });
@@ -1163,8 +1186,8 @@ async fn a_download_can_be_cancelled_and_can_fail() {
         "broken",
         "cat > /dev/null; echo 'the site said no' >&2; exit 3",
     );
-    let new = async |name: &str| {
-        let tab = json!({ "kind": "download", "downloader": name });
+    let new = async || {
+        let tab = json!({ "kind": "upload" });
         api.post("/tabs", tab).await["id"].as_i64().unwrap()
     };
     let job = async |tab: i64| api.get(&format!("/tabs/{tab}/download")).await["job"].clone();
@@ -1178,11 +1201,14 @@ async fn a_download_can_be_cancelled_and_can_fail() {
         }
         panic!("the download never ended");
     };
-    let start = json!({ "url": "https://example.test/" });
+    // Each address finds its downloader by its site.
+    let start = json!({ "url": "https://slow.test/" });
 
-    let slow = new("slow").await;
-    api.post(&format!("/tabs/{slow}/download/start"), start.clone())
+    let slow = new().await;
+    let started = api
+        .post(&format!("/tabs/{slow}/download/start"), start.clone())
         .await;
+    assert_eq!(started, json!({ "downloader": "slow" }));
     // One at a time per tab.
     api.refused(&format!("/tabs/{slow}/download/start"), start.clone())
         .await;
@@ -1194,7 +1220,8 @@ async fn a_download_can_be_cancelled_and_can_fail() {
     assert_eq!(ended(slow).await["outcome"], "cancelled");
 
     // A script that fails says why on its last line.
-    let broken = new("broken").await;
+    let broken = new().await;
+    let start = json!({ "url": "https://www.broken.test/thing" });
     api.post(&format!("/tabs/{broken}/download/start"), start)
         .await;
     assert_eq!(ended(broken).await["outcome"], "the site said no");
@@ -1294,8 +1321,8 @@ async fn the_inbox_downloads_what_it_is_sent() {
     assert_eq!(send("https://elsewhere.test/item").await.0, StatusCode::BAD_REQUEST);
     assert_eq!(send("not an address").await.0, StatusCode::BAD_REQUEST);
 
-    // The downloader is set for the inbox as a tab would set it.
-    api.ok("PATCH", "/inbox/settings/fake", Some(json!({ "tags": { "tags": ["sent"] } })))
+    // The downloader is given tags of its own for the inbox.
+    api.ok("PATCH", "/downloaders/fake", Some(json!({ "tags": { "tags": ["sent"] } })))
         .await;
 
     // It is found by the site, a subdomain of it included, and queued. It
@@ -1341,7 +1368,6 @@ async fn the_inbox_downloads_what_it_is_sent() {
     assert_eq!(api.found("sent once \"@cr:A Sender\" @ge:quick kind=file").await.len(), 3);
     let tabs = api.get("/tabs").await;
     assert_eq!(tabs[0]["kind"], "inbox");
-    assert_eq!(tabs[0]["downloader"], Value::Null);
     // Asked for again, it is the same tab.
     let again = api.post("/tabs", json!({ "kind": "inbox" })).await;
     assert_eq!(again["id"], tab);

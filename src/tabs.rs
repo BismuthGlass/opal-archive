@@ -14,8 +14,9 @@ struct Tab {
     id: i64,
     position: i64,
     /// `gallery`, a search of the library; `upload`, the files uploaded
-    /// through the tab; `download`, the files a downloader fetched for it;
-    /// or `collection`, the members of one collection.
+    /// or downloaded through the tab; `inbox`, what was sent to be
+    /// downloaded from outside; `selection`, the entities it was given; or
+    /// `collection`, the members of one collection.
     kind: String,
     /// What the tab searches for; in an upload or collection tab, a filter
     /// on what it holds.
@@ -24,8 +25,6 @@ struct Tab {
     name: String,
     /// The collection a collection tab shows.
     collection: Option<TabCollection>,
-    /// The downloader a download tab uses.
-    downloader: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -45,8 +44,6 @@ struct NewTab {
     query: String,
     /// For a collection tab, the collection.
     collection: Option<i64>,
-    /// For a download tab, the downloader.
-    downloader: Option<String>,
     /// For a selection tab, the entities it is to hold.
     #[serde(default)]
     ids: Vec<i64>,
@@ -105,7 +102,7 @@ fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
         }),
         None => None,
     };
-    // The inbox is kept as a download tab of no one downloader.
+    // The inbox is kept as a tab of the kind `download`, the only one.
     let downloader: Option<String> = row.get(8)?;
     let inbox = downloader.as_deref() == Some(downloads::inbox::ANY);
     Ok(Tab {
@@ -122,7 +119,6 @@ fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
         query: row.get(3)?,
         name: row.get(4)?,
         collection,
-        downloader: downloader.filter(|_| !inbox),
     })
 }
 
@@ -207,13 +203,17 @@ async fn create(
             return Err(ApiError::bad_request("no such collection"));
         }
     }
-    if let Some(name) = &input.downloader {
-        downloads::manifest(&state, name)?;
+    // A downloader has no tab of its own: an upload tab takes its addresses.
+    if !["gallery", "upload", "collection"].contains(&input.kind.as_str()) {
+        return Err(ApiError::BadRequest(format!(
+            "`{}` is not a kind of tab",
+            input.kind
+        )));
     }
     conn.execute(
-        "INSERT INTO tab (position, kind, query, collection_id, downloader)
-         VALUES ((SELECT coalesce(max(position), -1) + 1 FROM tab), ?1, ?2, ?3, ?4)",
-        params![input.kind, input.query, input.collection, input.downloader],
+        "INSERT INTO tab (position, kind, query, collection_id)
+         VALUES ((SELECT coalesce(max(position), -1) + 1 FROM tab), ?1, ?2, ?3)",
+        params![input.kind, input.query, input.collection],
     )?;
     let tab = one(&conn, conn.last_insert_rowid())?;
     Ok((StatusCode::CREATED, Json(tab)))

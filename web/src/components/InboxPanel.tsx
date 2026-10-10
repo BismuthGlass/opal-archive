@@ -4,7 +4,8 @@ import type { InboxRequest } from "../api";
 import { errorMessage, fieldLabel, plural } from "../format";
 import { pillStyle } from "../tagTypes";
 import { inbox, loadInbox } from "../inbox";
-import { BaseTags, Login, Progress } from "./DownloadPanel";
+import { BaseTags, Progress } from "./DownloadPanel";
+import DownloaderSettings from "./DownloaderSettings";
 import Icon from "./Icon";
 import { createStoredFlag } from "./Panel";
 
@@ -44,13 +45,14 @@ const WAITING: Record<InboxRequest["status"], string> = {
 /**
  * The panel at the top of the inbox: what was sent to it from outside, by
  * the browser extension for one, and is waiting, being downloaded, or
- * failed; and under it how each downloader is set when it downloads here.
+ * failed; and under it the tags each downloader gives to what it downloads here.
  * The tab lists everything downloaded this way until it is cleared.
  */
 export default function InboxPanel() {
   const [url, setUrl] = createSignal("");
   const [error, setError] = createSignal<string | null>(null);
   const [settingsOpen, setSettingsOpen] = createStoredFlag("opalarchive.inbox.settings", false);
+  const [showDownloaders, setShowDownloaders] = createSignal(false);
 
   /** Does something, shows what went wrong if anything, and reads the inbox again. */
   const attempt = async (action: () => Promise<unknown>) => {
@@ -118,11 +120,18 @@ export default function InboxPanel() {
             <button
               class="icon-button"
               aria-pressed={settingsOpen()}
-              aria-label="Settings of the downloaders"
-              title={settingsOpen() ? "Hide the settings" : "Show the settings"}
+              aria-label="Tags each downloader gives here"
+              title={settingsOpen() ? "Hide the tags each downloader gives here" : "Show the tags each downloader gives here"}
               onClick={() => setSettingsOpen(!settingsOpen())}
             >
+              <Icon name="label-outline" />
+            </button>
+            <button
+              title="The options and login of each downloader, for every tab and the inbox"
+              onClick={() => setShowDownloaders(true)}
+            >
               <Icon name="settings-outline" />
+              Downloader settings
             </button>
           </div>
           <Show when={error()}>
@@ -203,47 +212,30 @@ export default function InboxPanel() {
             </p>
           </Show>
           <Show when={settingsOpen()}>
+            {/* What each downloader gives to what it downloads here. Its
+                options and login are every tab's, set in their own window. */}
             <For each={data().downloaders}>
               {(entry) => (
                 <div class="download-settings">
                   <strong class="inbox-downloader">{entry.downloader.title}</strong>
-                  <Show when={entry.downloader.options.length > 0}>
-                    <span class="label">Options</span>
-                  </Show>
-                  <div class="download-options">
-                    <For each={entry.downloader.options}>
-                      {(option) => (
-                        <label class="download-option">
-                          <input
-                            type="checkbox"
-                            checked={entry.options[option.key] ?? option.default}
-                            onChange={(event) => {
-                              const value = event.currentTarget.checked;
-                              attempt(() =>
-                                api.configureInbox(entry.downloader.name, {
-                                  options: { [option.key]: value },
-                                }),
-                              );
-                            }}
-                          />
-                          {option.label}
-                        </label>
-                      )}
-                    </For>
-                  </div>
                   <BaseTags
                     data={entry}
                     error={error()}
                     onChange={(tags) =>
-                      attempt(() => api.configureInbox(entry.downloader.name, { tags }))
+                      attempt(() => api.configureDownloader(entry.downloader.name, { tags }))
                     }
                   />
-                  <Show when={entry.downloader.cookies}>
-                    <Login data={entry} attempt={attempt} />
-                  </Show>
                 </div>
               )}
             </For>
+          </Show>
+          <Show when={showDownloaders()}>
+            <DownloaderSettings
+              onClose={() => {
+                setShowDownloaders(false);
+                attempt(async () => {});
+              }}
+            />
           </Show>
         </section>
       )}

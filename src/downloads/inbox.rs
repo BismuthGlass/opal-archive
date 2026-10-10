@@ -3,10 +3,10 @@
 //!
 //! Each waits in a queue kept in the database, so that a restart loses
 //! none, and they are run one at a time. The downloader is found from the
-//! address, by the sites its manifest names, and is set as the inbox has
-//! it set: every downloader has options and base tags of its own here, as
-//! a download tab has. What is fetched is listed under one tab, which
-//! holds it until the user clears it.
+//! address, by the sites its manifest names, and is set as it is for
+//! every tab; besides that, each downloader has tags of its own that it
+//! gives here. What is fetched is listed under one tab, which holds it
+//! until the user clears it.
 
 use std::sync::atomic::Ordering;
 
@@ -59,7 +59,6 @@ pub fn router() -> Router<AppState> {
         .route("/inbox/clear", post(clear))
         .route("/inbox/queue/{id}", get(one).delete(remove))
         .route("/inbox/queue/{id}/retry", post(retry))
-        .route("/inbox/settings/{downloader}", axum::routing::patch(configure))
         .route("/inbox/sites", get(sites))
 }
 
@@ -117,46 +116,6 @@ pub fn close(conn: &Connection, tab: i64) -> rusqlite::Result<bool> {
     Ok(closed > 0)
 }
 
-/// The host an address names, in lower case.
-fn host_of(url: &str) -> Option<String> {
-    let rest = url.split_once("://")?.1;
-    let authority = rest.split(['/', '?', '#']).next()?;
-    let host = authority.rsplit('@').next()?.split(':').next()?;
-    (!host.is_empty()).then(|| host.to_ascii_lowercase())
-}
-
-/// Whether a host is of a site as a manifest names it.
-fn of_site(host: &str, site: &str) -> bool {
-    let site = site.to_ascii_lowercase();
-    match site.strip_suffix(".*") {
-        // A name under any ending: pinterest.com, pinterest.co.uk.
-        Some(name) => host.split('.').any(|label| label == name),
-        None => host == site || host.ends_with(&format!(".{site}")),
-    }
-}
-
-/// The downloader an address belongs to.
-fn for_url(state: &AppState, url: &str) -> Result<Manifest, ApiError> {
-    let host = host_of(url).ok_or_else(|| ApiError::bad_request("that is not a web address"))?;
-    manifests(state)
-        .into_iter()
-        .find(|manifest| manifest.sites.iter().any(|site| of_site(&host, site)))
-        .ok_or_else(|| ApiError::BadRequest(format!("no downloader takes addresses of {host}")))
-}
-
-/// What a downloader is set to in the inbox: its options, the manifest's
-/// defaults filled in, and its base tags.
-fn settings(conn: &Connection, manifest: &Manifest) -> rusqlite::Result<(Options, BaseTags)> {
-    let saved: Option<(String, String)> = conn
-        .query_row(
-            "SELECT options, tags FROM inbox_settings WHERE downloader = ?1",
-            [&manifest.name],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?;
-    Ok(filled(manifest, saved))
-}
-
 const SELECT: &str = "SELECT id, url, downloader, status, message, added, existing,
                              date_queued, date_finished, tags FROM inbox_queue";
 
@@ -193,7 +152,10 @@ async fn enqueue(
     }
     let manifest = match input.downloader.as_deref() {
         Some(name) => manifest(&state, name)?,
-        None => for_url(&state, &url)?,
+        None => for_url(&state, &url)?.ok_or_else(|| {
+            let host = host_of(&url).unwrap_or_default();
+            ApiError::BadRequest(format!("no downloader takes addresses of {host}"))
+        })?,
     };
     let tags = typed(&input.tags)?;
     let queued = {
@@ -263,7 +225,7 @@ async fn state_of(State(state): State<AppState>) -> Result<Json<Value>, ApiError
     for manifest in &found {
         let (options, tags) = settings(&conn, manifest)?;
         downloaders.push(json!({
-            "downloader": described(&state, manifest),
+            "downloader": described_with(&state, &conn, manifest),
             "options": options,
             "tags": tags,
         }));
@@ -275,25 +237,6 @@ async fn state_of(State(state): State<AppState>) -> Result<Json<Value>, ApiError
         "listed": listed,
         "downloaders": downloaders,
     })))
-}
-
-/// Sets a downloader's options in the inbox, its base tags, or both.
-async fn configure(
-    State(state): State<AppState>,
-    Path(name): Path<String>,
-    Json(input): Json<SettingsInput>,
-) -> Result<StatusCode, ApiError> {
-    let manifest = manifest(&state, &name)?;
-    let conn = state.db.lock().unwrap();
-    let (mut options, mut base) = settings(&conn, &manifest)?;
-    change(&manifest, &mut options, &mut base, input)?;
-    conn.execute(
-        "INSERT INTO inbox_settings (downloader, options, tags) VALUES (?1, ?2, ?3)
-         ON CONFLICT (downloader) DO UPDATE
-         SET options = excluded.options, tags = excluded.tags",
-        params![manifest.name, json!(options).to_string(), json!(base).to_string()],
-    )?;
-    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Empties the inbox: what it lists, and the requests that are finished.

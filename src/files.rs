@@ -27,7 +27,7 @@ use crate::{
 };
 
 /// The tags a tab gives to what is uploaded into it: tag field to values.
-type TabTags = std::collections::BTreeMap<String, Vec<String>>;
+pub type TabTags = std::collections::BTreeMap<String, Vec<String>>;
 
 #[derive(Deserialize)]
 struct TabTagsInput {
@@ -257,7 +257,7 @@ fn record(conn: &Connection, tab: Option<i64>, file: &FileEntity) -> rusqlite::R
 }
 
 /// The tags an upload tab gives to everything uploaded into it.
-fn tab_tags(conn: &Connection, tab: i64) -> rusqlite::Result<TabTags> {
+pub fn tab_tags(conn: &Connection, tab: i64) -> rusqlite::Result<TabTags> {
     let saved: Option<String> = conn
         .query_row("SELECT tags FROM tab_tags WHERE tab_id = ?1", [tab], |row| {
             row.get(0)

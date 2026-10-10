@@ -1,11 +1,11 @@
 import { createStore, produce, reconcile } from "solid-js/store";
 import * as api from "./api";
-import type { DownloadState } from "./api";
+import type { DownloadJob, DownloadState } from "./api";
 import { addedTo } from "./search";
 
-// What each download tab is set to and how its download is going. Kept
-// here rather than in the panel, so that a download is followed, and its
-// files shown, while another tab is in front.
+// How the download of each upload tab is going. Kept here rather than in
+// the panel, so that a download is followed, and its files shown, while
+// another tab is in front.
 const [states, setStates] = createStore<Record<number, DownloadState>>({});
 
 export const downloadState = (tab: number): DownloadState | undefined => states[tab];
@@ -62,7 +62,26 @@ export function forgetDownload(tab: number) {
   setStates(produce((all) => void delete all[tab]));
 }
 
-export async function startDownload(tab: number, url: string) {
-  await api.startDownload(tab, url);
-  await loadDownload(tab);
+/**
+ * Starts downloading an address into a tab and follows it. Answers with
+ * the downloader that took it, or `null` if the address is of no
+ * downloader's site and nothing was started.
+ */
+export async function startDownload(tab: number, url: string): Promise<string | null> {
+  const { downloader } = await api.startDownload(tab, url);
+  if (downloader !== null) await loadDownload(tab);
+  return downloader;
+}
+
+/**
+ * Waits until the tab has no download running, and answers with how its
+ * last one went, if it has had one.
+ */
+export async function downloadEnded(tab: number): Promise<DownloadJob | null> {
+  for (;;) {
+    await loadDownload(tab);
+    const job = states[tab]?.job ?? null;
+    if (!job?.running) return job;
+    await new Promise((resolve) => setTimeout(resolve, POLL));
+  }
 }

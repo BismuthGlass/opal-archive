@@ -1,16 +1,19 @@
-import { createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import * as api from "../api";
-import { errorMessage } from "../format";
+import { downloadState, loadDownload } from "../downloads";
+import { errorMessage, plural } from "../format";
 import { activeTab } from "../tabs";
 import { upload, uploads } from "../uploads";
-import { BaseTags } from "./DownloadPanel";
+import { BaseTags, Progress, SeenList } from "./DownloadPanel";
+import DownloaderSettings from "./DownloaderSettings";
 import Icon from "./Icon";
 import Modal from "./Modal";
 
 /**
- * The panel at the top of an upload tab, laid out as a downloader's is: a
- * row to pick files or give the web addresses of files to fetch, and under
- * it the tags given to everything uploaded into the tab.
+ * The panel at the top of an upload tab: a row to pick files or give web
+ * addresses, and under it the tags given to everything that arrives. An
+ * address goes to the downloader for its site, if there is one (a post, a
+ * board, a thread), and is otherwise fetched as the file it is of.
  */
 export function UploadBox() {
   let input!: HTMLInputElement;
@@ -20,9 +23,21 @@ export function UploadBox() {
     upload(addresses().split(/\s+/).filter(Boolean));
     setAddresses("");
   };
+  // The sites there is a downloader for, to say what can be pasted.
+  const [downloaders] = createResource(api.listDownloaders);
+  const sites = () => (downloaders.latest ?? []).map((downloader) => downloader.title);
+  const [showSettings, setShowSettings] = createSignal(false);
+  const [showSeen, setShowSeen] = createSignal(false);
   // The tags this tab gives to everything uploaded into it. The box is the
   // same one for every upload tab, so they are read again for each.
   const tab = () => activeTab()?.id;
+  // A download goes on while the page is away or reloaded: how the tab's
+  // is going is read when the tab comes to the front.
+  createEffect(() => {
+    const id = tab();
+    if (id !== undefined) loadDownload(id).catch(() => {});
+  });
+  const download = () => (tab() === undefined ? undefined : downloadState(tab()!));
   const [tags, { mutate, refetch }] = createResource(tab, api.getUploadTags);
   const [tagError, setTagError] = createSignal<string | null>(null);
   const setTags = async (next: Record<string, string[]>) => {
@@ -63,8 +78,13 @@ export function UploadBox() {
         <input
           type="text"
           class="download-url"
-          aria-label="Address of a file to fetch"
-          placeholder="Or paste the address of a file: https://example.com/picture.jpg"
+          aria-label="Addresses to download"
+          placeholder={
+            sites().length > 0
+              ? `Or paste an address: a file's, or one from ${sites().join(", ")}`
+              : "Or paste the address of a file: https://example.com/picture.jpg"
+          }
+          title="The address of a file, or of something a downloader takes: a post, a board, a thread. Several can be pasted at once."
           spellcheck={false}
           autocomplete="off"
           autocapitalize="off"
@@ -75,18 +95,59 @@ export function UploadBox() {
         <button class="primary" disabled={addresses().trim() === ""} onClick={fetchAll}>
           Fetch
         </button>
+        <button
+          title="The options and login of each downloader, for every tab and the inbox"
+          onClick={() => setShowSettings(true)}
+        >
+          <Icon name="settings-outline" />
+          Downloader settings
+        </button>
       </div>
       <p class="hint">
         Files can also be dropped anywhere on the window. A zip is unpacked: its files are added,
         and its folders become collections.
       </p>
+      {/* A downloader at work for this tab: how far it has got, and a way
+          to stop it. Shown whoever started it, this page or one before. */}
+      <Show when={download()?.job?.running && download()!.job}>
+        {(job) => (
+          <div class="upload-download">
+            <Progress job={job()} />
+            <button onClick={() => api.cancelDownload(tab()!).catch(() => {})}>Cancel</button>
+          </div>
+        )}
+      </Show>
       <Show when={uploads.total > 0 && uploads.tabs.includes(tab() ?? -1)}>
         <UploadStatus />
       </Show>
-      {/* A label beside each setting, as in a downloader's panel. */}
+      {/* A label beside each setting. */}
       <div class="download-settings">
         <BaseTags data={{ tags: tags.latest ?? {} }} error={tagError()} onChange={setTags} />
+        <Show when={(download()?.seen ?? 0) > 0}>
+          <span class="label">Seen before</span>
+          <div>
+            <button
+              class="link"
+              title="What a downloader has fetched into this tab before, which it skips when it meets it again"
+              onClick={() => setShowSeen(true)}
+            >
+              {plural(download()!.seen, "item")}, skipped when met again
+            </button>
+          </div>
+        </Show>
       </div>
+      <Show when={showSettings()}>
+        <DownloaderSettings onClose={() => setShowSettings(false)} />
+      </Show>
+      <Show when={showSeen() && tab() !== undefined}>
+        <SeenList
+          tab={tab()!}
+          onClose={() => {
+            setShowSeen(false);
+            loadDownload(tab()!).catch(() => {});
+          }}
+        />
+      </Show>
     </section>
   );
 }
@@ -144,7 +205,6 @@ export function DropTarget() {
   );
 }
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /**
  * How the uploads into a tab are going, or how the last ones went, in the
@@ -158,7 +218,8 @@ function UploadStatus() {
 
   return (
     <div class="download-progress" aria-live="polite">
-      <Show when={uploads.active}>
+      {/* A downloader at work shows its own bar, above. */}
+      <Show when={uploads.active && !uploads.downloading}>
         {/* With no value the bar shows that work is going on, how much of
             it being unknown. */}
         <Show when={uploads.unpacking} fallback={<progress value={overall()} />}>
@@ -169,7 +230,7 @@ function UploadStatus() {
         <Show when={uploads.active} fallback={<strong>Done: </strong>}>
           <Show
             when={uploads.unpacking}
-            fallback={`Uploading ${Math.min(uploads.done + 1, uploads.total)} of ${uploads.total}: `}
+            fallback={`${uploads.downloading ? "Downloading" : "Uploading"} ${Math.min(uploads.done + 1, uploads.total)} of ${uploads.total}: `}
           >
             Unpacking {uploads.unpacking}:{" "}
           </Show>
@@ -177,6 +238,7 @@ function UploadStatus() {
         {uploads.added} added
         <Show when={uploads.collections > 0}>, in {plural(uploads.collections, "collection")}</Show>
         <Show when={uploads.duplicates > 0}>, {uploads.duplicates} already in the library</Show>
+        <Show when={uploads.skipped > 0}>, {uploads.skipped} skipped as seen before</Show>
         <Show when={uploads.failures.length > 0}>
           {", "}
           <button

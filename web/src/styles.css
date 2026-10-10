@@ -2547,6 +2547,7 @@ kbd {
 }
 
 .download-row > button:not(.primary),
+.upload-download > button,
 .download-login > button:not(.link) {
   padding: 4px 10px;
   background: var(--bg);
@@ -2556,6 +2557,14 @@ kbd {
 
 .download-row > button.primary {
   padding: 5px 14px;
+}
+
+/* A button of an icon and a word. */
+.download-row > button:not(.primary):not(.icon-button) {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  white-space: nowrap;
 }
 
 .download-row > button:disabled,
@@ -2732,6 +2741,54 @@ kbd {
 
 .download-tags .chip.tinted .chip-label {
   padding-right: 8px;
+}
+
+/* A downloader at work for an upload tab: its progress, and a way to stop it. */
+.upload-download {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.upload-download .download-progress {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The window of every downloader's settings: each under its name, its
+   settings one to a line, and a rule between one downloader and the next. */
+.downloader-settings section {
+  display: grid;
+  gap: 8px;
+  padding: 14px 0;
+}
+
+.downloader-settings section + section {
+  border-top: 1px solid var(--border);
+}
+
+.downloader-settings h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.downloader-settings .hint {
+  margin: 0;
+}
+
+.downloader-login {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 14px;
+  align-items: center;
+}
+
+.downloader-login .label {
+  margin: 0;
+}
+
+.dialog .downloader-login select {
+  width: auto;
 }
 
 .download-tags .chip.tinted .chip-label:hover {

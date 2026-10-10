@@ -1,5 +1,5 @@
-//! Downloaders: scripts that fetch files from a website into the library,
-//! each driven from a download tab.
+//! Downloaders: scripts that fetch files from a website into the library.
+//! An upload tab gives an address to the downloader whose site it is of.
 //!
 //! A downloader is a folder holding a `manifest.json` and a script. The
 //! script knows the website and nothing of the library; this module knows
@@ -44,9 +44,9 @@ use crate::{
     tags,
 };
 
-/// A tab's choice for each of its downloader's options.
+/// What each of a downloader's options is set to.
 type Options = BTreeMap<String, bool>;
-/// The tags a tab gives to everything it downloads: tag field to values.
+/// The tags given to everything a download fetches: tag field to values.
 type BaseTags = BTreeMap<String, Vec<String>>;
 
 /// How many of a download's problems are kept to show.
@@ -74,7 +74,7 @@ pub struct Manifest {
     sites: Vec<String>,
     /// Present if it can use a login taken from a browser.
     cookies: Option<CookieSpec>,
-    /// Switches the user can set, per tab.
+    /// Switches the user can set.
     #[serde(default)]
     options: Vec<OptionSpec>,
 }
@@ -223,7 +223,8 @@ pub fn router() -> Router<AppState> {
             post(take_cookies).delete(forget_cookies),
         )
         .route("/downloaders/{name}/cookies/file", post(upload_cookies))
-        .route("/tabs/{id}/download", get(state_of).patch(configure))
+        .route("/downloaders/{name}", axum::routing::patch(configure))
+        .route("/tabs/{id}/download", get(state_of))
         .route("/tabs/{id}/download/start", post(start))
         .route("/tabs/{id}/download/cancel", post(stop))
         .route("/tabs/{id}/download/seen", get(seen))
@@ -268,9 +269,10 @@ fn cookie_file(state: &AppState, manifest: &Manifest) -> PathBuf {
     state.cookies.join(format!("{}.txt", manifest.name))
 }
 
-/// A downloader as the interface needs it: its manifest, and when its
-/// login was saved (seconds since 1970), if one is.
-fn described(state: &AppState, manifest: &Manifest) -> Value {
+/// A downloader as the interface needs it: its manifest, when its login
+/// was saved (seconds since 1970), if one is, and what its options are set
+/// to. For a caller that holds the database already.
+fn described_with(state: &AppState, conn: &Connection, manifest: &Manifest) -> Value {
     let saved = std::fs::metadata(cookie_file(state, manifest))
         .and_then(|file| file.modified())
         .ok()
@@ -278,9 +280,15 @@ fn described(state: &AppState, manifest: &Manifest) -> Value {
         .map(|age| age.as_secs());
     let mut described = json!(manifest);
     described["login_saved"] = json!(saved);
+    let set = settings(conn, manifest).map(|(options, _)| options);
+    described["settings"] = json!(set.unwrap_or_default());
     // Where there is no browser, a login is sent as a file.
     described["headless"] = json!(state.headless);
     described
+}
+
+fn described(state: &AppState, manifest: &Manifest) -> Value {
+    described_with(state, &state.db.lock().unwrap(), manifest)
 }
 
 /// Every downloader there is, by title.
@@ -433,32 +441,42 @@ fn last_line(text: &str) -> String {
         .to_string()
 }
 
-/// The downloader of a download tab; 404 if there is no such tab.
-fn downloader_of(state: &AppState, tab: i64) -> Result<Manifest, ApiError> {
-    let name: Option<String> = state
-        .db
-        .lock()
-        .unwrap()
-        .query_row("SELECT downloader FROM tab WHERE id = ?1", [tab], |row| {
-            row.get(0)
-        })
-        .optional()?
-        .ok_or(ApiError::NotFound)?;
-    let name = name.ok_or_else(|| ApiError::bad_request("not a download tab"))?;
-    manifest(state, &name)
+/// The host an address names, in lower case.
+fn host_of(url: &str) -> Option<String> {
+    let rest = url.split_once("://")?.1;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    let host = authority.rsplit('@').next()?.split(':').next()?;
+    (!host.is_empty()).then(|| host.to_ascii_lowercase())
 }
 
-/// What a tab is set to: its options, the manifest's defaults filled in,
-/// and its base tags.
-fn settings(
-    conn: &Connection,
-    manifest: &Manifest,
-    tab: i64,
-) -> rusqlite::Result<(Options, BaseTags)> {
+/// Whether a host is of a site as a manifest names it.
+fn of_site(host: &str, site: &str) -> bool {
+    let site = site.to_ascii_lowercase();
+    match site.strip_suffix(".*") {
+        // A name under any ending: pinterest.com, pinterest.co.uk.
+        Some(name) => host.split('.').any(|label| label == name),
+        None => host == site || host.ends_with(&format!(".{site}")),
+    }
+}
+
+/// The downloader an address belongs to, if there is one for its site.
+fn for_url(state: &AppState, url: &str) -> Result<Option<Manifest>, ApiError> {
+    let host = host_of(url).ok_or_else(|| ApiError::bad_request("that is not a web address"))?;
+    let found = manifests(state);
+    let mut of_host = found
+        .into_iter()
+        .filter(|manifest| manifest.sites.iter().any(|site| of_site(&host, site)));
+    Ok(of_host.next())
+}
+
+/// What a downloader is set to: its options, the manifest's defaults
+/// filled in, which every tab and the inbox use; and the tags the inbox
+/// has it give.
+fn settings(conn: &Connection, manifest: &Manifest) -> rusqlite::Result<(Options, BaseTags)> {
     let saved: Option<(String, String)> = conn
         .query_row(
-            "SELECT options, tags FROM tab_download WHERE tab_id = ?1",
-            [tab],
+            "SELECT options, tags FROM downloader_settings WHERE downloader = ?1",
+            [&manifest.name],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
@@ -518,12 +536,12 @@ fn fresh_out(state: &AppState) -> PathBuf {
     ))
 }
 
-/// Everything a download tab's panel shows.
+/// How a tab's download is going, or how its last one went, and how many
+/// things it has downloaded before.
 async fn state_of(
     State(state): State<AppState>,
     Path(tab): Path<i64>,
 ) -> Result<Json<Value>, ApiError> {
-    let manifest = downloader_of(&state, tab)?;
     let job = state
         .downloads
         .lock()
@@ -531,35 +549,38 @@ async fn state_of(
         .get(&tab)
         .map(|job| job.status.lock().unwrap().clone());
     let conn = state.db.lock().unwrap();
-    let (options, tags) = settings(&conn, &manifest, tab)?;
+    let there: bool = conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM tab WHERE id = ?1)",
+        [tab],
+        |row| row.get(0),
+    )?;
+    if !there {
+        return Err(ApiError::NotFound);
+    }
     let seen: i64 = conn.query_row(
         "SELECT count(*) FROM tab_download_seen WHERE tab_id = ?1",
         [tab],
         |row| row.get(0),
     )?;
-    Ok(Json(json!({
-        "downloader": described(&state, &manifest),
-        "options": options,
-        "tags": tags,
-        "seen": seen,
-        "job": job,
-    })))
+    Ok(Json(json!({ "seen": seen, "job": job })))
 }
 
-/// Sets a tab's options, its base tags, or both.
+/// Sets a downloader's options, for every tab and for the inbox, or the
+/// tags the inbox has it give, or both.
 async fn configure(
     State(state): State<AppState>,
-    Path(tab): Path<i64>,
+    Path(name): Path<String>,
     Json(input): Json<SettingsInput>,
 ) -> Result<StatusCode, ApiError> {
-    let manifest = downloader_of(&state, tab)?;
+    let manifest = manifest(&state, &name)?;
     let conn = state.db.lock().unwrap();
-    let (mut options, mut base) = settings(&conn, &manifest, tab)?;
+    let (mut options, mut base) = settings(&conn, &manifest)?;
     change(&manifest, &mut options, &mut base, input)?;
     conn.execute(
-        "INSERT INTO tab_download (tab_id, options, tags) VALUES (?1, ?2, ?3)
-         ON CONFLICT (tab_id) DO UPDATE SET options = excluded.options, tags = excluded.tags",
-        params![tab, json!(options).to_string(), json!(base).to_string()],
+        "INSERT INTO downloader_settings (downloader, options, tags) VALUES (?1, ?2, ?3)
+         ON CONFLICT (downloader) DO UPDATE
+         SET options = excluded.options, tags = excluded.tags",
+        params![manifest.name, json!(options).to_string(), json!(base).to_string()],
     )?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -601,20 +622,38 @@ async fn forget(
     Ok(Json(json!({ "forgotten": forgotten })))
 }
 
-/// Starts downloading `url` into the tab. One download runs per tab.
+/// Starts downloading `url` into an upload tab, with the downloader whose
+/// site the address is of, and answers with its name. Where there is no
+/// downloader for it, nothing is started and the name is `null`: the
+/// address may still be that of a file, to fetch as one. One download runs
+/// per tab.
 async fn start(
     State(state): State<AppState>,
     Path(tab): Path<i64>,
     Json(input): Json<StartInput>,
-) -> Result<StatusCode, ApiError> {
-    let manifest = downloader_of(&state, tab)?;
+) -> Result<Json<Value>, ApiError> {
     let url = input.url.trim().to_string();
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err(ApiError::bad_request("that is not a web address"));
     }
+    let Some(manifest) = for_url(&state, &url)? else {
+        return Ok(Json(json!({ "downloader": null })));
+    };
     let (options, base, seen) = {
         let conn = state.db.lock().unwrap();
-        let (options, base) = settings(&conn, &manifest, tab)?;
+        let uploads: Option<bool> = conn
+            .query_row(
+                "SELECT kind = 'upload' AND picked = 0 FROM tab WHERE id = ?1",
+                [tab],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if !uploads.ok_or(ApiError::NotFound)? {
+            return Err(ApiError::bad_request("not an upload tab"));
+        }
+        let (options, _) = settings(&conn, &manifest)?;
+        // What is downloaded gets the tags the tab gives what is uploaded.
+        let base = files::tab_tags(&conn, tab)?;
         let mut stmt = conn.prepare("SELECT key FROM tab_download_seen WHERE tab_id = ?1")?;
         let seen = stmt
             .query_map([tab], |row| row.get::<_, String>(0))?
@@ -657,6 +696,7 @@ async fn start(
         );
     }
 
+    let name = manifest.name.clone();
     let download = Download {
         state,
         tab,
@@ -675,7 +715,7 @@ async fn start(
         status.running = false;
         status.outcome = Some(outcome);
     });
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(json!({ "downloader": name })))
 }
 
 async fn stop(State(state): State<AppState>, Path(tab): Path<i64>) -> StatusCode {

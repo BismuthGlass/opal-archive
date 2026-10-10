@@ -203,14 +203,10 @@ export const load = () =>
   });
 
 /** Opens a tab and switches to it. Resolves to the tab, if it was created. */
-export async function open(
-  kind: TabKind,
-  query = "",
-  downloader?: string,
-): Promise<Tab | undefined> {
+export async function open(kind: TabKind, query = ""): Promise<Tab | undefined> {
   let tab: Tab | undefined;
   await guard(async () => {
-    tab = await api.createTab(kind, query, undefined, downloader);
+    tab = await api.createTab(kind, query);
     // There is one inbox: asked for again, the server answers with it.
     if (!tabs.some((had) => had.id === tab!.id)) setTabs(tabs.length, tab);
     select(tab.id);
@@ -242,7 +238,7 @@ export const setQuery = (id: number, query: string) =>
  */
 export const openSelection = (ids: number[]) =>
   guard(async () => {
-    const tab = await api.createTab("selection", "", undefined, undefined, ids);
+    const tab = await api.createTab("selection", "", undefined, ids);
     setTabs(tabs.length, tab);
     select(tab.id);
   });

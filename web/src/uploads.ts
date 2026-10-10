@@ -1,5 +1,6 @@
 import { createStore } from "solid-js/store";
 import * as api from "./api";
+import { downloadEnded, startDownload } from "./downloads";
 import { errorMessage } from "./format";
 import { addedTo } from "./search";
 import { activeTab, open } from "./tabs";
@@ -12,6 +13,8 @@ const idle = {
   done: 0,
   added: 0,
   duplicates: 0,
+  /** Things a downloader passed over, having downloaded them into the tab before. */
+  skipped: 0,
   /** Collections made of the folders of archives. */
   collections: 0,
   failures: [] as Failure[],
@@ -19,6 +22,8 @@ const idle = {
   progress: 0,
   /** The archive the server is unpacking, once it has all of it. */
   unpacking: null as string | null,
+  /** The address a downloader is at work on, and the tab it is for. */
+  downloading: null as { url: string; tab: number } | null,
   /** The upload tabs it went into: it is spoken of in those. */
   tabs: [] as number[],
 };
@@ -27,7 +32,10 @@ const [uploads, setUploads] = createStore({ ...idle });
 
 export { uploads };
 
-/** What is uploaded: a file from this computer, or one at a web address. */
+/**
+ * What is uploaded: a file from this computer, or a web address. The
+ * address may be a file's own, or one a downloader takes: a post, a board.
+ */
 type Source = File | string;
 
 const nameOf = (source: Source) => (typeof source === "string" ? source : source.name);
@@ -40,8 +48,8 @@ const queue: { file: Source; tab: number }[] = [];
 
 /**
  * Uploads files into the active tab if it is an upload tab, and into a new
- * upload tab otherwise. A file given as a web address is fetched by the
- * server.
+ * upload tab otherwise. What is given as a web address is fetched by the
+ * server: by the downloader for its site, or as a file if there is none.
  */
 export async function upload(files: Source[]) {
   if (files.length === 0) return;
@@ -58,6 +66,32 @@ function enqueue(files: Source[], tab: number) {
   queue.push(...files.map((file) => ({ file, tab })));
   setUploads("total", (n) => n + files.length);
   if (!uploads.active) run();
+}
+
+/**
+ * Has the downloader for an address's site download it into the tab, and
+ * waits for it to end. Says whether there was a downloader for it: if not,
+ * nothing was done. A tab runs one download at a time, so one already
+ * running is waited for first.
+ */
+async function download(url: string, tab: number): Promise<boolean> {
+  await downloadEnded(tab);
+  if ((await startDownload(tab, url)) === null) return false;
+  setUploads("downloading", { url, tab });
+  const job = await downloadEnded(tab);
+  if (!job) return true;
+  setUploads("added", (n) => n + job.added);
+  setUploads("duplicates", (n) => n + job.existing);
+  setUploads("skipped", (n) => n + job.skipped);
+  const problems = [...job.errors];
+  if (job.outcome === "cancelled") problems.push("Cancelled");
+  else if (job.outcome !== "done") problems.push(job.outcome ?? "The download failed");
+  else if (job.downloaded + job.skipped === 0 && problems.length === 0) {
+    problems.push("There was nothing to download");
+  }
+  const failed = problems.map((reason) => ({ name: url, reason }));
+  setUploads("failures", (list) => [...list, ...failed]);
+  return true;
 }
 
 // Files go up one at a time, in order.
@@ -85,6 +119,8 @@ async function run() {
           reason: failure.reason,
         }));
         setUploads("failures", (list) => [...list, ...inside]);
+      } else if (typeof file === "string" && (await download(file, tab))) {
+        // A downloader took the address, and what came of it is counted.
       } else {
         // How far a fetch by the server has got is not known.
         const result =
@@ -97,7 +133,7 @@ async function run() {
       const reason = errorMessage(err);
       setUploads("failures", (list) => [...list, { name: nameOf(file), reason }]);
     }
-    setUploads({ done: uploads.done + 1, unpacking: null });
+    setUploads({ done: uploads.done + 1, unpacking: null, downloading: null });
     waiting.add(tab);
     // Show new files as they arrive, without reloading for every one.
     if (Date.now() - lastRefresh > 2000) {

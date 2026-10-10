@@ -7,8 +7,9 @@ folder here, named for the downloader, holding:
 - a script, in any language, that does the fetching.
 
 The script knows its website and nothing about the library. The server
-knows the library and nothing about the website. A download tab in the
-interface is tied to one downloader; the server runs the script for it,
+knows the library and nothing about the website. An address pasted into an
+upload tab, or sent to the inbox, is given to the downloader whose site it
+is of, by the `sites` of its manifest; the server runs the script for it,
 takes in the files it fetches, and gives them their source URL and tags.
 
 Adding a downloader means adding a folder. The server reads the folders
@@ -34,9 +35,9 @@ when asked, so a new one shows up without a restart.
 | `source`   | The `source` tag given to every file it downloads                       |
 | `command`  | The program and its first arguments, run from the downloader's folder   |
 | `url_hint` | What can be pasted into the download box                                |
-| `sites`    | Optional. The sites it downloads from, by which an address sent to the inbox finds it: a domain, which stands for its subdomains too, or a name and `.*` for that name under any ending |
+| `sites`    | Optional. The sites it downloads from, by which an address finds it: a domain, which stands for its subdomains too, or a name and `.*` for that name under any ending |
 | `cookies`  | Optional. Present if it can use a login read from one of these browsers |
-| `options`  | Optional. Switches the user sets per tab; each is true or false         |
+| `options`  | Optional. Switches the user sets, once for every download; each is true or false |
 
 ## The script
 
@@ -203,9 +204,9 @@ request at a time. The answer is the request as queued, with its `id`;
 `queued`, `running`, `done`, `failed` or `cancelled`, and its `message`
 says why it failed.
 
-The script is run exactly as for a download tab, with two differences. Its
-options and base tags are the ones the downloader is set to in the inbox,
-not a tab's. And `seen` is always empty: what is asked for one thing at a
+The script is run exactly as for an upload tab, with two differences. The
+tags given are the ones the downloader is set to give in the inbox, not a
+tab's. And `seen` is always empty: what is asked for one thing at a
 time is wanted, and a file the library already has is only listed again.
 
 What is downloaded is listed under one tab, the inbox, which every
@@ -213,9 +214,9 @@ downloader shares. It lists it until the user clears it: closing the tab
 only puts it out of sight, and opening the inbox again brings it back as
 it was, with whatever arrived meanwhile.
 
-## A custom panel
+## Settings
 
-The interface builds a downloader's panel from its manifest: the address
-box, the options, the base tags, the login and the list of what was seen.
-A downloader that needs more can be given its own component in
-`web/src/downloaders.ts`.
+The interface builds a downloader's settings from its manifest, in the
+window that lists every downloader's: its `options`, each a switch, and
+its login if it has `cookies`. They are kept by the server, by the
+downloader's name, and passed with every download.
