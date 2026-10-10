@@ -1062,7 +1062,9 @@ for n in 1 2; do
     part='"collection":{"id":" fake:board ","url":"example.test/board","title":" Board ","description":""}'
   fi
   more='"title":" Thing '$n' ","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]},'$part
-  echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":\"$key\",\"files\":[$files],$more}"
+  # A thing may be at more than one address.
+  if [ "$n" = 2 ]; then source="[\"$key\",\"https://example.test/linked/2\"]"; else source="\"$key\""; fi
+  echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":$source,\"files\":[$files],$more}"
 done
 echo '{"event":"error","message":"one thing could not be had"}'
 "#;
@@ -1236,7 +1238,8 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         carried(&all, "source_url"),
         [
             tag("https://example.test/item/1", 1),
-            tag("https://example.test/item/2", 2)
+            tag("https://example.test/item/2", 2),
+            tag("https://example.test/linked/2", 2)
         ]
     );
 

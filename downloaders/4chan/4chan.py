@@ -14,6 +14,11 @@ The files are not put in a set: each is given its thread as its
 collection, `4chan:<board>:<thread>`, by which the files of a thread are
 found.
 
+A post may also link to a file kept somewhere else, as on catbox, where what
+4chan will not take is put. Those are downloaded too, into the thread's
+collection like the rest, each with two source URLs: its own address and its
+post's.
+
 It also takes the address of one post, a thread URL ending in `#p` and the
 post's number, and downloads that post's file alone, with its thread as its
 collection all the same; and the address of a file itself, which it
@@ -47,6 +52,10 @@ HEADERS = {
 HOSTS = ("4chan.org", "4channel.org")
 # Where the files themselves are served from.
 FILE_HOSTS = ("4cdn.org", "4chan.org")
+# Where else a post's files may be kept, and linked to from its comment.
+LINKED_HOSTS = ("catbox.moe", "lain.la", "uguu.se")
+# An address in a comment, with or without its scheme.
+LINK = re.compile(r"(?:https?://)?((?:[\w-]+\.)+[a-z]{2,})(/[^\s<>\"']*)", re.I)
 RETRY_STATUS = {429, 500, 502, 503, 504}
 # Files fetched at once. 4chan asks its readers to go easy.
 JOBS = 2
@@ -126,6 +135,20 @@ def text_of(comment: str) -> str:
     return html.unescape(text).strip()
 
 
+def linked_of(post: dict) -> list[str]:
+    """The files a post's comment links to on the hosts that keep them."""
+    found = []
+    for host, path in LINK.findall(text_of(post.get("com") or "")):
+        # What ends a sentence or a bracket is not part of the address.
+        path = path.split("?")[0].split("#")[0].rstrip(".,;:!)]}")
+        # Only a file's own address: a name and what kind of file it is.
+        if on(host.lower(), LINKED_HOSTS) and re.search(r"/[^/]+\.\w{2,5}$", path):
+            url = f"https://{host.lower()}{path}"
+            if url not in found:
+                found.append(url)
+    return found
+
+
 def file_name(post: dict) -> str:
     """The name the file was posted under, made safe to store."""
     name = re.sub(r'[\x00-\x1f/\\:*?"<>|]', "_", post.get("filename") or "").strip(" .")
@@ -163,9 +186,10 @@ def fetch_file(url: str, out: Path) -> str:
     part = dest.with_name(dest.name + ".part")
     r = get(url, stream=True)
     if r.status_code == 404:
-        raise RuntimeError("there is no such file: it may have been pruned")
+        raise RuntimeError("there is no such file: it may have been removed")
     if r.status_code != 200:
         raise RuntimeError(f"HTTP {r.status_code}")
+    out.mkdir(parents=True, exist_ok=True)
     with open(part, "wb") as f:
         for chunk in r.iter_content(1 << 16):
             f.write(chunk)
@@ -199,18 +223,26 @@ def download() -> int:
         posts = [post for post in posts if post["no"] == only]
         if not posts:
             raise RuntimeError(f"there is no post {only} in that thread: it may have been deleted")
-    posts = [
-        post
-        for post in posts
-        if post.get("tim") and post.get("ext") and not post.get("filedeleted")
-    ]
-    if only is not None and not posts:
-        raise RuntimeError("that post has no file")
-    emit("found", total=len(posts))
-    emit("log", message="Downloading")
 
     def post_url(post: dict) -> str:
         return POST.format(board=board, thread=thread, no=post["no"])
+
+    # What there is to fetch: each post's own file, known by the post's
+    # address, and each file a post links to, known by its own. A file
+    # linked to in several posts is the first one's.
+    things = []
+    linked = set()
+    for post in posts:
+        if post.get("tim") and post.get("ext") and not post.get("filedeleted"):
+            things.append((post_url(post), post, None))
+        for n, url in enumerate(linked_of(post)):
+            if url not in linked:
+                linked.add(url)
+                things.append((url, post, n))
+    if only is not None and not things:
+        raise RuntimeError("that post has no file")
+    emit("found", total=len(things))
+    emit("log", message="Downloading")
 
     # Each file says which thread it is of, and is in no set for it. Thread
     # numbers are a board's own, so the board is part of the collection.
@@ -221,26 +253,31 @@ def download() -> int:
     }
 
     todo = []
-    for post in posts:
-        if post_url(post) in seen:
-            emit("skipped", key=post_url(post))
+    for thing in things:
+        if thing[0] in seen:
+            emit("skipped", key=thing[0])
         else:
-            todo.append(post)
+            todo.append(thing)
 
-    def work(post: dict):
+    def work(thing: tuple):
+        key, post, n = thing
         try:
-            return post, fetch(board, post, out), None
+            if n is None:
+                return thing, fetch(board, post, out), None
+            # Apart from the post's own file, and from its other links.
+            return thing, fetch_file(key, out / f"{post['no']}-{n}"), None
         except Exception as e:  # keep going; the server is told
-            return post, None, str(e)
+            return thing, None, str(e)
 
     with ThreadPoolExecutor(JOBS) as pool:
-        for post, file, err in pool.map(work, todo):
-            key = post_url(post)
+        for (key, post, n), file, err in pool.map(work, todo):
             if err:
                 emit("error", key=key, message=f"{key}: {err}")
                 continue
             comment = text_of(post.get("com") or "") if options.get("comments") else ""
-            emit("item", key=key, source_url=key, files=[file], description=comment, collection=collection)
+            # A linked file is at its own address and at its post's.
+            source = key if n is None else [key, post_url(post)]
+            emit("item", key=key, source_url=source, files=[file], description=comment, collection=collection)
     return 0
 
 

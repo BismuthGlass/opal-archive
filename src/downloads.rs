@@ -161,7 +161,10 @@ struct ForgetInput {
 struct Item {
     /// What tells it from everything else on the site.
     key: String,
-    source_url: Option<String>,
+    /// Where it is on the site: one address, or several where it is at
+    /// more than one, as a file a post links to is at its own and the post's.
+    #[serde(default)]
+    source_url: Sources,
     /// What its files are part of on the site, as a thread: kept as a
     /// collection of theirs, where a set would group them too much.
     collection: Option<Part>,
@@ -180,6 +183,26 @@ struct Item {
     tags: BaseTags,
     /// The set its files are to be put in.
     set: Option<Whole>,
+}
+
+/// The addresses a downloader gives something: one, or a list of them.
+#[derive(Deserialize, Default)]
+#[serde(untagged)]
+enum Sources {
+    #[default]
+    None,
+    One(String),
+    Many(Vec<String>),
+}
+
+impl Sources {
+    fn each(&self) -> &[String] {
+        match self {
+            Sources::None => &[],
+            Sources::One(url) => std::slice::from_ref(url),
+            Sources::Many(urls) => urls,
+        }
+    }
 }
 
 /// What a downloader says something is part of: the collection's name, or
@@ -990,7 +1013,6 @@ impl Download {
         item: &Item,
         cancel: &Arc<Notify>,
     ) -> Result<(u64, u64), ApiError> {
-        let source_url = item.source_url.as_deref();
         let text = |text: &Option<String>| {
             let text = text
                 .as_deref()
@@ -1080,7 +1102,7 @@ impl Download {
         };
         fill(&tagged, "title", &title)?;
         fill(&tagged, "description", &description)?;
-        if let Some(url) = source_url {
+        for url in item.source_url.each() {
             entities::add_to_list(&tx, &tagged, SOURCE_URLS, url)?;
         }
         if let Some(part) = &item.collection

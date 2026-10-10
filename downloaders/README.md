@@ -83,6 +83,10 @@ the tab remembers; for Pinterest it is the pin's URL. For each `item` the
 server takes in the files, lists them under the tab, adds `source_url` and
 the tags, and remembers the key.
 
+`source_url` is one address, or a list of them where the thing is at more
+than one: a file a 4chan post links to on catbox has its own address and
+the post's.
+
 `collection` says what the files are part of on the site, where that is not
 something to make a set of: 4chan gives each file of a thread
 `4chan:<board>:<thread>`, Pinterest each pin of a board
