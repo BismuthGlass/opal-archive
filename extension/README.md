@@ -15,7 +15,9 @@ an address, which goes into the inbox's queue (see `downloaders/README.md`).
   way to try again. Pressing the button again sends the post again.
 - On Pinterest, the same button on the corner of each pin, in grids and
   on the pin's own page, and on each board of a profile, where it sends
-  the whole board.
+  the whole board. On a pin's own page, if the pin's picture cannot
+  be found to put the button on, the button is in the bottom left corner
+  of the window instead.
 - On 4chan, the button at the end of the line that names each post's
   file, which sends that post, and one by the number of each thread's
   first post, which sends the whole thread. In a board's catalog each

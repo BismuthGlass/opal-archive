@@ -39,6 +39,22 @@
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
 }
 
+/* In the corner of the window, where the post's picture was not found. */
+.opalarchive-button.opalarchive-over.opalarchive-float {
+  position: fixed;
+  top: auto;
+  bottom: 20px;
+  left: 20px;
+  z-index: 2147483000;
+  width: 44px;
+  height: 44px;
+}
+
+.opalarchive-button.opalarchive-float svg {
+  width: 24px;
+  height: 24px;
+}
+
 .opalarchive-button.opalarchive-over:hover {
   color: #1c7ed6;
   background: #ffffff;
