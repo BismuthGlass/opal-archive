@@ -8,7 +8,7 @@ folder here, named for the downloader, holding:
 
 The script knows its website and nothing about the library. The server
 knows the library and nothing about the website. An address pasted into an
-upload tab, or sent to the inbox, is given to the downloader whose site it
+upload tab, or sent to Opal Drop, is given to the downloader whose site it
 is of, by the `sites` of its manifest; the server runs the script for it,
 takes in the files it fetches, and gives them their source URL and tags.
 
@@ -194,7 +194,7 @@ browser extension or as an uploaded file. `COOKIES` may hold the cookies of
 any number of sites; the script writes only its own site's to `FILE`, and
 again prints whether there was a login among them.
 
-## The inbox
+## Opal Drop
 
 A download can also be asked for from outside the interface, with nothing
 but an address: by the browser extension in `extension/`, or by anything
@@ -218,13 +218,13 @@ request at a time. The answer is the request as queued, with its `id`;
 says why it failed.
 
 The script is run exactly as for an upload tab, with two differences. The
-tags given are the ones the downloader is set to give in the inbox, not a
+tags given are the ones the downloader is set to give in Opal Drop, not a
 tab's. And `seen` is always empty: what is asked for one thing at a
 time is wanted, and a file the library already has is only listed again.
 
-What is downloaded is listed under one tab, the inbox, which every
+What is downloaded is listed under one tab, Opal Drop, which every
 downloader shares. It lists it until the user clears it: closing the tab
-only puts it out of sight, and opening the inbox again brings it back as
+only puts it out of sight, and opening Opal Drop again brings it back as
 it was, with whatever arrived meanwhile.
 
 ## Settings

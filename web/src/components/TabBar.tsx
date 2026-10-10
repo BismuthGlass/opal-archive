@@ -24,7 +24,7 @@ const KINDS: { kind: TabKind; label: string; title?: string }[] = [
   },
   {
     kind: "inbox",
-    label: "Inbox",
+    label: "Opal Drop",
     title: "What the browser extension sends to be downloaded; there is one",
   },
 ];
@@ -38,7 +38,7 @@ function described(tab: Tab) {
     tab.kind === "upload"
       ? "Upload"
       : tab.kind === "inbox"
-        ? "Inbox"
+        ? "Opal Drop"
         : tab.kind === "selection"
           ? "Selection"
         : tab.set?.title || tab.set?.set_id || "Set";

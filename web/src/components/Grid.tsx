@@ -88,7 +88,7 @@ function badge(item: Item): string | null {
 const EMPTY: Record<string, string> = {
   upload: "Nothing uploaded in this tab yet.",
   download: "Nothing downloaded in this tab yet.",
-  inbox: "Nothing in the inbox.",
+  inbox: "Nothing in Opal Drop.",
   selection: "Nothing of what this tab was opened on is left.",
   set: "This set is empty.",
   variants: "None of these variants is left.",

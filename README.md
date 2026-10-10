@@ -153,13 +153,13 @@ is on, for a query of several lines).
 | `PUT /tabs/order`                | `{ids}` → put the tabs in that order                           |
 | `GET /tabs/{id}/view`, `PUT …`   | The snapshot a tab shows: `{query, ids, custom}`, or `null` if none is saved |
 | `GET /downloaders`               | The downloaders, as their manifests describe them, with when each one's login was saved and what its options are set to (`settings`) |
-| `PATCH /downloaders/{name}`      | `{options?, tags?}` → set that downloader's options, for every tab and the inbox, or the tags it gives to what it downloads for the inbox |
+| `PATCH /downloaders/{name}`      | `{options?, tags?}` → set that downloader's options, for every tab and Opal Drop, or the tags it gives to what it downloads for Opal Drop |
 | `POST /downloaders/{name}/cookies`, `DELETE …` | `{browser}` → read the site's login from that browser and keep it; forget it |
 | `POST /downloaders/{name}/cookies/file` | `{cookies}`, the text of a cookie file in the Netscape format → keep the site's login out of it |
-| `GET /inbox`, `POST /inbox`      | The inbox: its tab, queue and each downloader's settings; `{url, downloader?, tags?}` → queue the address to be downloaded, by the downloader whose `sites` it is of |
+| `GET /inbox`, `POST /inbox`      | Opal Drop: its tab, queue and each downloader's settings; `{url, downloader?, tags?}` → queue the address to be downloaded, by the downloader whose `sites` it is of |
 | `GET /inbox/queue/{id}`, `DELETE …` | What became of a request; take it off the queue, or stop it if it is running |
 | `POST /inbox/queue/{id}/retry`   | Queue again a request that failed or was stopped |
-| `POST /inbox/clear`              | Empty what the inbox lists and its finished requests; nothing leaves the library |
+| `POST /inbox/clear`              | Empty what Opal Drop lists and its finished requests; nothing leaves the library |
 | `GET /inbox/sites`               | The sites there is a downloader for |
 | `GET /tabs/{id}/download`        | How a tab's download is going, or how its last went (`job`), and how many things it has seen |
 | `POST /tabs/{id}/download/start`, `…/cancel` | `{url}` → start downloading it into the upload tab with the downloader whose site it is of, and answer `{downloader}` with its name, or `null`, with nothing started, if there is none for it; stop the download running |

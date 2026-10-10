@@ -88,13 +88,13 @@ export default function InboxPanel() {
   const clear = () => {
     const listed = inbox()?.listed ?? 0;
     const kept = listed > 0 ? ` The ${plural(listed, "item")} it lists stay in the library.` : "";
-    if (confirm(`Clear the inbox?${kept}`)) attempt(api.clearInbox);
+    if (confirm(`Clear Opal Drop?${kept}`)) attempt(api.clearInbox);
   };
 
   return (
     <Show when={inbox()}>
       {(data) => (
-        <section class="download-panel inbox-panel" aria-label="Inbox">
+        <section class="download-panel inbox-panel" aria-label="Opal Drop">
           <div class="download-row">
             <input
               type="text"
@@ -127,7 +127,7 @@ export default function InboxPanel() {
               <Icon name="label-outline" />
             </button>
             <button
-              title="The options and login of each downloader, for every tab and the inbox"
+              title="The options and login of each downloader, for every tab and Opal Drop"
               onClick={() => setShowDownloaders(true)}
             >
               <Icon name="settings-outline" />

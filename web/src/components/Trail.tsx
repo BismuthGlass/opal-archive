@@ -18,7 +18,7 @@ function outermost(): string {
   if (!tab) return "Results";
   if (tab.name) return tab.name;
   if (tab.kind === "set" && tab.set) return setName(tab.set);
-  if (tab.kind === "inbox") return "Inbox";
+  if (tab.kind === "inbox") return "Opal Drop";
   if (tab.kind === "selection") return "Selection";
   return tab.kind === "upload" ? "Uploads" : "Results";
 }

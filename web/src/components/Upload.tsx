@@ -96,7 +96,7 @@ export function UploadBox() {
           Fetch
         </button>
         <button
-          title="The options and login of each downloader, for every tab and the inbox"
+          title="The options and login of each downloader, for every tab and Opal Drop"
           onClick={() => setShowSettings(true)}
         >
           <Icon name="settings-outline" />

@@ -28,7 +28,7 @@ export default function DownloaderSettings(props: { onClose: () => void }) {
   return (
     <Modal title="Downloader settings" medium onClose={props.onClose}>
       <p class="hint">
-        An address pasted into an upload tab, or sent to the inbox, goes to the downloader for its
+        An address pasted into an upload tab, or sent to Opal Drop, goes to the downloader for its
         site. Each is set here, once for all of them.
       </p>
       <div class="downloader-settings">

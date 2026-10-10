@@ -2,7 +2,7 @@
 
 It sends posts to OpalArchive to be downloaded, without leaving the page
 they are on. OpalArchive does the downloading: the extension only passes on
-an address, which goes into the inbox's queue (see `downloaders/README.md`).
+an address, which goes into Opal Drop's queue (see `downloaders/README.md`).
 
 - On Reddit, a small button at the end of each post's title. Pressing it
   asks for tags to give what is downloaded, entered as in OpalArchive's own
@@ -42,7 +42,7 @@ extension send to that one from then on. This is noticed by itself for an
 OpalArchive on this computer, which is where a tunnel to one elsewhere
 ends too; for one at another address the press finds it out.
 
-What was sent is listed in OpalArchive's Inbox tab, until it is cleared
+What was sent is listed in OpalArchive's Opal Drop tab, until it is cleared
 there.
 
 ## Installing it
