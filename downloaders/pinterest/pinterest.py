@@ -416,9 +416,9 @@ def download() -> int:
                     "description": description,
                 }
                 if inside:
-                    whole["set"]["reference"] = inside
+                    whole["set"]["collection"] = inside
             elif inside:
-                whole["reference"] = inside
+                whole["collection"] = inside
             emit(
                 "item",
                 key=key,

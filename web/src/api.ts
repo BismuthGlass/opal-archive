@@ -25,6 +25,8 @@ export type FileSet = SetName & {
   source_url: string[];
   identifier: string[];
   reference: string[];
+  /** What it is part of where it came from: a board, a thread. */
+  collection: string[];
 };
 
 /** A downloader, as its manifest describes it. */
@@ -177,6 +179,8 @@ export type Metadata = {
   source_url: { value: string; count: number }[];
   identifier: { value: string; count: number }[];
   reference: { value: string; count: number }[];
+  /** What they are part of where they came from: a board, a thread. */
+  collection: { value: string; count: number }[];
   /** The sets any of them are in, and how many are in each. */
   sets: (SetName & { count: number })[];
 };
@@ -194,6 +198,9 @@ export type Changes = {
   /** References, another such list. */
   add_reference?: string[];
   remove_reference?: string[];
+  /** Collections: what something is part of where it came from. */
+  add_collection?: string[];
+  remove_collection?: string[];
 };
 
 export const TAG_FIELDS = [

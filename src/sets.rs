@@ -28,6 +28,7 @@ pub type List = (&'static str, &'static str);
 pub const SOURCE_URLS: List = ("set_source_url", "url");
 pub const IDENTIFIERS: List = ("set_identifier", "value");
 pub const REFERENCES: List = ("set_reference", "value");
+pub const COLLECTIONS: List = ("set_collection", "value");
 
 #[derive(Deserialize)]
 struct NewSet {
@@ -80,6 +81,10 @@ struct SetChanges {
     add_reference: Vec<String>,
     #[serde(default)]
     remove_reference: Vec<String>,
+    #[serde(default)]
+    add_collection: Vec<String>,
+    #[serde(default)]
+    remove_collection: Vec<String>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -210,6 +215,7 @@ pub fn describe(conn: &Connection, set: i64) -> rusqlite::Result<Option<Value>> 
         ("source_url", SOURCE_URLS),
         ("identifier", IDENTIFIERS),
         ("reference", REFERENCES),
+        ("collection", COLLECTIONS),
     ] {
         found[name] = json!(list_of(conn, list, set)?);
     }
@@ -341,6 +347,7 @@ async fn change(
     let plain = [
         (IDENTIFIERS, &input.add_identifier, "identifier"),
         (REFERENCES, &input.add_reference, "reference"),
+        (COLLECTIONS, &input.add_collection, "collection"),
     ];
     for (list, values, what) in plain {
         for value in values {
@@ -354,6 +361,7 @@ async fn change(
         (SOURCE_URLS, &input.remove_source_url),
         (IDENTIFIERS, &input.remove_identifier),
         (REFERENCES, &input.remove_reference),
+        (COLLECTIONS, &input.remove_collection),
     ];
     for ((table, column), values) in removed {
         for value in values {

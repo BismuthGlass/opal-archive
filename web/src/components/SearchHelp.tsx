@@ -46,7 +46,7 @@ const PARTS: Part[] = [
   },
   {
     title: "Text",
-    note: "Fields: title, description, ai_description, version, name (the file's name), ext, hash, identifier, reference, source_url, set_id, set_title, alt_group_id.",
+    note: "Fields: title, description, ai_description, version, name (the file's name), ext, hash, identifier, reference, collection, source_url, set_id, set_title, alt_group_id.",
     rows: [
       ["title=Sunset", "the title is exactly that"],
       ["title~holiday", "the title contains holiday"],
@@ -94,7 +94,7 @@ const PARTS: Part[] = [
   },
   {
     title: "Sets and variants",
-    note: "A file can be in several sets. A set is not found by itself: its files are, and what a set says of where it came from (source_url, identifier, reference) its files are found by too.",
+    note: "A file can be in several sets. A set is not found by itself: its files are, and what a set says of where it came from (source_url, identifier, reference, collection) its files are found by too.",
     rows: [
       ["set_id=pinterest:pin:123", "the files of that set"],
       ["set_id=pinterest:*", "the files of every set with such an ID"],

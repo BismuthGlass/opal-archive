@@ -27,6 +27,7 @@ const asSelection = (set: FileSet): Metadata => {
     source_url: counted(set.source_url),
     identifier: counted(set.identifier),
     reference: counted(set.reference),
+    collection: counted(set.collection),
     sets: [],
   };
 };

@@ -73,7 +73,7 @@ The script answers on standard output, one JSON object per line:
 | Event     | Fields                       | Meaning                                                   |
 | --------- | ---------------------------- | --------------------------------------------------------- |
 | `found`   | `total`                      | How many things there are to download, as far as is known |
-| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `tags`, `reference`, `set`, `delegate` | One thing has been fetched, as these files, in order |
+| `item`    | `key`, `source_url`, `files`, optionally `title`, `description`, `tags`, `collection`, `set`, `delegate` | One thing has been fetched, as these files, in order |
 | `skipped` | `key`                        | One thing was passed over because its key is in `seen`    |
 | `error`   | `message`, optionally `key`  | Something failed; the download goes on                    |
 | `log`     | `message`                    | What the script is doing, shown while it runs             |
@@ -83,13 +83,13 @@ the tab remembers; for Pinterest it is the pin's URL. For each `item` the
 server takes in the files, lists them under the tab, adds `source_url` and
 the tags, and remembers the key.
 
-`reference` says what the files are part of on the site, where that is not
+`collection` says what the files are part of on the site, where that is not
 something to make a set of: 4chan gives each file of a thread
 `4chan:<board>:<thread>`, Pinterest each pin of a board
 `pinterest:<user>:<board>`, or `pinterest:<user>:<board>:<section>` if it
-is in a section, and each pin a user created `pinterest:<user>`. It is kept as a reference of each file, by which the
-others are found (`reference=4chan:g:109956993`, or
-`reference=pinterest:someone:a-board*` for a board with its sections), and
+is in a section, and each pin a user created `pinterest:<user>`. It is kept as a collection of each file, by which the
+others are found (`collection=4chan:g:109956993`, or
+`collection=pinterest:someone:a-board*` for a board with its sections), and
 groups nothing. Start it with the downloader's name and namespace it with
 colons, as a set's `id` below.
 
@@ -121,7 +121,7 @@ describes the set its files go in:
   "title": "…",
   "description": "…",
   "tags": { "creator": ["Someone"] },
-  "reference": "pinterest:someone:a-board"
+  "collection": "pinterest:someone:a-board"
 }
 ```
 
@@ -132,7 +132,7 @@ describes the set its files go in:
 | `title`       | What it is called. It has no title if this is left out or empty, and is then called by its `id` |
 | `description` | Given to it if it has none                                               |
 | `tags`        | Tags for its files, as an item's: a set has none of its own              |
-| `reference`   | What it is part of on the site, kept as a reference of its own, as an item's is of its files |
+| `collection`  | What it is part of on the site, kept as a collection of its own, as an item's is of its files |
 
 The `id` is what the set is found by. The first item to name one makes the
 set, with that title; every later one, in any tab and after any restart,
@@ -146,14 +146,14 @@ arrives, as the same picture posted twice is, is then in both.
 
 A set is not an entity: it has no tags and is not listed in the tab. Its
 files are, and what the set says of where it came from (its `url`, its
-`reference`) they are found by too. Sets do not nest: what a set is part of
-is said with its `reference`.
+`collection`) they are found by too. Sets do not nest: what a set is part of
+is said with its `collection`.
 
 The downloaders here ask for one shape only: an item of several files asks
 for a set with an ID of its own, which makes one set per post. Pinterest
 does this for a pin of several images, Reddit for a post of several. Items
 that all give the same `id` would gather in one set, but a board or a
-thread is not grouped so: Pinterest and 4chan give a `reference` instead.
+thread is not grouped so: Pinterest and 4chan give a `collection` instead.
 Pinterest gives it to the file of a pin of one image, and to the set of a
 pin of several rather than to the files in it.
 

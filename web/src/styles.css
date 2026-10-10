@@ -1126,7 +1126,7 @@ button.primary {
   color: var(--danger-text);
 }
 
-/* The plain lists (identifiers, references, source URLs): one value per
+/* The plain lists (identifiers, references, collections, source URLs): one value per
    line, as text. */
 
 .links {

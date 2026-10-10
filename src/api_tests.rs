@@ -201,7 +201,7 @@ fn tag(value: &str, count: i64) -> (String, i64) {
 /// The values of one field in a metadata answer, with their counts.
 fn carried(metadata: &Value, field: &str) -> Vec<(String, i64)> {
     let list = match field {
-        "source_url" | "identifier" | "reference" => &metadata[field],
+        "source_url" | "identifier" | "reference" | "collection" => &metadata[field],
         _ => &metadata["tags"][field],
     };
     list.as_array()
@@ -341,6 +341,7 @@ async fn links_identifiers_and_references_are_plain_lists() {
             "add_source_url": ["example.com/a"],
             "add_identifier": [" isbn-1 "],
             "add_reference": [" ref-1 "],
+            "add_collection": [" 4chan:g:1 "],
         }),
     )
     .await;
@@ -361,6 +362,11 @@ async fn links_identifiers_and_references_are_plain_lists() {
     assert_eq!(both["tags"], json!({}));
     assert_eq!(api.found("identifier=isbn-1").await, [a, b]);
     assert_eq!(api.found("reference=ref-1").await, [a, b]);
+    // What they are part of is a list of its own, kept the same way.
+    assert_eq!(carried(&both, "collection"), [tag("4chan:g:1", 2)]);
+    assert_eq!(api.found("collection=4chan:*").await, [a, b]);
+    api.edit(&[a], json!({ "remove_collection": ["4chan:g:1"] })).await;
+    assert_eq!(api.found("has=collection").await, [b]);
 
     api.edit(
         &[a, b],
@@ -466,7 +472,7 @@ async fn sets_hold_files_in_order() {
         api.get(&format!("/sets/{set}")).await,
         json!({
             "id": set, "set_id": set_id, "title": "Mine", "description": null, "files": 3,
-            "source_url": [], "identifier": [], "reference": [],
+            "source_url": [], "identifier": [], "reference": [], "collection": [],
         })
     );
     // Its files say which set they are in, and are found by it.
@@ -644,6 +650,7 @@ async fn a_set_describes_itself_and_variants_are_grouped() {
                 "add_source_url": ["example.com/book"],
                 "add_identifier": ["isbn-1"],
                 "add_reference": ["shelf:3", " shelf:4 "],
+                "add_collection": ["site:shelves"],
             })),
         )
         .await;
@@ -652,12 +659,13 @@ async fn a_set_describes_itself_and_variants_are_grouped() {
         json!({
             "id": set, "set_id": "book:1", "title": "A book", "description": "In two parts",
             "files": 2, "source_url": ["https://example.com/book"], "identifier": ["isbn-1"],
-            "reference": ["shelf:3", "shelf:4"],
+            "reference": ["shelf:3", "shelf:4"], "collection": ["site:shelves"],
         })
     );
     // Where a set came from, its files came from.
     assert_eq!(api.found("source_url~example.com/book").await, [a, b]);
     assert_eq!(api.found("reference=shelf:*").await, [a, b]);
+    assert_eq!(api.found("collection=site:shelves").await, [a, b]);
     assert_eq!(api.found("has=identifier").await, [a, b]);
     assert_eq!(api.found("set_title~book").await, [a, b]);
 
@@ -942,7 +950,7 @@ async fn a_bad_query_says_where() {
 }
 
 /// A downloader that fetches from nowhere: two things, the first with a
-/// reference to its board and the second, of two files, in a set of its
+/// collection that is its board and the second, of two files, in a set of its
 /// own, and a complaint.
 const FAKE_DOWNLOADER: &str = r#"
 [ "$1" = download ] || exit 2
@@ -963,9 +971,9 @@ for n in 1 2; do
     files="$files,\"$out/$n-b.txt\""
   fi
   if [ "$n" = 2 ]; then
-    part='"set":{"id":"fake#2","url":"'$key'","description":" A pair ","reference":"fake:board:part","tags":{"genre":["Twos"],"nonsense":["x"]}}'
+    part='"set":{"id":"fake#2","url":"'$key'","description":" A pair ","collection":"fake:board:part","tags":{"genre":["Twos"],"nonsense":["x"]}}'
   else
-    part='"reference":" fake:board "'
+    part='"collection":" fake:board "'
   fi
   more='"title":" Thing '$n' ","description":"","tags":{"creator":["Its Maker"],"tags":["@bad"," from : site "],"nonsense":["x"]},'$part
   echo "{\"event\":\"item\",\"key\":\"$key\",\"source_url\":\"$key\",\"files\":[$files],$more}"
@@ -1146,9 +1154,9 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         ]
     );
 
-    // The first said what it is part of, which is kept as a reference.
-    assert_eq!(carried(&all, "reference"), [tag("fake:board", 1)]);
-    assert_eq!(api.found("reference=fake:board").await, files[..1]);
+    // The first said what it is part of, which is kept as its collection.
+    assert_eq!(carried(&all, "collection"), [tag("fake:board", 1)]);
+    assert_eq!(api.found("collection=fake:board").await, files[..1]);
 
     // The second thing asked for a set of its own: it holds its files in
     // order, under the ID and description given for it. Given no title,
@@ -1163,12 +1171,12 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     assert_eq!(api.members(set), [(files[1], Some(0)), (files[2], Some(1))]);
     assert_eq!(api.found("set_id=fake#2").await, files[1..]);
     assert_eq!(carried(&all, "genre"), [tag("Twos", 2)]);
-    // What it is part of is its own reference, and its address its own.
+    // What it is part of is its own collection, and its address its own.
     let described = api.get(&format!("/sets/{set}")).await;
     assert_eq!(described["description"], "A pair");
-    assert_eq!(described["reference"], json!(["fake:board:part"]));
+    assert_eq!(described["collection"], json!(["fake:board:part"]));
     assert_eq!(described["source_url"], json!(["https://example.test/item/2"]));
-    assert_eq!(api.found("reference=fake:board:*").await, files[1..]);
+    assert_eq!(api.found("collection=fake:board:*").await, files[1..]);
 
     // What was seen is passed over the next time.
     let seen = api.get(&format!("{path}/seen")).await;
@@ -1742,7 +1750,8 @@ async fn an_export_carries_metadata_to_another_library() {
             "add": { "tags": ["metroid:samus"], "creator": ["Someone"] },
             "add_source_url": ["https://example.com/a"],
             "add_identifier": ["site:1"],
-            "add_reference": ["4chan:g:1"],
+            "add_reference": ["see:also"],
+            "add_collection": ["4chan:g:1"],
         }),
     )
     .await;
@@ -1820,7 +1829,8 @@ async fn an_export_carries_metadata_to_another_library() {
             "creator": ["Someone"],
             "source_url": ["https://example.com/a"],
             "identifier": ["site:1"],
-            "reference": ["4chan:g:1"],
+            "reference": ["see:also"],
+            "collection": ["4chan:g:1"],
             "sets": [
                 { "set_id": "book:series", "set_index": 1 },
                 { "set_id": "pinterest:pin:1", "set_index": 1 },
@@ -1900,7 +1910,8 @@ async fn an_export_carries_metadata_to_another_library() {
     assert_eq!(entity["tags"], json!({ "creator": ["Someone"], "tags": ["metroid:samus"] }));
     assert_eq!(entity["source_url"], json!(["https://example.com/a"]));
     assert_eq!(entity["identifier"], json!(["site:1"]));
-    assert_eq!(entity["reference"], json!(["4chan:g:1"]));
+    assert_eq!(entity["reference"], json!(["see:also"]));
+    assert_eq!(entity["collection"], json!(["4chan:g:1"]));
     // The two files of one name have it again, though the zip told them apart.
     assert_eq!(to.found("name=a.pdf").await.len(), 2);
 

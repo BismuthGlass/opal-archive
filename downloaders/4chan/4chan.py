@@ -10,13 +10,14 @@
 It takes a thread URL and downloads the files posted in it, through 4chan's
 read-only JSON API (https://github.com/4chan/4chan-API). A thread still on
 the board or in its archive can be read; one that has been pruned is gone.
-The files are not put in a set: each is given a reference to its
-thread, `4chan:<board>:<thread>`, by which the files of a thread are found.
+The files are not put in a set: each is given its thread as its
+collection, `4chan:<board>:<thread>`, by which the files of a thread are
+found.
 
 It also takes the address of one post, a thread URL ending in `#p` and the
-post's number, and downloads that post's file alone, with the reference to
-its thread all the same; and the address of a file itself, which it
-downloads as it is, with no reference: it does not say what thread it is of.
+post's number, and downloads that post's file alone, with its thread as its
+collection all the same; and the address of a file itself, which it
+downloads as it is, with no collection: it does not say what thread it is of.
 """
 from __future__ import annotations
 
@@ -211,9 +212,9 @@ def download() -> int:
     def post_url(post: dict) -> str:
         return POST.format(board=board, thread=thread, no=post["no"])
 
-    # Each file refers to its thread, and is in no set for it. Thread
-    # numbers are a board's own, so the board is part of the reference.
-    reference = f"4chan:{board}:{thread}"
+    # Each file says which thread it is of, and is in no set for it. Thread
+    # numbers are a board's own, so the board is part of the collection.
+    collection = f"4chan:{board}:{thread}"
 
     todo = []
     for post in posts:
@@ -235,7 +236,7 @@ def download() -> int:
                 emit("error", key=key, message=f"{key}: {err}")
                 continue
             comment = text_of(post.get("com") or "") if options.get("comments") else ""
-            emit("item", key=key, source_url=key, files=[file], description=comment, reference=reference)
+            emit("item", key=key, source_url=key, files=[file], description=comment, collection=collection)
     return 0
 
 

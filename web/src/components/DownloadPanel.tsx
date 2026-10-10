@@ -105,6 +105,7 @@ export function BaseTags(props: {
     source_url: [],
     identifier: [],
     reference: [],
+    collection: [],
     sets: [],
   });
 

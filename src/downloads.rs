@@ -39,7 +39,7 @@ use tokio::{
 
 use crate::{
     AppState,
-    entities::{self, REFERENCES, SOURCE_URLS},
+    entities::{self, COLLECTIONS, SOURCE_URLS},
     error::ApiError,
     files,
     query::tag_type,
@@ -163,8 +163,8 @@ struct Item {
     key: String,
     source_url: Option<String>,
     /// What its files are part of on the site, as a thread: kept as a
-    /// reference of theirs, where a set would group them too much.
-    reference: Option<String>,
+    /// collection of theirs, where a set would group them too much.
+    collection: Option<String>,
     /// Its files, in order, in the folder the script was given.
     #[serde(default)]
     files: Vec<PathBuf>,
@@ -193,8 +193,8 @@ struct Whole {
     /// What it is called when it is made; it has no title if not said.
     title: Option<String>,
     description: Option<String>,
-    /// What it is part of on the site, kept as a reference of its own.
-    reference: Option<String>,
+    /// What it is part of on the site, kept as a collection of its own.
+    collection: Option<String>,
     /// Tags for its files, by field, besides the source and the tab's.
     #[serde(default)]
     tags: BaseTags,
@@ -925,7 +925,7 @@ impl Download {
     }
 
     /// Takes one downloaded thing into the library: its files go in and get
-    /// the source URL, the reference, the tags, and the title and
+    /// the source URL, the collection, the tags, and the title and
     /// description where they have none. They are listed under the tab,
     /// and if the thing asks for a set those of them in no set are put in
     /// it. What it hands over to other
@@ -1006,8 +1006,8 @@ impl Download {
             if let Some(url) = text(&whole.url) {
                 sets::add_to_list(&tx, set, sets::SOURCE_URLS, &url)?;
             }
-            if let Some(reference) = text(&whole.reference) {
-                sets::add_to_list(&tx, set, sets::REFERENCES, &reference)?;
+            if let Some(collection) = text(&whole.collection) {
+                sets::add_to_list(&tx, set, sets::COLLECTIONS, &collection)?;
             }
             // None of them may have been free to go in it.
             sets::prune(&tx)?;
@@ -1028,8 +1028,8 @@ impl Download {
         if let Some(url) = source_url {
             entities::add_to_list(&tx, &tagged, SOURCE_URLS, url)?;
         }
-        if let Some(reference) = text(&item.reference) {
-            entities::add_to_list(&tx, &tagged, REFERENCES, &reference)?;
+        if let Some(collection) = text(&item.collection) {
+            entities::add_to_list(&tx, &tagged, COLLECTIONS, &collection)?;
         }
         let source = [("source".to_string(), self.manifest.source.clone())];
         let each = |tags: &BaseTags| {

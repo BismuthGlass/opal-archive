@@ -126,7 +126,7 @@ is on, for a query of several lines).
 | `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed`, `tab`, `set` and `variants` too. With `collapse=1` a set is listed once, as the first of its files found; a search within a set or a variant group is not affected |
 | `GET /entities/{id}`             | Everything about one file, the sets it is in (`sets`: each one's `id`, `set_id`, `title`, and the file's `index` in it) included |
 | `POST /entities/metadata`        | `{ids}` → what those files have in common, and the sets any of them are in |
-| `POST /entities/edit`            | `{ids, set, add, remove, add_source_url, remove_source_url, add_identifier, remove_identifier, add_reference, remove_reference}` → the same edit applied to all. `set` takes `alt_group_id` too, which files that are variants of each other share; the `_source_url`, `_identifier` and `_reference` lists change those plain lists |
+| `POST /entities/edit`            | `{ids, set, add, remove, add_source_url, remove_source_url, add_identifier, remove_identifier, add_reference, remove_reference, add_collection, remove_collection}` → the same edit applied to all. `set` takes `alt_group_id` too, which files that are variants of each other share; the `_source_url`, `_identifier` and `_reference` lists change those plain lists |
 | `POST /entities/trash`           | `{ids}` → move to the trash: hidden from searches, nothing removed |
 | `POST /entities/restore`         | `{ids}` → take back out of the trash                           |
 | `POST /entities/delete`          | `{ids}` → delete for good those that are in the trash; files leave storage |
@@ -140,7 +140,7 @@ is on, for a query of several lines).
 | `POST /tags/aliases/apply`       | Replace aliases still on entities with the tags they stand for |
 | `GET /sets?q=`                   | The sets whose title or set ID contains `q`, with how many files each holds, for picking one |
 | `POST /sets`                     | `{files, title, set_id}` → a new set of those files, in that order, besides any sets they are in. Without a `set_id` it is given one; one another set has is refused |
-| `GET /sets/{id}`                 | Everything about one set: `set_id`, `title`, `description`, how many files it holds, and its `source_url`, `identifier` and `reference` lists |
+| `GET /sets/{id}`                 | Everything about one set: `set_id`, `title`, `description`, how many files it holds, and its `source_url`, `identifier`, `reference` and `collection` lists |
 | `PATCH /sets/{id}`               | `{set, add_source_url, remove_source_url, …}` as an edit of entities is written → change it, all or nothing. `set` takes `set_id`, `title` and `description`. A set has no tags |
 | `DELETE /sets/{id}`              | Take the set apart: its files stay in the library               |
 | `POST /sets/{id}/files`          | `{add, remove}` → put files in it, or take them out. A set left with none is gone |

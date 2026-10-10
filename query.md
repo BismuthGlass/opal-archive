@@ -155,7 +155,7 @@ Trashed entities are left out of every search that does not mention
 
 ### String fields
 
-Multi-valued: `identifier` `reference` `source_url`. These are plain lists, not tags.
+Multi-valued: `identifier` `reference` `collection` `source_url`. These are plain lists, not tags.
 
 Single-valued: `title` `description` `ai_description` `version` `name` `ext`
 `hash` `set_id` `set_title` `alt_group_id`
@@ -197,7 +197,7 @@ has=set_id                                files that are in a set
 that is a variant of something.
 
 A set has plain lists of its own, of where it came from: `source_url`,
-`identifier` and `reference`. A file is found by its set's as by its own, so
+`identifier`, `reference` and `collection`. A file is found by its set's as by its own, so
 `source_url~pinterest.com/pin/123` finds every file of the set that has that
 address, and `has=source_url` a file one of whose sets has one.
 

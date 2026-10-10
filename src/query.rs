@@ -153,6 +153,7 @@ fn lookup(name: &str) -> Option<Field> {
         "source_url" => Field::List("source_url", "url"),
         "identifier" => Field::List("identifier", "value"),
         "reference" => Field::List("reference", "value"),
+        "collection" => Field::List("collection", "value"),
         "title" => Field::Text('e', "title"),
         "description" => Field::Text('e', "description"),
         "ai_description" => Field::Text('e', "ai_description"),
@@ -1144,6 +1145,8 @@ mod tests {
              VALUES (1, 1), (1, 2), (1, 4), (2, 3), (2, 5), (3, 1);
              INSERT INTO identifier (entity_id, value) VALUES (5, 'isbn-1');
              INSERT INTO reference (entity_id, value) VALUES (5, 'ref-1');
+             INSERT INTO collection (entity_id, value) VALUES (5, '4chan:g:1');
+             INSERT INTO set_collection (set_key, value) VALUES (4, 'pinterest:someone:board');
              INSERT INTO source_url (entity_id, url) VALUES (5, 'https://example.com/a');",
         )
         .unwrap();
@@ -1287,6 +1290,10 @@ mod tests {
         assert_eq!(found(&conn, "has=title"), [1]);
         assert_eq!(found(&conn, "identifier=isbn-1"), [5]);
         assert_eq!(found(&conn, "reference=ref-*"), [5]);
+        // What a file is part of, or one of its sets is.
+        assert_eq!(found(&conn, "collection=4chan:g:*"), [5]);
+        assert_eq!(found(&conn, "collection=pinterest:someone:*"), [1, 2]);
+        assert_eq!(found(&conn, "has=collection"), [1, 2, 5]);
         assert_eq!(found(&conn, "source_url~example"), [5]);
         assert!(fails("score>many"));
         assert!(fails("media=film"));

@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 
 use crate::{
     archive::reason,
-    entities::{self, IDENTIFIERS, REFERENCES, SCALARS, SOURCE_URLS},
+    entities::{self, COLLECTIONS, IDENTIFIERS, REFERENCES, SCALARS, SOURCE_URLS},
     query::TAG_FIELDS,
     sets, tags,
 };
@@ -42,7 +42,7 @@ pub fn write(conn: &Connection, id: i64) -> rusqlite::Result<Metadata> {
     for (field, values) in entities::tags_of(conn, id)? {
         meta.insert(field, json!(values));
     }
-    for list in [SOURCE_URLS, IDENTIFIERS, REFERENCES] {
+    for list in [SOURCE_URLS, IDENTIFIERS, REFERENCES, COLLECTIONS] {
         meta.insert(list.0.into(), json!(entities::list_of(conn, list, id)?));
     }
     let sets = entities::sets_of_file(conn, id)?.into_iter().map(|set| {
@@ -98,8 +98,8 @@ fn texts<'a>(meta: &'a Metadata, field: &str, problems: &mut Vec<String>) -> Vec
     }
 }
 
-/// Gives a file what a sidecar says of it. Tags, source URLs, identifiers
-/// and references are added to what it has; a field that holds one value
+/// Gives a file what a sidecar says of it. Tags, source URLs, identifiers,
+/// references and collections are added to what it has; a field that holds one value
 /// is only filled in where the file has none. What only the library
 /// decides (when it was added, the name of the file) is taken from the
 /// sidecar for a file that is `new`, and left alone otherwise. Which sets
@@ -193,7 +193,7 @@ pub fn apply(
             Err(err) => problems.push(reason(err)),
         }
     }
-    for list in [IDENTIFIERS, REFERENCES] {
+    for list in [IDENTIFIERS, REFERENCES, COLLECTIONS] {
         for value in texts(meta, list.0, problems) {
             match value.trim() {
                 "" => problems.push(format!("empty {}", list.0)),
@@ -296,7 +296,12 @@ pub fn apply_set(
             Err(err) => problems.push(reason(err)),
         }
     }
-    for (field, list) in [("identifier", sets::IDENTIFIERS), ("reference", sets::REFERENCES)] {
+    let plain = [
+        ("identifier", sets::IDENTIFIERS),
+        ("reference", sets::REFERENCES),
+        ("collection", sets::COLLECTIONS),
+    ];
+    for (field, list) in plain {
         for value in texts(meta, field, problems) {
             match value.trim() {
                 "" => problems.push(format!("empty {field}")),

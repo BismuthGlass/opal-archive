@@ -37,6 +37,7 @@ interface SetMetadata {
   source_url?: string[];
   identifier?: string[];
   reference?: string[];
+  collection?: string[];
 }
 
 // A set a file is in.
@@ -128,6 +129,12 @@ interface FileMetadata {
   // References for the file, as a plain list of strings.
   reference?: string[];
 
+  // What the file is part of where it came from, as a plain list of
+  // strings: a board (`pinterest:someone:a-board`), a thread
+  // (`4chan:g:109956993`).  It names, and groups nothing: files that
+  // belong together in an order are a set.
+  collection?: string[];
+
   // Description provided to an AI to identify the file.
   ai_description?: string;
 
@@ -169,6 +176,6 @@ The library has no custom fields: a field not listed here is ignored when a side
 
 ## Changes
 
-v2.0: collections are gone.  A file lists the sets it is in under `sets`, each with its `set_id` and `set_index`, in place of the `collection` list, and variants share an `alt_group_id` in place of a collection of that type.  A set's own sidecar has `metadata_type: "set"` and only a title, a description and the lists that say where it came from; it has no type, no tags, and cannot be in another set.  A directory's is `_set.json`, formerly `_collection.json`.  `collection_id`, `collection_type` and `ordered` are gone: a set is always in the order its files give.
+v2.0: collections that hold files are gone.  `collection` is now a plain list of names, of what a file or a set is part of where it came from, which `reference` was used for until now.  A file lists the sets it is in under `sets`, each with its `set_id` and `set_index`, in place of the `collection` list, and variants share an `alt_group_id` in place of a collection of that type.  A set's own sidecar has `metadata_type: "set"` and only a title, a description and the lists that say where it came from; it has no type, no tags, and cannot be in another set.  A directory's is `_set.json`, formerly `_collection.json`.  `collection_id`, `collection_type` and `ordered` are gone: a set is always in the order its files give.
 
 v1.1: a collection says what it is itself, with `collection_type` and `ordered`, and need not have a `collection_id`; `date_added` is a date and time; `media_type`, `size` and `original_name` are added to the file attributes; `ai_content` is gone, a `medium` tag saying it instead; unknown fields are ignored rather than preserved, and unknown values are refused rather than only warned about.

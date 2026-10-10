@@ -71,6 +71,13 @@ struct EditInput {
     /// References to detach.
     #[serde(default)]
     remove_reference: Vec<String>,
+    /// Collections to attach: what the entities are part of where they
+    /// came from.
+    #[serde(default)]
+    add_collection: Vec<String>,
+    /// Collections to detach.
+    #[serde(default)]
+    remove_collection: Vec<String>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -101,6 +108,7 @@ pub type List = (&'static str, &'static str);
 pub const SOURCE_URLS: List = ("source_url", "url");
 pub const IDENTIFIERS: List = ("identifier", "value");
 pub const REFERENCES: List = ("reference", "value");
+pub const COLLECTIONS: List = ("collection", "value");
 
 /// An entity's values in a list.
 pub fn list_of(conn: &Connection, list: List, id: i64) -> rusqlite::Result<Vec<String>> {
@@ -202,6 +210,7 @@ async fn entity(
         json!(list_of(&conn, IDENTIFIERS, id)?),
     );
     result.insert("reference".into(), json!(list_of(&conn, REFERENCES, id)?));
+    result.insert("collection".into(), json!(list_of(&conn, COLLECTIONS, id)?));
     result.insert("file".into(), json!(file_details(&conn, id)?));
     result.insert("sets".into(), json!(sets_of_file(&conn, id)?));
     Ok(Json(Value::Object(result)))
@@ -324,6 +333,7 @@ async fn metadata(
         "source_url": counted(&conn, &ids, SOURCE_URLS)?,
         "identifier": counted(&conn, &ids, IDENTIFIERS)?,
         "reference": counted(&conn, &ids, REFERENCES)?,
+        "collection": counted(&conn, &ids, COLLECTIONS)?,
         "sets": sets_of(&conn, &ids)?,
     })))
 }
@@ -519,6 +529,7 @@ async fn edit(
         .collect::<Result<Vec<_>, _>>()?;
     let added_identifiers = plain_values(&input.add_identifier, "identifier")?;
     let added_references = plain_values(&input.add_reference, "reference")?;
+    let added_collections = plain_values(&input.add_collection, "collection")?;
     let ids = ids_json(&input.ids);
 
     let mut conn = state.db.lock().unwrap();
@@ -558,6 +569,12 @@ async fn edit(
     }
     for value in &input.remove_reference {
         remove_from_list(&tx, &ids, REFERENCES, value.trim())?;
+    }
+    for value in &added_collections {
+        add_to_list(&tx, &ids, COLLECTIONS, value)?;
+    }
+    for value in &input.remove_collection {
+        remove_from_list(&tx, &ids, COLLECTIONS, value.trim())?;
     }
     let count: i64 = tx.query_row(
         &format!("SELECT count(*) FROM entity WHERE id {IN_IDS}"),

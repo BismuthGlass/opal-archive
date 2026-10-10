@@ -33,6 +33,15 @@ export const PLAIN_LISTS = [
     remove: (value: string): Changes => ({ remove_reference: [value] }),
   },
   {
+    field: "collection",
+    label: "Collection",
+    placeholder: "Add…",
+    links: false,
+    values: (data: Metadata) => data.collection,
+    add: (value: string): Changes => ({ add_collection: [value] }),
+    remove: (value: string): Changes => ({ remove_collection: [value] }),
+  },
+  {
     field: "source_url",
     label: "Source URL",
     placeholder: "Add a link…",
