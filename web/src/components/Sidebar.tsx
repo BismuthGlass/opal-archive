@@ -50,8 +50,6 @@ const DETAIL_FIELDS: DetailField[] = [
   { field: "ai_description", label: "AI description", long: true },
   // Only used to name the file again on download.
   { field: "original_name", label: "Filename", single: true },
-  // What the files that are variants of each other share.
-  { field: "alt_group_id", label: "Variant group" },
 ];
 
 /**
@@ -256,6 +254,14 @@ export default function Sidebar(props: {
                                 show them
                               </button>
                             </Show>
+                            {", "}
+                            <button
+                              class="link"
+                              title="Take this file out of its variant group. The others stay grouped."
+                              onClick={() => apply({ set: { alt_group_id: null } })}
+                            >
+                              ungroup
+                            </button>
                           </dd>
                         </>
                       )}

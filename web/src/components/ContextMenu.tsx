@@ -307,6 +307,11 @@ function Menu(props: {
     action().catch((err) => showToast(errorMessage(err)));
   };
 
+  /** Whether any of the selection is a variant of something, to be ungrouped. */
+  const grouped = () => {
+    const group = state()?.scalars.alt_group_id;
+    return group !== undefined && (group.mixed || group.value !== null);
+  };
   /** The set on show, which the selection can be taken out of. */
   const set = shownSet();
   /** Says what was done to the selection's sets or variants, once it is. */
@@ -421,6 +426,23 @@ function Menu(props: {
             </button>
           </li>
         )}
+      </Show>
+      <Show when={grouped()}>
+        <li role="none">
+          <button
+            role="menuitem"
+            title="Take these out of their variant groups. What else is in a group stays grouped."
+            onClick={() =>
+              group(async () => {
+                await api.edit(ids, { set: { alt_group_id: null } });
+                return `Ungrouped ${plural(ids.length, "file")}`;
+              })
+            }
+          >
+            <Icon name="close" />
+            Ungroup variants
+          </button>
+        </li>
       </Show>
       <Show when={ids.length > 1}>
         <li role="none">
