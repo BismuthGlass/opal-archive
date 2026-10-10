@@ -178,7 +178,7 @@ def uploaded(media_id: str, meta: dict) -> tuple[str, str]:
     return "file", ORIGINAL.format(name=f"{media_id}{ext}")
 
 
-def media_of(post: dict, want_external: bool, delegates: list[str]) -> list[tuple[str, str]]:
+def media_of(post: dict, delegates: list[str]) -> list[tuple[str, str]]:
     """Everything a post shows, in display order."""
     metadata = post.get("media_metadata") or {}
     if post.get("gallery_data"):
@@ -196,8 +196,6 @@ def media_of(post: dict, want_external: bool, delegates: list[str]) -> list[tupl
     if post.get("is_self") or host.endswith("reddit.com"):
         # A text post; any pictures are in among its words.
         return [uploaded(i, meta) for i, meta in metadata.items()]
-    if not want_external:
-        return []
     # A site with a downloader of its own is that downloader's to fetch:
     # it knows what the site says of it, which is then kept too.
     if taken_by(host, delegates):
@@ -289,7 +287,6 @@ def load_cookies(path: str | None) -> None:
 
 def download() -> int:
     request = json.load(sys.stdin)
-    options = request.get("options") or {}
     out = Path(request["out"])
     out.mkdir(parents=True, exist_ok=True)
     seen = set(request.get("seen") or [])
@@ -315,9 +312,9 @@ def download() -> int:
         if key in seen:
             emit("skipped", key=key)
             return 0
-    media = media_of(post, options.get("external", True), request.get("delegates") or [])
+    media = media_of(post, request.get("delegates") or [])
     if not media:
-        raise RuntimeError("the post has nothing to download, with the options as they are")
+        raise RuntimeError("the post has nothing to download")
     emit("log", message="Downloading")
     handed = [url for how, url in media if how == "delegate"]
     files = fetch_post(post, [medium for medium in media if medium[0] != "delegate"], out)

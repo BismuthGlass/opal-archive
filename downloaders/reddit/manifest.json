@@ -6,12 +6,5 @@
   "sites": ["reddit.com", "redd.it"],
   "cookies": {
     "browsers": ["chrome", "firefox", "safari", "brave", "edge", "chromium", "opera", "vivaldi"]
-  },
-  "options": [
-    {
-      "key": "external",
-      "label": "Download what a post links to on another site, such as Imgur, Redgifs or YouTube",
-      "default": true
-    }
-  ]
+  }
 }
