@@ -1597,7 +1597,7 @@ span.chip-label:hover {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: 0;
+  padding: 0 0 0 16px;
   margin: 0;
   line-height: 1.35;
   list-style: none;
@@ -1661,15 +1661,8 @@ span.chip-label:hover {
   border-radius: 2px;
 }
 
-.tag-line .chip-edit {
-  padding: 0 3px;
-  font-size: inherit;
-  line-height: inherit;
-}
-
 /* The input sits above its chips, so it stays put as values come and go. */
 .list-label + .chips,
-.list-label + .tag-lines,
 .list-label + .links {
   margin-top: 4px;
 }
@@ -1695,6 +1688,14 @@ span.chip-label:hover {
 
 .list-label:hover {
   color: var(--text);
+}
+
+/* The label of a list of tags has a small plus in front of it, always
+   there: it is how tags are added. */
+.tags-label .icon {
+  width: 1.1em;
+  height: 1.1em;
+  opacity: 1;
 }
 
 .chip-label:disabled {

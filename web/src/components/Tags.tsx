@@ -15,7 +15,6 @@ import {
   typesStarting,
 } from "../tagTypes";
 import { openTagMenu } from "./ContextMenu";
-import { ListLabel } from "./fields";
 import type { FieldProps, ListMode } from "./fields";
 import Icon from "./Icon";
 import Modal from "./Modal";
@@ -592,6 +591,25 @@ export function TaggerModal(props: {
 }
 
 /**
+ * What heads a list of tags. In the panel it opens the tagger, which the
+ * plus in front of it says; in the tagger it is only a heading.
+ */
+function TagsLabel(props: ListMode & { label: string }) {
+  return (
+    <Show when={!props.editing} fallback={<span class="label">{props.label}:</span>}>
+      <button
+        class="label list-label tags-label"
+        title={`Add or remove ${props.label.toLowerCase()}`}
+        onClick={props.onEdit}
+      >
+        <Icon name="add" />
+        {props.label}:
+      </button>
+    </Show>
+  );
+}
+
+/**
  * The tags of one type that is not aggregated, in a section of their own.
  * In the panel the label opens the tagger.
  */
@@ -609,12 +627,7 @@ export function TagField(props: FieldProps & ListMode & { field: string }) {
 
   return (
     <div class="field">
-      <Show
-        when={props.editing}
-        fallback={<ListLabel label={fieldLabel(props.field)} onEdit={props.onEdit} />}
-      >
-        <span class="label">{fieldLabel(props.field)}</span>
-      </Show>
+      <TagsLabel label={fieldLabel(props.field)} editing={props.editing} onEdit={props.onEdit} />
       <ul class="tag-lines">
         <For each={sorted()}>
           {(tag) => (
@@ -633,9 +646,9 @@ export function TagField(props: FieldProps & ListMode & { field: string }) {
 }
 
 /**
- * The tags of every aggregated type in one list with no heading, told
- * apart by their colours. In the panel it ends in the button that opens
- * the tagger; in the tagger each tag can be taken off.
+ * The tags of every aggregated type in one list, told apart by their
+ * colours. In the panel its label opens the tagger; in the tagger each
+ * tag can be taken off.
  */
 export function AggregatedTags(props: FieldProps & ListMode) {
   const entries = () =>
@@ -644,6 +657,7 @@ export function AggregatedTags(props: FieldProps & ListMode) {
     );
   return (
     <div class="aggregate">
+      <TagsLabel label="Tags" editing={props.editing} onEdit={props.onEdit} />
       <ul class="tag-lines">
         <For each={entries()}>
           {(entry) => (
@@ -656,19 +670,6 @@ export function AggregatedTags(props: FieldProps & ListMode) {
             />
           )}
         </For>
-        <Show when={!props.editing}>
-          <li class="tag-line">
-            <button
-              class="chip chip-edit"
-              aria-label="Edit tags"
-              title="Add or remove tags"
-              onClick={props.onEdit}
-            >
-              <Icon name="add" />
-              <Show when={entries().length === 0}>Tags</Show>
-            </button>
-          </li>
-        </Show>
       </ul>
     </div>
   );
