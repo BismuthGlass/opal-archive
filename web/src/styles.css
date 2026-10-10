@@ -2400,66 +2400,66 @@ kbd {
 
 /* Tag manager. */
 
-.tag-manager-bar {
-  display: flex;
-  flex: none;
-  gap: 8px;
-  align-items: center;
-}
-
-.tag-manager-bar input {
-  flex: 1;
-  min-width: 0;
-}
-
-.tag-manager-bar button {
-  flex: none;
-}
-
-/* The list of tags beside the details of the one selected. */
+/* The tags to browse on one side, and the details of the one selected on
+   the other, with a line between. */
 .tag-manager {
   display: flex;
   /* Takes what is left of the modal's fixed height. */
   flex: 1;
-  gap: 12px;
   min-height: 0;
-  margin-top: 10px;
-}
-
-.tag-list {
-  flex: 1 1 45%;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
-.tag-list > li + li {
+  margin: 0 -16px -16px;
   border-top: 1px solid var(--border);
 }
 
+/* The box that filters, the list it filters, and a line under them. */
+.tag-browser {
+  display: flex;
+  flex: 0 0 340px;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid var(--border);
+}
+
+.tag-browser > input {
+  flex: none;
+  margin: 12px 12px 8px;
+}
+
+.dialog .tag-browser > input {
+  width: auto;
+}
+
+.tag-list {
+  flex: 1;
+  min-height: 0;
+  padding: 0 6px 6px;
+  margin: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
 .tag-list > li.hint {
-  padding: 12px;
+  padding: 8px 6px;
 }
 
 .dialog button.tag-row {
   display: flex;
-  gap: 6px;
-  align-items: center;
+  gap: 8px;
+  align-items: baseline;
   width: 100%;
-  min-height: 26px;
-  padding: 2px 8px;
-  text-align: left;
+  padding: 4px 8px;
+  line-height: 1.35;
   color: var(--text);
-  border-radius: 0;
+  text-align: left;
+  border-radius: 6px;
 }
 
 .dialog button.tag-row[aria-selected="true"] {
-  background: var(--bg);
-  box-shadow: inset 3px 0 0 var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.tag-row .icon {
+  align-self: center;
 }
 
 .tag-row .tag-name {
@@ -2475,8 +2475,13 @@ kbd {
 .tag-note {
   flex: none;
   font-size: 12px;
-  color: var(--muted);
   font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* How many items carry the tag, at the end of its row. */
+.tag-row .tag-uses {
+  margin-left: auto;
 }
 
 /* The start of a tag's description, in its row. */
@@ -2485,48 +2490,85 @@ kbd {
   min-width: 0;
   overflow: hidden;
   font-size: 12px;
+  color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--muted);
+}
+
+.tag-browser-foot {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: baseline;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+}
+
+.tag-browser-foot button {
+  margin-left: auto;
+}
+
+.dialog .tag-browser-foot button {
+  padding: 2px 8px;
+  font-size: 12px;
 }
 
 .tag-details {
   display: flex;
-  flex: 1 1 55%;
+  flex: 1;
   flex-direction: column;
-  gap: 8px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 16px 20px;
   overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+}
+
+/* With no tag selected, the words that say so sit in the middle. */
+.tag-details .tag-nothing {
+  margin: auto;
 }
 
 .tag-details header {
   display: flex;
-  gap: 8px;
-  align-items: center;
+  gap: 12px;
+  align-items: flex-start;
 }
 
-.tag-details header .tag-name {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.tag-details header input {
+/* The tag's name, large, over its type and how much it is used. */
+.tag-title {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
-.tag-details .stacked {
-  margin: 4px 0 0;
+.tag-title .tag-name {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.tag-details h3 {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 20px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.tag-details h3 .tag-note {
+  font-weight: 400;
 }
 
 .tag-details textarea {
   display: block;
+  flex: none;
   width: 100%;
-  margin-top: 4px;
-  padding: 6px 8px;
+  padding: 8px 10px;
   font: inherit;
   line-height: 1.45;
   color: var(--text);
@@ -2536,18 +2578,14 @@ kbd {
   border-radius: 6px;
 }
 
-.tag-saved {
-  margin-top: -4px;
-}
-
 .tag-actions {
   display: flex;
   flex: none;
-  gap: 4px;
+  gap: 6px;
 }
 
 .dialog .tag-actions button {
-  padding: 1px 8px;
+  padding: 3px 10px;
   font-size: 13px;
 }
 
@@ -2556,16 +2594,20 @@ kbd {
 }
 
 .tag-aliases {
-  margin: 0;
   padding: 0;
+  margin: 0;
   list-style: none;
+}
+
+.tag-aliases:not(:empty) {
+  margin-bottom: 6px;
 }
 
 .tag-aliases li {
   display: flex;
   gap: 6px;
   align-items: center;
-  min-height: 26px;
+  min-height: 28px;
   color: var(--muted);
 }
 
@@ -2585,9 +2627,14 @@ kbd {
     flex-direction: column;
   }
 
-  .tag-list,
+  .tag-browser {
+    flex: 1 1 50%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
   .tag-details {
-    flex-basis: 50%;
+    flex: 1 1 50%;
   }
 }
 

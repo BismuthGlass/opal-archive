@@ -185,182 +185,202 @@ export default function TagManager(props: {
 
   return (
     <Modal title="Tag Manager" wide tall onClose={props.onClose}>
-      <div class="tag-manager-bar">
-        <input
-          type="text"
-          autofocus
-          ref={box}
-          aria-label="Filter or create tags"
-          placeholder="Filter tags or name a new one. @cr: for creators, @ for all the types"
-          autocomplete="off"
-          spellcheck={false}
-          value={filter()}
-          onInput={(event) => setFilter(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") create();
-          }}
-        />
-        <button
-          class="primary"
-          disabled={pending() === 0}
-          title={
-            pending() === 0
-              ? "No item carries an alias: there is nothing to update"
-              : "Replace aliases still on items with the tags they stand for, in every tag type"
-          }
-          onClick={() => run(api.applyAliases)}
-        >
-          Update aliases
-          <Show when={pending() > 0}> ({pending()})</Show>
-        </button>
-      </div>
       <Show when={error()}>
         <p class="form-error" role="alert">
           {error()}
         </p>
       </Show>
       <div class="tag-manager">
-        <ul class="tag-list" role="listbox" aria-label="Tags">
-          <For each={types()}>
-            {(type) => (
-              <li>
-                <button class="plain tag-row" onClick={() => chooseType(type)}>
-                  <span class="tag-name" style={tagTextStyle(type)}>
-                    {fieldLabel(type)}
-                  </span>
-                  <span class="tag-note">
-                    {type === "tags" ? "no @ needed" : `@${prefixOf(type)}:`}
-                  </span>
-                </button>
-              </li>
-            )}
-          </For>
-          <Show when={read().field === null && read().naming === null}>
-            <li class="hint">{read().lead.slice(0, -1)} is not a tag type. Type @ to see them.</li>
-          </Show>
-          <Show when={read().field !== null}>
-          <Show when={creatable()}>
-            <li>
-              <button class="plain tag-row" onClick={create}>
-                <Icon name="add" />
-                Create
-                <span class="tag-name" style={tagTextStyle(field())}>
-                  {typed()}
-                </span>
-                <span class="tag-note">Enter</span>
-              </button>
-            </li>
-          </Show>
-          <For
-            each={matching().slice(0, MAX_ROWS)}
-            fallback={
-              <Show when={!creatable()}>
-                <li class="hint">
-                  {data.loading
-                    ? "Loading…"
-                    : `No ${fieldLabel(field()).toLowerCase()} yet. Type a name to create one.`}
+        <div class="tag-browser">
+          <input
+            type="text"
+            autofocus
+            ref={box}
+            aria-label="Filter or create tags"
+            placeholder="Filter or name a new tag. @ for the types"
+            title="Filters the plain tags, or with a type in front (@cr:) the tags of that type. A name that does not exist yet can be created."
+            autocomplete="off"
+            spellcheck={false}
+            value={filter()}
+            onInput={(event) => setFilter(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") create();
+            }}
+          />
+          <ul class="tag-list" role="listbox" aria-label="Tags">
+            <For each={types()}>
+              {(type) => (
+                <li>
+                  <button class="plain tag-row" onClick={() => chooseType(type)}>
+                    <span class="tag-name" style={tagTextStyle(type)}>
+                      {fieldLabel(type)}
+                    </span>
+                    <span class="tag-uses">
+                      {type === "tags" ? "no @ needed" : `@${prefixOf(type)}:`}
+                    </span>
+                  </button>
+                </li>
+              )}
+            </For>
+            <Show when={read().field === null && read().naming === null}>
+              <li class="hint">{read().lead.slice(0, -1)} is not a tag type. Type @ to see them.</li>
+            </Show>
+            <Show when={read().field !== null}>
+              <Show when={creatable()}>
+                <li>
+                  <button class="plain tag-row tag-create" onClick={create}>
+                    <Icon name="add" />
+                    Create
+                    <span class="tag-name" style={tagTextStyle(field())}>
+                      {typed()}
+                    </span>
+                    <span class="tag-uses">Enter</span>
+                  </button>
                 </li>
               </Show>
-            }
-          >
-            {(tag) => (
-              <li>
-                <button
-                  class="plain tag-row"
-                  role="option"
-                  aria-selected={selected() === tag}
-                  onClick={() => select(tag)}
-                >
-                  <span class="tag-name" style={tagTextStyle(field())}>
-                    {tag.value}
-                  </span>
-                  <span class="tag-uses" title={`On ${plural(tag.count, "item")}`}>
-                    {tag.count}
-                  </span>
-                  <Show when={tag.aliases.length > 0}>
-                    <span class="tag-note">
-                      {tag.aliases.length} {tag.aliases.length === 1 ? "alias" : "aliases"}
-                    </span>
+              <For
+                each={matching().slice(0, MAX_ROWS)}
+                fallback={
+                  <Show when={!creatable()}>
+                    <li class="hint">
+                      {data.loading
+                        ? "Loading…"
+                        : `No ${fieldLabel(field()).toLowerCase()} yet. Type a name to create one.`}
+                    </li>
                   </Show>
-                  <Show when={tag.description}>
-                    <span class="tag-preview">{tag.description}</span>
-                  </Show>
-                </button>
-              </li>
-            )}
-          </For>
-          <Show when={matching().length > MAX_ROWS}>
-            <li class="hint">
-              Showing {MAX_ROWS} of {matching().length} tags. Filter to see the rest.
-            </li>
-          </Show>
-          </Show>
-        </ul>
+                }
+              >
+                {(tag) => (
+                  <li>
+                    <button
+                      class="plain tag-row"
+                      role="option"
+                      aria-selected={selected() === tag}
+                      onClick={() => select(tag)}
+                    >
+                      <span class="tag-name" style={tagTextStyle(field())}>
+                        {tag.value}
+                      </span>
+                      <Show when={tag.description}>
+                        <span class="tag-preview">{tag.description}</span>
+                      </Show>
+                      <Show when={tag.aliases.length > 0}>
+                        <span
+                          class="tag-note"
+                          title={`Also known as ${tag.aliases.map((alias) => alias.value).join(", ")}`}
+                        >
+                          {tag.aliases.length} {tag.aliases.length === 1 ? "alias" : "aliases"}
+                        </span>
+                      </Show>
+                      <span class="tag-uses" title={`On ${plural(tag.count, "item")}`}>
+                        {tag.count}
+                      </span>
+                    </button>
+                  </li>
+                )}
+              </For>
+              <Show when={matching().length > MAX_ROWS}>
+                <li class="hint">
+                  Showing {MAX_ROWS} of {matching().length} tags. Filter to see the rest.
+                </li>
+              </Show>
+            </Show>
+          </ul>
+          {/* Under the list: the type on show and how many it has, and the
+              button for every type's aliases. */}
+          <div class="tag-browser-foot">
+            <span class="tag-name" style={tagTextStyle(field())}>
+              {fieldLabel(field())}
+            </span>
+            <span class="tag-note">
+              {matching().length === tags().length
+                ? tags().length
+                : `${matching().length} of ${tags().length}`}
+            </span>
+            <button
+              classList={{ primary: pending() > 0 }}
+              disabled={pending() === 0}
+              title={
+                pending() === 0
+                  ? "No item carries an alias: there is nothing to update"
+                  : "Replace aliases still on items with the tags they stand for, in every tag type"
+              }
+              onClick={() => run(api.applyAliases)}
+            >
+              Update aliases
+              <Show when={pending() > 0}> ({pending()})</Show>
+            </button>
+          </div>
+        </div>
         <section class="tag-details" aria-label="Details of the selected tag">
           <Show
             when={selected()}
-            fallback={<p class="hint">Select a tag to see and edit its details.</p>}
+            fallback={<p class="hint tag-nothing">Select a tag to see and edit its details.</p>}
           >
             {(tag) => (
               <>
                 <header>
-                  <Show
-                    when={renaming()}
-                    fallback={
-                      <span class="tag-name" style={tagTextStyle(field())}>
-                        {tag().value}
-                      </span>
-                    }
-                  >
-                    <InlineInput
-                      label={`New name for ${tag().value}`}
-                      initial={tag().value}
-                      onSave={(text) => rename(tag(), text)}
-                      onCancel={() => setRenaming(false)}
-                    />
-                  </Show>
-                  <span class="tag-note">on {plural(tag().count, "item")}</span>
-                </header>
-                <div class="tag-actions">
-                  <button
-                    title="Rename this tag; giving it the name of another tag merges them"
-                    onClick={() => setRenaming(true)}
-                  >
-                    Rename or merge
-                  </button>
-                  <Show when={tag().count === 0 && tag().aliases.length === 0}>
-                    <button
-                      class="danger"
-                      title="Delete this tag, which nothing carries"
-                      onClick={() => remove(tag())}
-                    >
-                      Delete
-                    </button>
-                  </Show>
-                </div>
-
-                <label class="stacked">
-                  Description
-                  <textarea
-                    rows={9}
-                    aria-label={`Description of ${tag().value}`}
-                    placeholder="Who or what this is, how the tag should be used…"
-                    value={draft()}
-                    onInput={(event) => setDraft(event.currentTarget.value)}
-                    // Saved on leaving the box, and by Ctrl or Cmd with Enter.
-                    onBlur={saveDescription}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-                        saveDescription();
+                  <div class="tag-title">
+                    <Show
+                      when={renaming()}
+                      fallback={
+                        <span class="tag-name" style={tagTextStyle(field())}>
+                          {tag().value}
+                        </span>
                       }
-                    }}
-                  />
-                </label>
-                <p class="hint tag-saved">
-                  {unsaved() ? "Not saved yet: click outside the box to save" : "\u00a0"}
-                </p>
+                    >
+                      <InlineInput
+                        label={`New name for ${tag().value}`}
+                        initial={tag().value}
+                        onSave={(text) => rename(tag(), text)}
+                        onCancel={() => setRenaming(false)}
+                      />
+                    </Show>
+                    <span class="tag-note">
+                      {fieldLabel(field())}, on {plural(tag().count, "item")}
+                    </span>
+                  </div>
+                  <div class="tag-actions">
+                    <button
+                      title="Rename this tag; giving it the name of another tag merges them"
+                      onClick={() => setRenaming(true)}
+                    >
+                      Rename or merge
+                    </button>
+                    <Show when={tag().count === 0 && tag().aliases.length === 0}>
+                      <button
+                        class="danger"
+                        title="Delete this tag, which nothing carries"
+                        onClick={() => remove(tag())}
+                      >
+                        Delete
+                      </button>
+                    </Show>
+                  </div>
+                </header>
 
-                <span class="stacked">Aliases</span>
+                <h3>
+                  Description
+                  <Show when={unsaved()}>
+                    <span class="tag-note">Not saved yet: click outside the box to save</span>
+                  </Show>
+                </h3>
+                <textarea
+                  rows={6}
+                  aria-label={`Description of ${tag().value}`}
+                  placeholder="Who or what this is, how the tag should be used…"
+                  value={draft()}
+                  onInput={(event) => setDraft(event.currentTarget.value)}
+                  // Saved on leaving the box, and by Ctrl or Cmd with Enter.
+                  onBlur={saveDescription}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                      saveDescription();
+                    }
+                  }}
+                />
+
+                <h3>Aliases</h3>
                 <ul class="tag-aliases">
                   <For each={tag().aliases}>
                     {(alias) => (
