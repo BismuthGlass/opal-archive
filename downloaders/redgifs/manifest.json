@@ -1,0 +1,7 @@
+{
+  "title": "Redgifs",
+  "source": "redgifs",
+  "command": ["uv", "run", "--quiet", "--script", "redgifs.py"],
+  "url_hint": "A video's page, a user's page, or the address of a video itself",
+  "sites": ["redgifs.com"]
+}
