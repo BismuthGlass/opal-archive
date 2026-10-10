@@ -11,7 +11,9 @@
 
 It takes pin, board, board section and profile URLs. A profile stands for
 the pins its owner created and, going into what is inside, for its boards;
-its `_created` and `_saved` addresses stand for the one or the other. Public
+its `_created` and `_saved` addresses stand for the one or the other. It
+also takes the address of a picture or video itself, on `pinimg.com`, which
+it downloads at its full size: that says nothing of the pin it is of. Public
 boards need no login, but Pinterest hides some pins, and every secret board, from visitors
 who are logged out.
 """
@@ -306,6 +308,44 @@ def collect(url: str, recursive: bool) -> list[dict]:
     return pins
 
 
+def file_of(url: str) -> str | None:
+    """The address of the file a URL names, if it is a file's own address."""
+    parsed = urlparse(url if "://" in url else f"https://{url}")
+    host = (parsed.hostname or "").lower()
+    # Pinterest serves its pictures and videos from pinimg.com.
+    if (host == "pinimg.com" or host.endswith(".pinimg.com")) and Path(parsed.path).suffix:
+        return f"https://{host}{parsed.path}"
+    return None
+
+
+def fetch_file(url: str, out: Path) -> tuple[str, str]:
+    """Downloads a file by its own address, and returns its path and the address it came from.
+
+    A picture is asked for at its full size first, whatever size the
+    address is of: `/236x/…` and `/originals/…` are the same picture.
+    Failing that it is downloaded as the address has it.
+    """
+    tried = []
+    if urlparse(url).hostname == "i.pinimg.com":
+        # The full size keeps the format it was uploaded in, which a
+        # smaller one, always a JPEG, does not tell.
+        full = re.sub(r"^(https://i\.pinimg\.com)/[^/]+/", r"\1/originals/", url, count=1)
+        stem, ext = full.rsplit(".", 1)
+        tried = [f"{stem}.{other}" for other in dict.fromkeys([ext, "png", "jpg", "gif", "webp"])]
+    for address in dict.fromkeys([*tried, url]):
+        dest = out / Path(urlparse(address).path).name
+        part = dest.with_name(dest.name + ".part")
+        r = get(address, stream=True)
+        if r.status_code != 200:
+            continue
+        with open(part, "wb") as f:
+            for chunk in r.iter_content(1 << 16):
+                f.write(chunk)
+        part.rename(dest)
+        return str(dest), address
+    raise RuntimeError("there is no such file")
+
+
 def load_cookies(path: str | None) -> None:
     if not path:
         return
@@ -321,6 +361,19 @@ def download() -> int:
     out.mkdir(parents=True, exist_ok=True)
     seen = set(request.get("seen") or [])
     load_cookies(request.get("cookies"))
+
+    # A file's own address says nothing of its pin: it is downloaded as it
+    # is, and known by that address.
+    file = file_of(request["url"])
+    if file:
+        emit("found", total=1)
+        if file in seen:
+            emit("skipped", key=file)
+        else:
+            emit("log", message="Downloading")
+            path, address = fetch_file(file, out)
+            emit("item", key=file, source_url=address, files=[path])
+        return 0
 
     emit("log", message="Looking at the address")
     pins = collect(request["url"], options.get("recursive", True))

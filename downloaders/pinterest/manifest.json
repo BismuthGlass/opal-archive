@@ -2,8 +2,8 @@
   "title": "Pinterest",
   "source": "pinterest",
   "command": ["uv", "run", "--quiet", "--script", "pinterest.py"],
-  "url_hint": "A pin, board, board section or profile URL",
-  "sites": ["pinterest.*", "pin.it"],
+  "url_hint": "A pin, board, board section or profile URL, or the address of a picture itself",
+  "sites": ["pinterest.*", "pin.it", "pinimg.com"],
   "cookies": {
     "browsers": ["chrome", "firefox", "safari", "brave", "edge", "chromium", "opera", "vivaldi"]
   },
