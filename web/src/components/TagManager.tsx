@@ -51,8 +51,8 @@ const normalized = (name: string) =>
 
 /**
  * Every tag of one type, as a list beside the details of the one selected:
- * its description, its aliases, and the buttons to rename, merge and
- * delete it. An alias is in the list too, struck out in front of the tag
+ * its description, its aliases, its child tags, and the buttons to rename,
+ * merge and delete it. An alias is in the list too, struck out in front of the tag
  * it stands for: it has a description of its own, and its details lead to
  * that tag. The box filters the plain tags, or those of the type written
  * in front (`@cr:`), as it would a namespace; a name typed there that does
@@ -179,6 +179,18 @@ export default function TagManager(props: {
     const alias = box.value.trim();
     box.value = "";
     if (alias) run(() => api.setAlias(field(), alias, tag.value));
+  };
+
+  /** Adds the child tag typed in the box: a plain tag, or `@cr:name`. */
+  const addChild = (tag: TagEntry, box: HTMLInputElement) => {
+    const child = readTag(box.value);
+    if (!child.value) return;
+    if (child.field === null) {
+      setError(`${child.lead.slice(0, -1)} is not a tag type.`);
+      return;
+    }
+    box.value = "";
+    run(() => api.setChild(field(), tag.value, { field: child.field!, value: child.value }));
   };
 
   const remove = async (tag: TagEntry) => {
@@ -475,6 +487,49 @@ export default function TagManager(props: {
                     autocomplete="off"
                     onKeyDown={(event) => {
                       if (event.key === "Enter") addAlias(tag(), event.currentTarget);
+                    }}
+                  />
+
+                  <h3>Child tags</h3>
+                  <p class="hint tag-children-say">
+                    Added to an item along with {tag().value}. Taking {tag().value} off leaves
+                    them on.
+                  </p>
+                  <ul class="tag-aliases">
+                    <For each={tag().children}>
+                      {(child) => (
+                        <li>
+                          <Icon name="add" />
+                          <span class="tag-alias-name">
+                            <span class="tag-name" style={tagTextStyle(child.field)}>
+                              {child.value}
+                            </span>
+                            <Show when={child.field !== field()}>
+                              <span class="tag-note">{fieldLabel(child.field)}</span>
+                            </Show>
+                          </span>
+                          <button
+                            class="plain"
+                            aria-label={`Remove the child tag ${child.value}`}
+                            title="Stop adding this along with the tag"
+                            onClick={() =>
+                              run(() => api.setChild(field(), tag().value, child, true))
+                            }
+                          >
+                            <Icon name="close" />
+                          </button>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                  <input
+                    type="text"
+                    aria-label={`New child tag of ${tag().value}`}
+                    placeholder="Add a child tag. @sw:name for another type"
+                    autocomplete="off"
+                    spellcheck={false}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") addChild(tag(), event.currentTarget);
                     }}
                   />
                 </Show>

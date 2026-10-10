@@ -424,6 +424,8 @@ export type TagEntry = {
   /** `count` is the items still carrying the alias itself. */
   aliases: { value: string; count: number }[];
   alias_of: string | null;
+  /** The tags, of any type, added to an item along with this one. */
+  children: { field: string; value: string }[];
 };
 
 export const suggestTags = (field: string, q: string) =>
@@ -446,6 +448,23 @@ export const deleteTag = (field: string, value: string) =>
 /** Makes `alias` stand for `target`; an empty target removes the alias. */
 export const setAlias = (field: string, alias: string, target: string) =>
   request<void>("POST", "/tags/alias", { field, alias, target });
+/**
+ * Gives a tag a child tag, added to an item whenever the tag is, or with
+ * `remove` takes the child away. Items that carry the tag are not changed.
+ */
+export const setChild = (
+  field: string,
+  value: string,
+  child: { field: string; value: string },
+  remove = false,
+) =>
+  request<void>("POST", "/tags/child", {
+    field,
+    value,
+    child_field: child.field,
+    child: child.value,
+    remove,
+  });
 /** Replaces aliases still on items with the tags they stand for. */
 export const applyAliases = () =>
   request<{ updated: number }>("POST", "/tags/aliases/apply", {});

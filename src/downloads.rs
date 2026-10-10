@@ -1135,7 +1135,7 @@ impl Download {
         for (field, value) in given {
             // An alias stands for the tag it defers to.
             let value = tags::resolve(&tx, &field, value)?;
-            entities::attach_tag(&tx, &tagged, &field, &value)?;
+            tags::add(&tx, &tagged, &field, &value)?;
         }
         tx.execute(
             "INSERT OR IGNORE INTO tab_download_seen (tab_id, key)

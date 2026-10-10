@@ -2643,6 +2643,11 @@ kbd {
   text-decoration: underline;
 }
 
+/* Under the heading of the child tags, what they are. */
+.tag-details .tag-children-say {
+  margin: 0 0 6px;
+}
+
 /* In the details of an alias, what being one means. */
 .tag-details .tag-alias-says {
   margin: 20px 0 0;

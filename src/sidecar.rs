@@ -198,7 +198,9 @@ pub fn apply(
         for value in texts(meta, field, problems) {
             match tags::normalize(field, value) {
                 Ok(value) => {
-                    // An alias stands for the tag it defers to.
+                    // An alias stands for the tag it defers to. Child tags
+                    // are not brought along: a sidecar says what the tags
+                    // were, and is taken at its word.
                     let value = tags::resolve(conn, field, value)?;
                     entities::attach_tag(conn, &ids, field, &value)?;
                 }

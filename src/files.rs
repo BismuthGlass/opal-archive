@@ -347,7 +347,7 @@ pub fn give_tab_tags(conn: &Connection, tab: Option<i64>, ids: &[i64]) -> rusqli
         for value in values {
             // An alias stands for the tag it defers to.
             let value = tags::resolve(conn, &field, value)?;
-            entities::attach_tag(conn, &ids, &field, &value)?;
+            tags::add(conn, &ids, &field, &value)?;
         }
     }
     Ok(())

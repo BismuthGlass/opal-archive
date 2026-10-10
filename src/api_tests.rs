@@ -925,9 +925,10 @@ async fn aliases_wait_to_be_applied() {
         json!([{
             "value": "cat", "count": 1, "description": null,
             "aliases": [{ "value": "kitty", "count": 1 }], "alias_of": null,
+            "children": [],
         }, {
             "value": "kitty", "count": 1, "description": null,
-            "aliases": [], "alias_of": "cat",
+            "aliases": [], "alias_of": "cat", "children": [],
         }])
     );
     assert_eq!(
@@ -960,7 +961,7 @@ async fn aliases_wait_to_be_applied() {
         api.get("/tags/all?field=tags").await["tags"][1],
         json!({
             "value": "kitty", "count": 0, "description": "A small cat.",
-            "aliases": [], "alias_of": "cat",
+            "aliases": [], "alias_of": "cat", "children": [],
         })
     );
 
@@ -986,6 +987,89 @@ async fn aliases_wait_to_be_applied() {
     api.post("/tags/alias", alias("puss", "")).await;
     assert_eq!(
         api.refused("/tags/alias", alias("puss", "")).await,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn child_tags_come_with_their_parent_once() {
+    let api = Api::new();
+    let (a, b) = (api.file("a.png"), api.file("b.png"));
+    let child = |value: &str, child_field: &str, child: &str| {
+        json!({ "field": "character", "value": value, "child_field": child_field, "child": child })
+    };
+    let add = |value: &str| json!({ "add": { "character": [value] } });
+
+    // Nothing carries the parent yet: it is kept, to be found later.
+    api.post("/tags/child", child("samus", "source_work", "metroid"))
+        .await;
+    api.post("/tags/child", child("samus", "tags", "armour"))
+        .await;
+    assert_eq!(
+        api.get("/tags/all?field=character").await["tags"],
+        json!([{
+            "value": "samus", "count": 0, "description": null,
+            "aliases": [], "alias_of": null,
+            "children": [
+                { "field": "source_work", "value": "metroid" },
+                { "field": "tags", "value": "armour" },
+            ],
+        }])
+    );
+
+    // Adding the parent adds its children, and theirs.
+    api.post(
+        "/tags/child",
+        json!({ "field": "tags", "value": "armour", "child_field": "tags", "child": "metal" }),
+    )
+    .await;
+    api.edit(&[a], add("samus")).await;
+    let on_a = api.metadata(&[a]).await;
+    assert_eq!(carried(&on_a, "source_work"), [tag("metroid", 1)]);
+    assert_eq!(carried(&on_a, "tags"), [tag("armour", 1), tag("metal", 1)]);
+
+    // Taking the parent off leaves them, and a child taken off stays off
+    // when the parent is added again over a file that has it.
+    api.edit(&[a], json!({ "remove": { "tags": ["metal"] } }))
+        .await;
+    api.edit(&[a, b], add("samus")).await;
+    assert_eq!(carried(&api.metadata(&[a]).await, "tags"), [tag("armour", 1)]);
+    assert_eq!(
+        carried(&api.metadata(&[b]).await, "tags"),
+        [tag("armour", 1), tag("metal", 1)]
+    );
+    api.edit(&[b], json!({ "remove": { "character": ["samus"] } }))
+        .await;
+    assert_eq!(
+        carried(&api.metadata(&[b]).await, "source_work"),
+        [tag("metroid", 1)]
+    );
+
+    // The links follow a renamed tag, and go with a removed one.
+    api.post(
+        "/tags/rename",
+        json!({ "field": "source_work", "from": "metroid", "to": "metroid prime" }),
+    )
+    .await;
+    api.post(
+        "/tags/child",
+        json!({
+            "field": "character", "value": "samus",
+            "child_field": "tags", "child": "armour", "remove": true,
+        }),
+    )
+    .await;
+    assert_eq!(
+        api.get("/tags/all?field=character").await["tags"][0]["children"],
+        json!([{ "field": "source_work", "value": "metroid prime" }])
+    );
+
+    api.refused("/tags/child", child("samus", "character", "Samus"))
+        .await;
+    let mut gone = child("samus", "tags", "armour");
+    gone["remove"] = json!(true);
+    assert_eq!(
+        api.refused("/tags/child", gone).await,
         StatusCode::NOT_FOUND
     );
 }

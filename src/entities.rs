@@ -458,7 +458,8 @@ fn home(field: &str) -> Option<(&'static str, &'static str)> {
     }
 }
 
-/// Puts a tag on the entities, creating it if it is new.
+/// Puts a tag on the entities, creating it if it is new. Only that tag:
+/// `tags::add` also brings its child tags.
 pub fn attach_tag(conn: &Connection, ids: &str, field: &str, value: &str) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO tag (field, value) VALUES (?1, ?2) ON CONFLICT (field, value) DO NOTHING",
@@ -556,7 +557,7 @@ async fn edit(
     for (field, value) in added {
         // Adding an alias adds the tag it defers to.
         let value = tags::resolve(&tx, field, value)?;
-        attach_tag(&tx, &ids, field, &value)?;
+        tags::add(&tx, &ids, field, &value)?;
     }
     for (field, value) in &removed {
         detach_tag(&tx, &ids, field, value)?;

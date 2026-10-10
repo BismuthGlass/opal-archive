@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
-    AppState,
+    AppState, entities,
     error::ApiError,
     query::{Aliases, TAG_FIELDS, contains_pattern},
 };
@@ -64,6 +64,17 @@ struct AliasInput {
     target: String,
 }
 
+/// A tag and one of its child tags, to add the link or remove it.
+#[derive(Deserialize)]
+struct ChildInput {
+    field: String,
+    value: String,
+    child_field: String,
+    child: String,
+    #[serde(default)]
+    remove: bool,
+}
+
 #[derive(Deserialize)]
 struct RenameInput {
     field: String,
@@ -79,6 +90,7 @@ pub fn router() -> Router<AppState> {
         .route("/tags/all", get(list))
         .route("/tags/rename", post(rename))
         .route("/tags/alias", post(set_alias))
+        .route("/tags/child", post(set_child))
         .route("/tags/aliases/apply", post(apply_aliases))
 }
 
@@ -348,6 +360,48 @@ fn move_tag(conn: &Connection, field: &str, id: i64, value: &str) -> rusqlite::R
     Ok(())
 }
 
+/// Puts a tag on the entities, given as a JSON array of IDs, and with it
+/// its child tags, and theirs. Only the entities that did not carry the
+/// tag get the children: it is adding the tag that brings them, once, so
+/// a child taken off an entity does not come back when the parent is
+/// added again over it. That also ends a circle of children.
+pub fn add(conn: &Connection, ids: &str, field: &str, value: &str) -> rusqlite::Result<()> {
+    let mut stmt = conn.prepare(
+        "SELECT e.id FROM entity e WHERE e.id IN (SELECT value FROM json_each(?1))
+         AND NOT EXISTS (
+             SELECT 1 FROM entity_tag et JOIN tag t ON t.id = et.tag_id
+             WHERE et.entity_id = e.id AND t.field = ?2 AND t.value = ?3)",
+    )?;
+    let fresh = stmt
+        .query_map([ids, field, value], |row| row.get::<_, i64>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if fresh.is_empty() {
+        return Ok(());
+    }
+    let fresh = entities::ids_json(&fresh);
+    entities::attach_tag(conn, &fresh, field, value)?;
+    for (child_field, child) in children_of(conn, field, value)? {
+        // A child that has since become an alias stands for its tag.
+        let child = resolve(conn, &child_field, child)?;
+        add(conn, &fresh, &child_field, &child)?;
+    }
+    Ok(())
+}
+
+/// A tag's child tags, as field and value.
+fn children_of(
+    conn: &Connection,
+    field: &str,
+    value: &str,
+) -> rusqlite::Result<Vec<(String, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT child_field, child FROM tag_child WHERE field = ?1 AND parent = ?2
+         ORDER BY child_field, child",
+    )?;
+    stmt.query_map([field, value], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect()
+}
+
 /// Every alias, for the query compiler.
 pub fn aliases(conn: &Connection) -> rusqlite::Result<Aliases> {
     let mut stmt = conn.prepare("SELECT field, alias, target FROM tag_alias")?;
@@ -395,6 +449,22 @@ fn rename_tag(conn: &Connection, field: &str, from: &str, to: &str) -> Result<()
         "UPDATE tag_alias SET target = ?3 WHERE field = ?1 AND target = ?2",
         [field, from, &to],
     )?;
+    // Child tags follow the name, as parent and as child. Where the new
+    // name already had the link, the old one is dropped, and a tag merged
+    // with its own child is not left as a child of itself.
+    conn.execute(
+        "UPDATE OR IGNORE tag_child SET parent = ?3 WHERE field = ?1 AND parent = ?2",
+        [field, from, &to],
+    )?;
+    conn.execute(
+        "UPDATE OR IGNORE tag_child SET child = ?3 WHERE child_field = ?1 AND child = ?2",
+        [field, from, &to],
+    )?;
+    forget_children(conn, field, from)?;
+    conn.execute(
+        "DELETE FROM tag_child WHERE field = child_field AND parent = child",
+        [],
+    )?;
     match id {
         Some(id) => Ok(move_tag(conn, field, id, &to)?),
         // A tag nothing carries exists only as the target of aliases.
@@ -417,8 +487,8 @@ async fn rename(
     Ok(Json(json!({ "renamed": 1 })))
 }
 
-/// Every tag of a field with the aliases that defer to it, for the tag
-/// manager. An alias is listed under its target and as a tag of its own,
+/// Every tag of a field with the aliases that defer to it and its child
+/// tags, for the tag manager. An alias is listed under its target and as a tag of its own,
 /// with `alias_of` naming the target: its count is the entities still
 /// carrying it, which `apply_aliases` moves to the target. `pending`
 /// totals that over all fields.
@@ -475,16 +545,38 @@ async fn list(
         alias_of.insert(alias.to_lowercase(), target);
     }
 
+    let mut children: HashMap<String, Vec<Value>> = HashMap::new();
+    let mut stmt = conn.prepare(
+        "SELECT parent, child_field, child FROM tag_child WHERE field = ?1
+         ORDER BY child_field, child",
+    )?;
+    let child_rows = stmt.query_map([&params.field], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    })?;
+    for row in child_rows {
+        let (parent, field, value) = row?;
+        children
+            .entry(parent.to_lowercase())
+            .or_default()
+            .push(json!({ "field": field, "value": value }));
+    }
+
     let tags: Vec<Value> = uses
         .into_iter()
         .map(|(key, (value, count))| {
             let aliases = aliases.remove(&key).unwrap_or_default();
+            let children = children.remove(&key).unwrap_or_default();
             json!({
                 "value": value,
                 "count": count,
                 "description": descriptions.get(&key),
                 "aliases": aliases,
                 "alias_of": alias_of.get(&key),
+                "children": children,
             })
         })
         .collect();
@@ -570,6 +662,55 @@ async fn apply_aliases(State(state): State<AppState>) -> Result<Json<Value>, Api
 }
 
 /// The tag row for a value: its ID, and how many entities carry it.
+/// Drops every link a tag is in, as parent or as child.
+fn forget_children(conn: &Connection, field: &str, value: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "DELETE FROM tag_child WHERE (field = ?1 AND parent = ?2)
+         OR (child_field = ?1 AND child = ?2)",
+        [field, value],
+    )?;
+    Ok(())
+}
+
+/// Gives a tag a child tag, of any field, or with `remove` takes one away.
+/// Nothing changes on the entities that carry the tag already: a child is
+/// added when its parent is. The parent is kept from now on, as a tag that
+/// was created is.
+async fn set_child(
+    State(state): State<AppState>,
+    Json(input): Json<ChildInput>,
+) -> Result<Json<Value>, ApiError> {
+    check_field(&input.child_field)?;
+    let conn = state.db.lock().unwrap();
+    // An alias is never added itself, so has no use for children.
+    let parent = definable(&conn, &input.field, &input.value)?;
+    let child = normalize(&input.child_field, &input.child)?;
+    if input.remove {
+        let removed = conn.execute(
+            "DELETE FROM tag_child
+             WHERE field = ?1 AND parent = ?2 AND child_field = ?3 AND child = ?4",
+            [&input.field, &parent, &input.child_field, &child],
+        )?;
+        if removed == 0 {
+            return Err(ApiError::NotFound);
+        }
+    } else {
+        let child = resolve(&conn, &input.child_field, child)?;
+        if input.field == input.child_field && child.eq_ignore_ascii_case(&parent) {
+            return Err(ApiError::BadRequest(format!(
+                "`{parent}` cannot be a child of itself"
+            )));
+        }
+        pin(&conn, &input.field, &parent)?;
+        conn.execute(
+            "INSERT OR IGNORE INTO tag_child (field, parent, child_field, child)
+             VALUES (?1, ?2, ?3, ?4)",
+            [&input.field, &parent, &input.child_field, &child],
+        )?;
+    }
+    Ok(Json(json!({ "ok": true })))
+}
+
 fn find(conn: &Connection, field: &str, value: &str) -> rusqlite::Result<Option<(i64, i64)>> {
     conn.query_row(
         "SELECT t.id, (SELECT count(*) FROM entity_tag et WHERE et.tag_id = t.id)
@@ -665,6 +806,7 @@ async fn delete(
         ))),
         Some((id, _)) => {
             conn.execute("DELETE FROM tag WHERE id = ?1", [id])?;
+            forget_children(&conn, &input.field, value)?;
             Ok(Json(json!({ "deleted": true })))
         }
     }
