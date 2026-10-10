@@ -36,6 +36,10 @@ pub const SCALARS: &[&str] = &[
 /// Restricts a statement to the IDs in a JSON array parameter.
 const IN_IDS: &str = "IN (SELECT value FROM json_each(?1))";
 
+fn yes() -> bool {
+    true
+}
+
 #[derive(Deserialize)]
 struct Ids {
     ids: Vec<i64>,
@@ -53,6 +57,10 @@ struct EditInput {
     /// Tag field to values to detach.
     #[serde(default)]
     remove: BTreeMap<String, Vec<String>>,
+    /// Whether the tags attached bring their child tags. The tagger says
+    /// no: it has shown the children already, and sends those still wanted.
+    #[serde(default = "yes")]
+    children: bool,
     /// Source URLs to attach.
     #[serde(default)]
     add_source_url: Vec<String>,
@@ -557,7 +565,11 @@ async fn edit(
     for (field, value) in added {
         // Adding an alias adds the tag it defers to.
         let value = tags::resolve(&tx, field, value)?;
-        tags::add(&tx, &ids, field, &value)?;
+        if input.children {
+            tags::add(&tx, &ids, field, &value)?;
+        } else {
+            attach_tag(&tx, &ids, field, &value)?;
+        }
     }
     for (field, value) in &removed {
         detach_tag(&tx, &ids, field, value)?;

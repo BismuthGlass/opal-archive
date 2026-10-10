@@ -51,6 +51,13 @@ struct TagInput {
     description: Option<String>,
 }
 
+/// Names a tag in a query string.
+#[derive(Deserialize)]
+struct TagParams {
+    field: String,
+    value: String,
+}
+
 #[derive(Deserialize)]
 struct ListParams {
     field: String,
@@ -91,6 +98,7 @@ pub fn router() -> Router<AppState> {
         .route("/tags/rename", post(rename))
         .route("/tags/alias", post(set_alias))
         .route("/tags/child", post(set_child))
+        .route("/tags/children", get(children))
         .route("/tags/aliases/apply", post(apply_aliases))
 }
 
@@ -662,6 +670,41 @@ async fn apply_aliases(State(state): State<AppState>) -> Result<Json<Value>, Api
 }
 
 /// The tag row for a value: its ID, and how many entities carry it.
+/// Every tag that adding this one brings: its children, theirs, and so on,
+/// each once and in the order they are met. For the tagger, to show them
+/// before anything is saved.
+async fn children(
+    State(state): State<AppState>,
+    Query(params): Query<TagParams>,
+) -> Result<Json<Value>, ApiError> {
+    check_field(&params.field)?;
+    let conn = state.db.lock().unwrap();
+    let root = resolve(&conn, &params.field, normalize(&params.field, &params.value)?)?;
+    let key = |field: &str, value: &str| (field.to_string(), value.to_lowercase());
+    let mut met = vec![key(&params.field, &root)];
+    let mut found: Vec<(String, String)> = Vec::new();
+    let mut next = 0;
+    let mut parent = (params.field.clone(), root);
+    loop {
+        for (child_field, child) in children_of(&conn, &parent.0, &parent.1)? {
+            let child = resolve(&conn, &child_field, child)?;
+            if !met.contains(&key(&child_field, &child)) {
+                met.push(key(&child_field, &child));
+                found.push((child_field, child));
+            }
+        }
+        // Each tag found is looked into in turn, for children of its own.
+        let Some(found) = found.get(next) else { break };
+        parent = found.clone();
+        next += 1;
+    }
+    let found: Vec<Value> = found
+        .into_iter()
+        .map(|(field, value)| json!({ "field": field, "value": value }))
+        .collect();
+    Ok(Json(json!(found)))
+}
+
 /// Drops every link a tag is in, as parent or as child.
 fn forget_children(conn: &Connection, field: &str, value: &str) -> rusqlite::Result<()> {
     conn.execute(

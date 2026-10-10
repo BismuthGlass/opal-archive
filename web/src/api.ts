@@ -196,6 +196,11 @@ export type Changes = {
   set?: Record<string, string | number | boolean | null>;
   add?: Record<string, string[]>;
   remove?: Record<string, string[]>;
+  /**
+   * False to add only the tags given, without the child tags they would
+   * bring: the tagger's, which has shown the children already.
+   */
+  children?: boolean;
   /** Source URLs, which are a list of their own rather than tags. */
   add_source_url?: string[];
   remove_source_url?: string[];
@@ -465,6 +470,9 @@ export const setChild = (
     child: child.value,
     remove,
   });
+/** Every tag that adding this one brings: its children, and theirs. */
+export const childrenOf = (field: string, value: string) =>
+  request<{ field: string; value: string }[]>("GET", `/tags/children?${params({ field, value })}`);
 /** Replaces aliases still on items with the tags they stand for. */
 export const applyAliases = () =>
   request<{ updated: number }>("POST", "/tags/aliases/apply", {});

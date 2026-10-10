@@ -1865,6 +1865,15 @@ span.chip-label:hover {
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
 }
 
+/* A list that opens over its box, where there is no room under it. */
+.suggestions.above {
+  inset: auto 0 calc(100% + 2px);
+}
+
+.suggestions li.hint {
+  cursor: default;
+}
+
 .suggestions li {
   display: flex;
   gap: 8px;
@@ -2641,6 +2650,12 @@ kbd {
 
 .tag-alias-name button:hover {
   text-decoration: underline;
+}
+
+/* The box a tag is named in holds the list of suggestions over it. */
+.tag-picker {
+  position: relative;
+  flex: none;
 }
 
 /* Under the heading of the child tags, what they are. */

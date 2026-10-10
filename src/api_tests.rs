@@ -1028,6 +1028,25 @@ async fn child_tags_come_with_their_parent_once() {
     assert_eq!(carried(&on_a, "source_work"), [tag("metroid", 1)]);
     assert_eq!(carried(&on_a, "tags"), [tag("armour", 1), tag("metal", 1)]);
 
+    // The tagger asks what a tag brings, and may add it without them.
+    assert_eq!(
+        api.get("/tags/children?field=character&value=Samus").await,
+        json!([
+            { "field": "source_work", "value": "metroid" },
+            { "field": "tags", "value": "armour" },
+            { "field": "tags", "value": "metal" },
+        ])
+    );
+    let c = api.file("c.png");
+    api.edit(
+        &[c],
+        json!({ "add": { "character": ["samus"], "tags": ["armour"] }, "children": false }),
+    )
+    .await;
+    let on_c = api.metadata(&[c]).await;
+    assert_eq!(carried(&on_c, "source_work"), []);
+    assert_eq!(carried(&on_c, "tags"), [tag("armour", 1)]);
+
     // Taking the parent off leaves them, and a child taken off stays off
     // when the parent is added again over a file that has it.
     api.edit(&[a], json!({ "remove": { "tags": ["metal"] } }))

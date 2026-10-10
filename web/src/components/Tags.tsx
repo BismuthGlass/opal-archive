@@ -290,9 +290,10 @@ function createTagBox(props: FieldProps & { initial?: string }) {
 /**
  * A tag of the selection. In the tagger, where changes wait to be saved,
  * `pending` says what is to become of it: put on everything selected, or
- * taken off.
+ * taken off. `via` names the tag that brought it, for a child tag put on
+ * because its parent is.
  */
-type Tag = Metadata["tags"][string][number] & { pending?: "added" | "removed" };
+type Tag = Metadata["tags"][string][number] & { pending?: "added" | "removed"; via?: string };
 
 /** The tags of a type the selection carries, or will once the tagger is saved. */
 const carriedTags = (data: Metadata, field: string): Tag[] =>
@@ -314,6 +315,34 @@ function withValue(
   const { [field]: _, ...others } = lists;
   const next = keep ? [...rest, value] : rest;
   return next.length > 0 ? { ...others, [field]: next } : others;
+}
+
+type Named = { field: string; value: string };
+const tagKey = (tag: Named) => `${tag.field}\n${tag.value.toLowerCase()}`;
+/** Whether a tag is among those waiting to be put on. */
+const adds = (staged: Staged, tag: Named) =>
+  staged.add[tag.field]?.some(sameTag(tag.value)) ?? false;
+
+/**
+ * The child tags waiting to be put on because a tag that brings them is,
+ * by `tagKey`: each with the tag that brought it.
+ */
+type Brought = Record<string, { child: Named; parent: Named }>;
+
+/**
+ * Lets go of the children whose parent is no longer to be put on: they
+ * came with it, and go with it. One that was called off itself is only
+ * forgotten.
+ */
+function withoutOrphans(staged: Staged, brought: Brought): [Staged, Brought] {
+  let add = staged.add;
+  const kept: Brought = {};
+  for (const [key, link] of Object.entries(brought)) {
+    if (!adds(staged, link.child)) continue;
+    if (adds(staged, link.parent)) kept[key] = link;
+    else add = withValue(add, link.child.field, link.child.value, false);
+  }
+  return [{ ...staged, add }, kept];
 }
 
 /**
@@ -341,8 +370,15 @@ function stage(staged: Staged, base: Metadata, changes: Changes): Staged {
   return { add, remove };
 }
 
-/** The selection's metadata as it will be once the changes waiting are saved. */
-function staged(base: Metadata, changes: Staged): Metadata {
+/**
+ * The selection's metadata as it will be once the changes waiting are
+ * saved, the child tags among them marked with what brings them.
+ */
+function staged(base: Metadata, changes: Staged, brought: Brought): Metadata {
+  const via = (field: string, value: string) => {
+    const parent = brought[tagKey({ field, value })]?.parent;
+    return parent && tagText(parent.field, parent.value);
+  };
   const tags: Record<string, Tag[]> = {};
   for (const field of new Set([...Object.keys(base.tags), ...Object.keys(changes.add)])) {
     const adding = changes.add[field] ?? [];
@@ -351,12 +387,18 @@ function staged(base: Metadata, changes: Staged): Metadata {
       removing.some(sameTag(tag.value))
         ? { ...tag, pending: "removed" }
         : adding.some(sameTag(tag.value))
-          ? { ...tag, count: base.count, pending: "added" }
+          ? { ...tag, count: base.count, pending: "added", via: via(field, tag.value) }
           : tag,
     );
     const fresh: Tag[] = adding
       .filter((value) => !had.some((tag) => sameTag(value)(tag.value)))
-      .map((value) => ({ value, count: base.count, description: null, pending: "added" }));
+      .map((value) => ({
+        value,
+        count: base.count,
+        description: null,
+        pending: "added",
+        via: via(field, value),
+      }));
     tags[field] = [...had, ...fresh];
   }
   return { ...base, tags };
@@ -389,7 +431,9 @@ function TagLine(
           removed()
             ? "Taken off when the changes are saved"
             : props.tag.pending === "added"
-              ? "Put on when the changes are saved"
+              ? props.tag.via
+                ? `Put on along with ${props.tag.via} when the changes are saved`
+                : "Put on when the changes are saved"
               : undefined
         }
         style={tagTextStyle(props.field)}
@@ -422,6 +466,9 @@ function TagLine(
         <span class="chip-count" title={`On ${props.tag.count} of ${props.data.count} selected`}>
           ({props.tag.count})
         </span>
+      </Show>
+      <Show when={props.tag.pending === "added" && props.tag.via}>
+        <span class="chip-count">with {props.tag.via}</span>
       </Show>
       <Show when={props.editing && removed()}>
         <span class="chip-actions">
@@ -501,6 +548,10 @@ export function Tagger(props: FieldProps & { initial?: string }) {
  * Nothing is changed as the tags are put on and taken off: the changes
  * wait, shown as they will be, until they are saved, with the button or
  * with Shift and Enter. Closing the modal with changes waiting asks first.
+ *
+ * A tag put on brings its child tags, which wait with it and can be
+ * called off one by one; calling the tag off calls them off too. What is
+ * saved is what is shown: the server is told not to bring children again.
  */
 export function TaggerModal(props: {
   ids: number[];
@@ -517,22 +568,62 @@ export function TaggerModal(props: {
     () => [props.ids, dataVersion()] as const,
     ([ids]) => api.getMetadata(ids),
   );
+  const [brought, setBrought] = createSignal<Brought>({});
+  /** The child tags still being asked for; saving waits for them. */
+  let lookups: Promise<unknown> = Promise.resolve();
   /** The tags as they will be once what waits is saved. */
-  const shown = createMemo(() => metadata.latest && staged(metadata.latest, waiting()));
+  const shown = createMemo(
+    () => metadata.latest && staged(metadata.latest, waiting(), brought()),
+  );
   const count = () =>
     [waiting().add, waiting().remove]
       .flatMap((lists) => Object.values(lists))
       .reduce((sum, values) => sum + values.length, 0);
+  /** Takes in the changes waiting, and with them who brought which child. */
+  const settle = (next: Staged, links: Brought) => {
+    const [kept, known] = withoutOrphans(next, links);
+    setWaiting(kept);
+    setBrought(known);
+  };
+  /** Puts the children of a tag just put on among the changes waiting. */
+  const bring = (parent: Named) => {
+    const lookup = api
+      .childrenOf(parent.field, parent.value)
+      .then((children) => {
+        const base = metadata.latest;
+        // Called off while its children were being asked for.
+        if (!base || !adds(waiting(), parent)) return;
+        let next = waiting();
+        const links = { ...brought() };
+        for (const child of children) {
+          const had = adds(next, child);
+          next = stage(next, base, { add: { [child.field]: [child.value] } });
+          if (!had && adds(next, child)) links[tagKey(child)] = { child, parent };
+        }
+        settle(next, links);
+      })
+      .catch((err) => setError(errorMessage(err)));
+    lookups = Promise.all([lookups, lookup]);
+  };
   const apply = (changes: Changes) => {
     const base = metadata.latest;
-    if (base) setWaiting((had) => stage(had, base, changes));
+    if (!base) return;
+    const had = waiting();
+    const next = stage(had, base, changes);
+    settle(next, brought());
+    for (const [field, values] of Object.entries(next.add)) {
+      for (const value of values) {
+        if (!adds(had, { field, value })) bring({ field, value });
+      }
+    }
   };
   const save = async () => {
     if (saving()) return;
     if (count() === 0) return props.onClose();
     setSaving(true);
     try {
-      await api.edit(props.ids, waiting());
+      await lookups;
+      await api.edit(props.ids, { ...waiting(), children: false });
       changed();
       props.onClose();
     } catch (err) {

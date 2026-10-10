@@ -6,6 +6,7 @@ import { changed } from "../search";
 import { prefixOf, readTag, tagText, tagTextStyle, typesStarting } from "../tagTypes";
 import Icon from "./Icon";
 import Modal from "./Modal";
+import TagPicker from "./TagPicker";
 
 /** More matching tags than this are not listed; the filter narrows them. */
 const MAX_ROWS = 300;
@@ -179,18 +180,6 @@ export default function TagManager(props: {
     const alias = box.value.trim();
     box.value = "";
     if (alias) run(() => api.setAlias(field(), alias, tag.value));
-  };
-
-  /** Adds the child tag typed in the box: a plain tag, or `@cr:name`. */
-  const addChild = (tag: TagEntry, box: HTMLInputElement) => {
-    const child = readTag(box.value);
-    if (!child.value) return;
-    if (child.field === null) {
-      setError(`${child.lead.slice(0, -1)} is not a tag type.`);
-      return;
-    }
-    box.value = "";
-    run(() => api.setChild(field(), tag.value, { field: child.field!, value: child.value }));
   };
 
   const remove = async (tag: TagEntry) => {
@@ -522,15 +511,10 @@ export default function TagManager(props: {
                       )}
                     </For>
                   </ul>
-                  <input
-                    type="text"
-                    aria-label={`New child tag of ${tag().value}`}
+                  <TagPicker
+                    label={`New child tag of ${tag().value}`}
                     placeholder="Add a child tag. @sw:name for another type"
-                    autocomplete="off"
-                    spellcheck={false}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") addChild(tag(), event.currentTarget);
-                    }}
+                    onPick={(child) => run(() => api.setChild(field(), tag().value, child))}
                   />
                 </Show>
               </>
