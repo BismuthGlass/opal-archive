@@ -85,7 +85,9 @@ export default function App() {
   const [helpOpen, setHelpOpen] = createSignal(false);
   /** What the tagging hotkey applies to, while the tag editor it opens is up. */
   const [tagging, setTagging] = createSignal<{ ids: number[]; name: string } | null>(null);
-  /** What the next digit rates, after the quick-rate key. */
+  /** What the next digit scores, after the score key. */
+  const [scoring, setScoring] = createSignal<{ ids: number[]; name: string } | null>(null);
+  /** What the next digit rates, after the rating key. */
   const [rating, setRating] = createSignal<{ ids: number[]; name: string } | null>(null);
   /** What the next digit marks, after the mark-as key. */
   const [marking, setMarking] = createSignal<{ ids: number[]; name: string } | null>(null);
@@ -191,11 +193,24 @@ export default function App() {
     return ids.length > 0 ? { ids, name: plural(ids.length, "item") } : null;
   };
 
-  const rate = async (target: { ids: number[]; name: string }, score: number | null) => {
+  const score = async (target: { ids: number[]; name: string }, score: number | null) => {
     try {
       await api.edit(target.ids, { set: { score } });
       showToast(
-        score === null ? `Cleared the score of ${target.name}` : `Rated ${target.name} ${score}`,
+        score === null ? `Cleared the score of ${target.name}` : `Scored ${target.name} ${score}`,
+      );
+    } catch (err) {
+      showToast(errorMessage(err));
+    }
+    changed();
+  };
+
+  /** Sets the content rating, or with `null` clears it. */
+  const rate = async (target: { ids: number[]; name: string }, rating: string | null) => {
+    try {
+      await api.edit(target.ids, { set: { content_rating: rating } });
+      showToast(
+        rating === null ? `Cleared the rating of ${target.name}` : `Rated ${target.name} ${rating}`,
       );
     } catch (err) {
       showToast(errorMessage(err));
@@ -308,19 +323,34 @@ export default function App() {
     // The menu from a right click has the keyboard while it is open.
     if (contextMenuOpen()) return;
 
-    // After the quick-rate key, the next key is the score, or calls it off.
+    // After the score key, the next key is the score, or calls it off.
+    const scored = scoring();
+    if (scored) {
+      setScoring(null);
+      hideToast();
+      const given = /^[0-7]$/.test(event.key) ? Number(event.key) : null;
+      if (given !== null || event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (given !== null) score(scored, given || null);
+        return;
+      }
+      // Any other key calls the scoring off and does what it usually does.
+    }
+
+    // After the rating key, likewise, the next key is the rating: 1 to 3,
+    // in the order the ratings go.
     const rated = rating();
     if (rated) {
       setRating(null);
       hideToast();
-      const score = /^[0-7]$/.test(event.key) ? Number(event.key) : null;
-      if (score !== null || event.key === "Escape") {
+      const given = /^[0-3]$/.test(event.key) ? Number(event.key) : null;
+      if (given !== null || event.key === "Escape") {
         event.preventDefault();
         event.stopImmediatePropagation();
-        if (score !== null) rate(rated, score || null);
+        if (given !== null) rate(rated, given ? api.CONTENT_RATINGS[given - 1] : null);
         return;
       }
-      // Any other key calls the rating off and does what it usually does.
     }
 
     // After the mark-as key, likewise, the next key is the mark.
@@ -380,9 +410,12 @@ export default function App() {
         trash(on, action === "restore");
       } else if (action === "archive" || action === "unarchive") {
         archive(on, action === "unarchive");
-      } else {
+      } else if (action === "quickRating") {
         setRating(on);
-        showToast(`Rate ${on.name}: press 1 to 7, or 0 to clear`, true);
+        showToast(`Rate ${on.name}: press 1 for safe, 2 for risky, 3 for nsfw, or 0 to clear`, true);
+      } else {
+        setScoring(on);
+        showToast(`Score ${on.name}: press 1 to 7, or 0 to clear`, true);
       }
       return;
     }

@@ -12,9 +12,15 @@ export const ACTIONS = [
     key: "t",
   },
   {
-    id: "quickRate",
-    label: "Quick rate",
+    id: "quickScore",
+    label: "Score",
     description: "Then press 1 to 7 to set the score, or 0 to clear it.",
+    key: "s",
+  },
+  {
+    id: "quickRating",
+    label: "Rating",
+    description: "Then press 1 for safe, 2 for risky or 3 for nsfw, or 0 to clear the rating.",
     key: "r",
   },
   {
