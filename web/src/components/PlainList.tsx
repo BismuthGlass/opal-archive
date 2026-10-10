@@ -10,7 +10,7 @@ const isWebAddress = (url: string) => /^https?:\/\//i.test(url);
 /**
  * The lists a file has that are not tags: plain values with no
  * suggestions, namespaces or aliases. Source URLs are shown as links, one
- * to a line; identifiers as chips.
+ * to a line; identifiers and references as chips.
  */
 export const PLAIN_LISTS = [
   {
@@ -18,9 +18,18 @@ export const PLAIN_LISTS = [
     label: "Identifiers",
     placeholder: "Add…",
     links: false,
-    values: (data: Metadata) => data.identifiers,
-    add: (value: string): Changes => ({ add_identifiers: [value] }),
-    remove: (value: string): Changes => ({ remove_identifiers: [value] }),
+    values: (data: Metadata) => data.identifier,
+    add: (value: string): Changes => ({ add_identifier: [value] }),
+    remove: (value: string): Changes => ({ remove_identifier: [value] }),
+  },
+  {
+    field: "reference",
+    label: "References",
+    placeholder: "Add…",
+    links: false,
+    values: (data: Metadata) => data.reference,
+    add: (value: string): Changes => ({ add_reference: [value] }),
+    remove: (value: string): Changes => ({ remove_reference: [value] }),
   },
   {
     field: "source_url",

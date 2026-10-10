@@ -196,7 +196,7 @@ fn tag(value: &str, count: i64) -> (String, i64) {
 /// The values of one field in a metadata answer, with their counts.
 fn carried(metadata: &Value, field: &str) -> Vec<(String, i64)> {
     let list = match field {
-        "source_urls" | "identifiers" => &metadata[field],
+        "source_urls" | "identifier" | "reference" => &metadata[field],
         _ => &metadata["tags"][field],
     };
     list.as_array()
@@ -328,12 +328,16 @@ async fn tags_are_added_counted_and_removed() {
 }
 
 #[tokio::test]
-async fn links_and_identifiers_are_plain_lists() {
+async fn links_identifiers_and_references_are_plain_lists() {
     let api = Api::new();
     let (a, b) = (api.file("a.png"), api.file("b.png"));
     api.edit(
         &[a, b],
-        json!({ "add_urls": ["example.com/a"], "add_identifiers": [" isbn-1 "] }),
+        json!({
+            "add_urls": ["example.com/a"],
+            "add_identifier": [" isbn-1 "],
+            "add_reference": [" ref-1 "],
+        }),
     )
     .await;
     api.edit(&[a], json!({ "add_urls": ["http://other.example/"] }))
@@ -347,14 +351,20 @@ async fn links_and_identifiers_are_plain_lists() {
             tag("https://example.com/a", 2)
         ]
     );
-    assert_eq!(carried(&both, "identifiers"), [tag("isbn-1", 2)]);
+    assert_eq!(carried(&both, "identifier"), [tag("isbn-1", 2)]);
+    assert_eq!(carried(&both, "reference"), [tag("ref-1", 2)]);
     // Neither is a tag.
     assert_eq!(both["tags"], json!({}));
     assert_eq!(api.found("identifier=isbn-1").await, [a, b]);
+    assert_eq!(api.found("reference=ref-1").await, [a, b]);
 
     api.edit(
         &[a, b],
-        json!({ "remove_urls": ["https://example.com/a"], "remove_identifiers": ["isbn-1"] }),
+        json!({
+            "remove_urls": ["https://example.com/a"],
+            "remove_identifier": ["isbn-1"],
+            "remove_reference": ["ref-1"],
+        }),
     )
     .await;
     let both = api.metadata(&[a, b]).await;
@@ -362,10 +372,16 @@ async fn links_and_identifiers_are_plain_lists() {
         carried(&both, "source_urls"),
         [tag("http://other.example/", 1)]
     );
-    assert_eq!(carried(&both, "identifiers"), []);
+    assert_eq!(carried(&both, "identifier"), []);
+    assert_eq!(carried(&both, "reference"), []);
     api.refused(
         "/entities/edit",
-        json!({ "ids": [a], "add_identifiers": ["  "] }),
+        json!({ "ids": [a], "add_identifier": ["  "] }),
+    )
+    .await;
+    api.refused(
+        "/entities/edit",
+        json!({ "ids": [a], "add_reference": ["  "] }),
     )
     .await;
 }

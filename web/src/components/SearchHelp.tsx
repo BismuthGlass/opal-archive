@@ -46,7 +46,7 @@ const PARTS: Part[] = [
   },
   {
     title: "Text",
-    note: "Fields: title, description, ai_description, version, name (the file's name), ext, hash, identifier, source_url, collection_id.",
+    note: "Fields: title, description, ai_description, version, name (the file's name), ext, hash, identifier, reference, source_url, collection_id.",
     rows: [
       ["title=Sunset", "the title is exactly that"],
       ["title~holiday", "the title contains holiday"],

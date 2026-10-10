@@ -250,7 +250,8 @@ export function BaseTags(props: {
       ]),
     ),
     source_urls: [],
-    identifiers: [],
+    identifier: [],
+    reference: [],
     memberships: [],
   });
 

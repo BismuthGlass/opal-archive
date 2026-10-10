@@ -155,7 +155,7 @@ Trashed entities are left out of every search that does not mention
 
 ### String fields
 
-Multi-valued: `identifier` `source_url`. These are plain lists, not tags.
+Multi-valued: `identifier` `reference` `source_url`. These are plain lists, not tags.
 
 Single-valued: `title` `description` `ai_description` `version` `name` `ext`
 `hash` `collection_id`

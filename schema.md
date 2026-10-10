@@ -100,6 +100,9 @@ interface FileMetadata {
   // Other IDs, e.g. a website ID.
   identifier?: string[];
 
+  // References for the file, as a plain list of strings.
+  reference?: string[];
+
   // Description provided to an AI to identify the file.
   ai_description?: string;
 

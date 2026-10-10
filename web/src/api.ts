@@ -179,7 +179,8 @@ export type Metadata = {
   collection_id: { value: string | null; mixed: boolean };
   tags: Record<string, { value: string; count: number; description: string | null }[]>;
   source_urls: { value: string; count: number }[];
-  identifiers: { value: string; count: number }[];
+  identifier: { value: string; count: number }[];
+  reference: { value: string; count: number }[];
   memberships: {
     id: number;
     title: string | null;
@@ -198,8 +199,11 @@ export type Changes = {
   add_urls?: string[];
   remove_urls?: string[];
   /** Identifiers, likewise a list of their own. */
-  add_identifiers?: string[];
-  remove_identifiers?: string[];
+  add_identifier?: string[];
+  remove_identifier?: string[];
+  /** References, another such list. */
+  add_reference?: string[];
+  remove_reference?: string[];
 };
 
 export const TAG_FIELDS = [

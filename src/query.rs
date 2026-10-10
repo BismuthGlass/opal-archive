@@ -157,6 +157,7 @@ fn lookup(name: &str) -> Option<Field> {
     Some(match name {
         "source_url" => Field::List("source_url", "url"),
         "identifier" => Field::List("identifier", "value"),
+        "reference" => Field::List("reference", "value"),
         "title" => Field::Text('e', "title"),
         "description" => Field::Text('e', "description"),
         "ai_description" => Field::Text('e', "ai_description"),
@@ -1262,6 +1263,7 @@ mod tests {
              INSERT INTO entity_tag (entity_id, tag_id)
              VALUES (1, 1), (1, 2), (1, 4), (2, 3), (2, 5), (3, 1);
              INSERT INTO identifier (entity_id, value) VALUES (5, 'isbn-1');
+             INSERT INTO reference (entity_id, value) VALUES (5, 'ref-1');
              INSERT INTO source_url (entity_id, url) VALUES (5, 'https://example.com/a');",
         )
         .unwrap();
@@ -1458,6 +1460,7 @@ mod tests {
         assert_eq!(found(&conn, "date>=2021"), [] as [i64; 0]);
         assert_eq!(found(&conn, "has=title"), [1, 4]);
         assert_eq!(found(&conn, "identifier=isbn-1"), [5]);
+        assert_eq!(found(&conn, "reference=ref-*"), [5]);
         assert_eq!(found(&conn, "source_url~example"), [5]);
         assert!(fails("score>many"));
         assert!(fails("media=film"));

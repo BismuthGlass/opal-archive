@@ -61,10 +61,16 @@ struct EditInput {
     remove_urls: Vec<String>,
     /// Identifiers to attach.
     #[serde(default)]
-    add_identifiers: Vec<String>,
+    add_identifier: Vec<String>,
     /// Identifiers to detach.
     #[serde(default)]
-    remove_identifiers: Vec<String>,
+    remove_identifier: Vec<String>,
+    /// References to attach.
+    #[serde(default)]
+    add_reference: Vec<String>,
+    /// References to detach.
+    #[serde(default)]
+    remove_reference: Vec<String>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -94,6 +100,7 @@ pub fn ids_json(ids: &[i64]) -> String {
 pub type List = (&'static str, &'static str);
 pub const SOURCE_URLS: List = ("source_url", "url");
 const IDENTIFIERS: List = ("identifier", "value");
+const REFERENCES: List = ("reference", "value");
 
 /// An entity's values in a list.
 fn list_of(conn: &Connection, list: List, id: i64) -> rusqlite::Result<Vec<String>> {
@@ -193,9 +200,10 @@ async fn entity(
         json!(list_of(&conn, SOURCE_URLS, id)?),
     );
     result.insert(
-        "identifiers".into(),
+        "identifier".into(),
         json!(list_of(&conn, IDENTIFIERS, id)?),
     );
+    result.insert("reference".into(), json!(list_of(&conn, REFERENCES, id)?));
     result.insert("file".into(), json!(file_details(&conn, id)?));
     result.insert("collection".into(), json!(collection_details(&conn, id)?));
     Ok(Json(Value::Object(result)))
@@ -354,7 +362,8 @@ async fn metadata(
         "collection_id": shared_of_collections::<String>(&conn, &ids, "collection_id")?,
         "tags": counted_tags(&conn, &ids)?,
         "source_urls": counted(&conn, &ids, SOURCE_URLS)?,
-        "identifiers": counted(&conn, &ids, IDENTIFIERS)?,
+        "identifier": counted(&conn, &ids, IDENTIFIERS)?,
+        "reference": counted(&conn, &ids, REFERENCES)?,
         "memberships": memberships(&conn, &ids)?,
     })))
 }
@@ -588,6 +597,18 @@ fn remove_from_list(conn: &Connection, ids: &str, list: List, value: &str) -> ru
     Ok(())
 }
 
+/// The values to add to a plain list, as they are stored. `what` names one
+/// of them, for refusing an empty one.
+fn plain_values<'a>(values: &'a [String], what: &str) -> Result<Vec<&'a str>, ApiError> {
+    values
+        .iter()
+        .map(|value| match value.trim() {
+            "" => Err(ApiError::BadRequest(format!("empty {what}"))),
+            value => Ok(value),
+        })
+        .collect()
+}
+
 /// Applies the same change to every listed entity, all or nothing.
 async fn edit(
     State(state): State<AppState>,
@@ -611,14 +632,8 @@ async fn edit(
         .iter()
         .map(|url| source_url(url))
         .collect::<Result<Vec<_>, _>>()?;
-    let added_identifiers = input
-        .add_identifiers
-        .iter()
-        .map(|value| match value.trim() {
-            "" => Err(ApiError::bad_request("empty identifier")),
-            value => Ok(value),
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let added_identifiers = plain_values(&input.add_identifier, "identifier")?;
+    let added_references = plain_values(&input.add_reference, "reference")?;
     let ids = ids_json(&input.ids);
 
     let mut conn = state.db.lock().unwrap();
@@ -658,8 +673,14 @@ async fn edit(
     for value in &added_identifiers {
         add_to_list(&tx, &ids, IDENTIFIERS, value)?;
     }
-    for value in &input.remove_identifiers {
+    for value in &input.remove_identifier {
         remove_from_list(&tx, &ids, IDENTIFIERS, value.trim())?;
+    }
+    for value in &added_references {
+        add_to_list(&tx, &ids, REFERENCES, value)?;
+    }
+    for value in &input.remove_reference {
+        remove_from_list(&tx, &ids, REFERENCES, value.trim())?;
     }
     let count: i64 = tx.query_row(
         &format!("SELECT count(*) FROM entity WHERE id {IN_IDS}"),
