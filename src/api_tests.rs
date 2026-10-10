@@ -506,6 +506,22 @@ async fn sets_hold_files_in_order() {
     api.refused("/tabs", json!({ "kind": "set" })).await;
     api.refused("/tabs", json!({ "kind": "set", "set": 999 })).await;
 
+    // A search can list a set once, by the first of its files it finds:
+    // which that is depends on the order asked for. Within the set itself
+    // every file is listed.
+    let collapsed = async |query: &str| -> Vec<i64> {
+        let path = format!("/search/ids?q={query}&collapse=1");
+        serde_json::from_value(api.get(&path).await["ids"].clone()).unwrap()
+    };
+    api.post(&format!("/sets/{set}/files"), json!({ "remove": [d] })).await;
+    assert_eq!(collapsed("sort%3Did").await, [a, d]);
+    assert_eq!(collapsed("sort%3D-id").await, [d, c]);
+    assert_eq!(collapsed(&format!("sort%3Did+-id%3D{a}")).await, [b, d]);
+    let inside = format!("/search/ids?q=&collapse=1&set={set}");
+    assert_eq!(api.get(&inside).await["ids"], json!([c, a, b]));
+    assert_eq!(api.get(&format!("{in_tab}&collapse=1")).await["ids"], json!([c, a, b]));
+    api.post(&format!("/sets/{set}/files"), json!({ "add": [d] })).await;
+
     // Files left out of a new order follow it, as they were.
     let (status, _) = api
         .call(

@@ -35,7 +35,7 @@ import {
   toggleMark,
   unmark,
 } from "./search";
-import { loadSettings } from "./settings";
+import { collapsesSets, loadSettings } from "./settings";
 import { watchInbox } from "./inbox";
 import { closeTagEditor, openTagEditor, tagEditor } from "./tagEditing";
 import { refreshStats, stats } from "./stats";
@@ -91,8 +91,11 @@ export default function App() {
   // Each tab shows a search, over the library or over what the tab holds
   // (its uploads, or a set's files): run it when the tab or its query
   // changes.
-  /** The tab the last search was shown in, and how far inside sets. */
-  let shown: { tab: number; inside: boolean; depth: number } | null = null;
+  /**
+   * The tab the last search was shown in, how far inside sets, and whether
+   * sets were listed once.
+   */
+  let shown: { tab: number; inside: boolean; depth: number; stacked: boolean } | null = null;
   createEffect(
     on(
       () => {
@@ -104,21 +107,26 @@ export default function App() {
         const way = trail().map((step) => step.id).join("/");
         // With the trash on show it is another view of the same query.
         const trashed = showsTrashed() ? "\u0002" : "";
+        // So it is with sets listed once, which a set itself never is.
+        const stacked = collapsesSets() ? "\u0003" : "";
         return inside()
           ? `${tab.id}:\u0001${way}:${trashed}${inside()!.query}`
-          : `${tab.id}:${trashed}${tab.query}`;
+          : `${tab.id}:${trashed}${stacked}${tab.query}`;
       },
       (key) => {
         if (key === undefined) return;
         view(null);
         const tab = activeTab()!;
         const step = inside();
+        const stacked = collapsesSets();
         // The query of the tab on show changed: the search was asked for.
-        const asked = shown?.tab === tab.id && !shown.inside && !step;
+        // The settings arriving, or changing, is not asking.
+        const asked =
+          shown?.tab === tab.id && !shown.inside && !step && shown.stacked === stacked;
         // A set just gone into is listed afresh, though it was seen
         // before: what is in it may have changed since.
         const entered = shown?.tab === tab.id && trail().length > shown.depth;
-        shown = { tab: tab.id, inside: !!step, depth: trail().length };
+        shown = { tab: tab.id, inside: !!step, depth: trail().length, stacked };
         if (step) {
           // Not saved with the tab: the trail is the page's alone.
           runSearch(step.query, null, key, null, step.id, false, entered, showsTrashed());
@@ -126,7 +134,17 @@ export default function App() {
           // Listing the whole library is not done just for opening a tab.
           const wait = tab.kind === "gallery" && tab.query === "" && !asked;
           const scope = tab.kind === "gallery" ? null : tab.id;
-          runSearch(tab.query, scope, key, tab.id, null, wait, false, showsTrashed());
+          runSearch(
+            tab.query,
+            scope,
+            key,
+            tab.id,
+            null,
+            wait,
+            false,
+            showsTrashed(),
+            stacked && tab.kind !== "set",
+          );
         }
       },
     ),

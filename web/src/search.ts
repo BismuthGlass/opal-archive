@@ -20,6 +20,8 @@ const [search, setSearch] = createStore({
    * the query having to say `@trashed`.
    */
   trashed: false,
+  /** Whether a set is listed once, as one result, rather than file by file. */
+  collapsed: false,
   /** The page of results on show, counted from 0. */
   page: 0,
   /** Whether the results have been dragged into an order of their own. */
@@ -45,12 +47,13 @@ export const MARKS = 5;
  */
 const [marks, setMarks] = createSignal<ReadonlyMap<number, number>>(new Map());
 /**
- * A query as it is saved with a tab's view: marked, by a character that
- * cannot be typed, when the view was calculated with the trash on show, so
- * that a view calculated the other way is not taken for this one.
+ * A query as it is saved with a tab's view: marked, by characters that
+ * cannot be typed, when the view was calculated with the trash on show or
+ * with sets listed once, so that a view calculated another way is not
+ * taken for this one.
  */
-const savedAs = (query: string, trashed = search.trashed) =>
-  trashed ? `${query}\u0002` : query;
+const savedAs = (query: string, trashed = search.trashed, collapsed = search.collapsed) =>
+  `${query}${trashed ? "\u0002" : ""}${collapsed ? "\u0003" : ""}`;
 
 // Bumped when a new search is shown (the grid scrolls back to the top) and
 // when library data changes (dependent views reload).
@@ -271,7 +274,14 @@ function calculate() {
   const current = (calculation += 1);
   // What the tab was left with is asked for only when the view is opened;
   // a refresh always runs the search.
-  const found = api.searchIds(search.query, seed, search.scope, search.set, search.trashed);
+  const found = api.searchIds(
+    search.query,
+    seed,
+    search.scope,
+    search.set,
+    search.trashed,
+    search.collapsed,
+  );
   calculated = found.then((found) => {
     if (current !== calculation) return;
     if (search.custom) {
@@ -309,6 +319,8 @@ export function runSearch(
   fresh = false,
   /** Whether to list what is in the trash along with the rest. */
   trashed = false,
+  /** Whether to list a set once, as one result. */
+  collapsed = false,
 ) {
   // The view being left is saved now, not after its delay.
   flushSave();
@@ -333,6 +345,7 @@ export function runSearch(
     scope,
     set,
     trashed,
+    collapsed,
     page: left?.page ?? 0,
     custom: seen?.custom ?? false,
     total: 0,
@@ -362,7 +375,7 @@ export function runSearch(
       .catch(() => null)
       .then((saved) => {
         if (current !== calculation) return;
-        if (saved && saved.query === savedAs(query, trashed)) {
+        if (saved && saved.query === savedAs(query, trashed, collapsed)) {
           ids = saved.ids;
           setSearch("custom", saved.custom);
           views.set(viewKey, { ids, custom: saved.custom });

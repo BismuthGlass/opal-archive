@@ -40,6 +40,10 @@ const PAGE_HOLD = 600;
 const placeholder = (item: Item) =>
   item.extension ? item.extension.toUpperCase() : item.media_type;
 
+/** Whether a result stands for its whole set: in a view that lists a set once. */
+const stands = (item: Item | undefined) =>
+  search.collapsed && item !== undefined && item.set !== null && (item.set_files ?? 0) > 1;
+
 function badge(item: Item): string | null {
   if (item.length !== null && item.media_type !== "image") return duration(item.length);
   return null;
@@ -257,6 +261,7 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                 class="tile"
                 classList={{
                   selected: item() !== undefined && selected().has(item()!.id),
+                  stack: stands(item()),
                   trashed: item()?.trashed ?? false,
                   moving: item() !== undefined && (drag()?.ids.includes(item()!.id) ?? false),
                 }}
@@ -281,7 +286,13 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                     toggle: event.ctrlKey || event.metaKey,
                   });
                 }}
-                onDblClick={() => item() && props.onOpen(index)}
+                onDblClick={() => {
+                  // A file is opened in the viewer; one that stands for its
+                  // set is gone into, in this tab.
+                  const current = item();
+                  if (current && stands(current)) enter({ id: current.set! });
+                  else if (current) props.onOpen(index);
+                }}
                 onContextMenu={(event) => {
                   const current = item();
                   if (!current) return;
@@ -327,7 +338,11 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                           <Show when={current().set !== null && current().set !== shownSet()?.id}>
                             <button
                               class="badge set-badge"
-                              title={`In a set of ${plural(current().set_files ?? 0, "file")}: open it`}
+                              title={
+                                stands(current())
+                                  ? `The first found of a set of ${plural(current().set_files ?? 0, "file")}: open the set`
+                                  : `In a set of ${plural(current().set_files ?? 0, "file")}: open it`
+                              }
                               onPointerDown={(event) => event.stopPropagation()}
                               onDblClick={(event) => event.stopPropagation()}
                               onClick={(event) => {

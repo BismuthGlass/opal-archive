@@ -15,9 +15,12 @@ export type Settings = {
   savedQueries?: SavedQuery[];
   /** What files are called when they are downloaded or exported. */
   downloadNames?: api.Naming;
+  /** Whether a view lists a set once, as one tile, rather than every file of it. */
+  collapseSets?: boolean;
 };
 
 export const downloadNames = (): api.Naming => settings.downloadNames ?? "original";
+export const collapsesSets = (): boolean => settings.collapseSets ?? false;
 
 /** A query kept under a name. One line: a single row of a stack. */
 export type SavedQuery = { name: string; query: string };

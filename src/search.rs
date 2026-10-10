@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use axum::{
     Json, Router,
     extract::{Query, State},
@@ -29,6 +31,9 @@ struct SearchParams {
     set: Option<i64>,
     /// Present to have trashed entities included without `@trashed`.
     trashed: Option<String>,
+    /// Present to have a set listed once, by the first of its files that
+    /// the search finds. It does nothing to a search within a set.
+    collapse: Option<String>,
 }
 
 /// What the results grid needs to draw one file.
@@ -58,6 +63,7 @@ pub fn router() -> Router<AppState> {
 /// Compiles `source`, narrowed to the files of `set` if one is given, and
 /// otherwise to what `tab` holds if it is an upload, a download or a set
 /// tab. A set is shown in its own order unless the query asks for another.
+/// Returns whether it was narrowed to a set, too.
 fn compile(
     conn: &Connection,
     source: &str,
@@ -65,7 +71,7 @@ fn compile(
     tab: Option<i64>,
     set: Option<i64>,
     include_trashed: bool,
-) -> Result<query::Compiled, ApiError> {
+) -> Result<(query::Compiled, bool), ApiError> {
     let mut compiled = query::compile(source, seed, &tags::aliases(conn)?, include_trashed)?;
     // What to narrow to: a tab's own list, or a set.
     let scope: Option<(String, Option<i64>)> = match (set, tab) {
@@ -77,6 +83,7 @@ fn compile(
             .optional()?,
         (None, None) => None,
     };
+    let mut in_set = false;
     match (scope, tab) {
         (Some((kind, _)), Some(tab)) if kind == "upload" || kind == "download" => {
             compiled.filter = format!(
@@ -86,6 +93,7 @@ fn compile(
             compiled.filter_params.push(Value::Integer(tab));
         }
         (Some((_, Some(set))), _) => {
+            in_set = true;
             compiled.filter = format!("({}) AND f0.set_key = ?", compiled.filter);
             compiled.filter_params.push(Value::Integer(set));
             if !compiled.sorted {
@@ -95,10 +103,11 @@ fn compile(
         }
         _ => {}
     }
-    Ok(compiled)
+    Ok((compiled, in_set))
 }
 
-/// IDs of everything matching `source`, in the query's order.
+/// IDs of everything matching `source`, in the query's order. With
+/// `collapse`, a set is listed once, as the first of its files found.
 pub fn matching_ids(
     conn: &Connection,
     source: &str,
@@ -106,20 +115,26 @@ pub fn matching_ids(
     tab: Option<i64>,
     set: Option<i64>,
     include_trashed: bool,
+    collapse: bool,
 ) -> Result<Vec<i64>, ApiError> {
-    let compiled = compile(conn, source, seed, tab, set, include_trashed)?;
+    let (compiled, in_set) = compile(conn, source, seed, tab, set, include_trashed)?;
     let sql = format!(
-        "SELECT e0.id FROM {} WHERE {} ORDER BY {}",
+        "SELECT e0.id, f0.set_key FROM {} WHERE {} ORDER BY {}",
         query::FROM,
         compiled.filter,
         compiled.order
     );
     let params = compiled.filter_params.iter().chain(&compiled.order_params);
     let mut stmt = conn.prepare(&sql)?;
-    let ids = stmt
-        .query_map(params_from_iter(params), |row| row.get(0))?
-        .collect::<rusqlite::Result<Vec<i64>>>()?;
-    Ok(ids)
+    let found = stmt
+        .query_map(params_from_iter(params), |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<(i64, Option<i64>)>>>()?;
+    let mut listed = HashSet::new();
+    let ids = found.into_iter().filter_map(|(id, set)| {
+        let again = collapse && !in_set && set.is_some_and(|set| !listed.insert(set));
+        (!again).then_some(id)
+    });
+    Ok(ids.collect())
 }
 
 async fn search(
@@ -130,7 +145,7 @@ async fn search(
     let offset = params.offset.max(0);
     let conn = state.db.lock().unwrap();
     let include_trashed = params.trashed.is_some();
-    let compiled = compile(
+    let (compiled, _) = compile(
         &conn,
         &params.q,
         params.seed,
@@ -204,6 +219,7 @@ async fn search_ids(
         params.tab,
         params.set,
         params.trashed.is_some(),
+        params.collapse.is_some(),
     )?;
     Ok(Json(json!({ "ids": ids })))
 }

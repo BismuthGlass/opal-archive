@@ -663,6 +663,27 @@ button.primary {
   border-radius: 4px;
 }
 
+/* A file standing for its whole set, in a view that lists a set once: a
+   stack of cards in the colour sets have. */
+.tile.stack .thumb {
+  border-color: var(--set);
+  box-shadow:
+    3px 3px 0 -1px var(--bg),
+    3px 3px 0 0 var(--set),
+    6px 6px 0 -1px var(--bg),
+    6px 6px 0 0 var(--set);
+}
+
+/* Over the image, which would cover a line drawn inside the frame. */
+.tile.stack .thumb::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  border: 1px solid var(--set);
+  border-radius: 5px;
+}
+
 /* A file of a set: how many the set holds, on a badge in the colour sets
    have, that opens the set. */
 .tile .set-badge {

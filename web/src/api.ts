@@ -341,10 +341,18 @@ export const searchIds = (
   set: number | null = null,
   /** Without this, trashed entities only match a query with `@trashed`. */
   withTrashed = false,
+  /** Lists a set once, as the first of its files that the search finds. */
+  collapse = false,
 ) =>
   request<{ ids: number[] }>(
     "GET",
-    `/search/ids?${params({ q, seed, ...scoped(tab, set), ...(withTrashed ? { trashed: 1 } : {}) })}`,
+    `/search/ids?${params({
+      q,
+      seed,
+      ...scoped(tab, set),
+      ...(withTrashed ? { trashed: 1 } : {}),
+      ...(collapse ? { collapse: 1 } : {}),
+    })}`,
   ).then((r) => r.ids);
 
 export const getEntity = (id: number) => request<Entity>("GET", `/entities/${id}`);

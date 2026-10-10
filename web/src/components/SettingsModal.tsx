@@ -3,7 +3,7 @@ import { ACTIONS, bind, isDefault, keyFor, keyLabel, keyOf } from "../hotkeys";
 import type { Action } from "../hotkeys";
 import { errorMessage, fieldLabel } from "../format";
 import { savedQueries, setSavedQueries } from "../savedQueries";
-import { downloadNames, saveSetting } from "../settings";
+import { collapsesSets, downloadNames, saveSetting } from "../settings";
 import type { SavedQuery } from "../settings";
 import type { Naming } from "../api";
 import {
@@ -25,6 +25,7 @@ const SECTIONS = [
   { id: "tagTypes", label: "Tag types" },
   { id: "savedQueries", label: "Saved queries" },
   { id: "hotkeys", label: "Hotkeys" },
+  { id: "gallery", label: "Gallery" },
   { id: "downloads", label: "Downloads" },
 ] as const;
 
@@ -83,6 +84,44 @@ function Downloads() {
             </li>
           )}
         </For>
+      </ul>
+      <Show when={error()}>
+        <p class="form-error" role="alert">
+          {error()}
+        </p>
+      </Show>
+    </>
+  );
+}
+
+function Gallery() {
+  const [error, setError] = createSignal("");
+  const choose = (collapse: boolean) => {
+    setError("");
+    saveSetting("collapseSets", collapse || null).catch((err) => setError(errorMessage(err)));
+  };
+  return (
+    <>
+      <h3>Gallery</h3>
+      <ul class="setting-rows">
+        <li>
+          <label class="setting-choice">
+            <input
+              type="checkbox"
+              checked={collapsesSets()}
+              onChange={(event) => choose(event.currentTarget.checked)}
+            />
+            <div class="setting-text">
+              <span class="setting-label">Show a set as one tile</span>
+              <span class="hint">
+                A search lists a set once, as the first of its files that it finds, with how many
+                the set holds. Double-clicking it opens the set. Selecting it selects that one file:
+                to tag or rate the others, open the set. Without this, every file of a set is
+                listed.
+              </span>
+            </div>
+          </label>
+        </li>
       </ul>
       <Show when={error()}>
         <p class="form-error" role="alert">
@@ -443,6 +482,9 @@ export default function SettingsModal(props: { onClose: () => void }) {
             </Match>
             <Match when={section() === "downloads"}>
               <Downloads />
+            </Match>
+            <Match when={section() === "gallery"}>
+              <Gallery />
             </Match>
           </Switch>
         </section>
