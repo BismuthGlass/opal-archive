@@ -56,7 +56,7 @@ const placeholder = (item: Item) =>
  * of its sets that holds more than itself.
  */
 const stoodFor = (item: Item | undefined) =>
-  search.collapsed ? item?.sets.find((set) => set.files > 1) : undefined;
+  search.collapsed ? item?.set.find((set) => set.files > 1) : undefined;
 
 /**
  * Whether a result is no longer in the set on show: taken out of it since
@@ -65,11 +65,11 @@ const stoodFor = (item: Item | undefined) =>
  */
 const takenOut = (item: Item | undefined) => {
   const shown = shownSet();
-  return shown !== undefined && item !== undefined && !item.sets.some((set) => set.set_id === shown.set_id);
+  return shown !== undefined && item !== undefined && !item.set.some((set) => set.set_id === shown.set_id);
 };
 
 /** The sets a result is in, but for the one on show. */
-const otherSets = (item: Item) => item.sets.filter((set) => set.set_id !== shownSet()?.set_id);
+const otherSets = (item: Item) => item.set.filter((set) => set.set_id !== shownSet()?.set_id);
 
 function badge(item: Item): string | null {
   if (item.length !== null && item.media_type !== "image") return duration(item.length);

@@ -30,7 +30,7 @@ export default function GroupDialog(props: {
   const [present] = createResource(async () => {
     const data = await api.getMetadata(props.ids);
     return set
-      ? data.sets.map((held) => ({ id: held.set_id, title: held.title, count: held.count }))
+      ? data.set.map((held) => ({ id: held.set_id, title: held.title, count: held.count }))
       : data.collection.map((held) => ({ id: held.value, title: null, count: held.count }));
   });
 

@@ -48,7 +48,7 @@ export default function Viewer(props: {
   // first.
   const sets = () => {
     const here = shownSet()?.set_id;
-    return [...(item()?.sets ?? [])].sort(
+    return [...(item()?.set ?? [])].sort(
       (a, b) => Number(b.set_id === here) - Number(a.set_id === here),
     );
   };

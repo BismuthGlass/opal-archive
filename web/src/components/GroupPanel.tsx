@@ -38,7 +38,7 @@ const asSelection = (info: GroupInfo): Metadata => {
     identifier: counted(info.identifier),
     reference: counted(info.reference),
     collection: counted(info.collection),
-    sets: [],
+    set: [],
   };
 };
 

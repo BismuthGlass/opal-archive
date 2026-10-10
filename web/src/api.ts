@@ -142,7 +142,7 @@ export type Item = {
   extension: string;
   length: number | null;
   /** The sets it is in, each with how many files not in the trash it holds. */
-  sets: (SetName & { files: number })[];
+  set: (SetName & { files: number })[];
   /**
    * The group of variants it is one of, and how many files not in the
    * trash are in it, this one included.
@@ -164,7 +164,7 @@ export type Entity = {
   title: string | null;
   file: Omit<FileEntity, "id" | "date_added">;
   /** The sets it is in, and where in each. */
-  sets: (SetName & { index: number | null })[];
+  set: (SetName & { index: number | null })[];
 };
 
 export type Scalar = { value: string | number | null; mixed: boolean };
@@ -182,7 +182,7 @@ export type Metadata = {
   /** What they are part of where they came from: a board, a thread. */
   collection: { value: string; count: number }[];
   /** The sets any of them are in, and how many are in each. */
-  sets: (SetName & { count: number })[];
+  set: (SetName & { count: number })[];
 };
 
 export type Changes = {

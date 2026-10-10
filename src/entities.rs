@@ -217,7 +217,7 @@ async fn entity(
     result.insert("reference".into(), json!(list_of(&conn, REFERENCES, id)?));
     result.insert("collection".into(), json!(list_of(&conn, COLLECTIONS, id)?));
     result.insert("file".into(), json!(file_details(&conn, id)?));
-    result.insert("sets".into(), json!(sets_of_file(&conn, id)?));
+    result.insert("set".into(), json!(sets_of_file(&conn, id)?));
     Ok(Json(Value::Object(result)))
 }
 
@@ -338,7 +338,7 @@ async fn metadata(
         "identifier": counted(&conn, &ids, IDENTIFIERS)?,
         "reference": counted(&conn, &ids, REFERENCES)?,
         "collection": counted(&conn, &ids, COLLECTIONS)?,
-        "sets": sets_of(&conn, &ids)?,
+        "set": sets_of(&conn, &ids)?,
     })))
 }
 

@@ -40,7 +40,7 @@ export const PLAIN_LISTS = [
     placeholder: "Add by set ID…",
     links: false,
     values: (data: Metadata) =>
-      data.sets.map((set) => ({ value: set.set_id, count: set.count })),
+      data.set.map((set) => ({ value: set.set_id, count: set.count })),
     add: (value: string): Changes => ({ add_set: [value] }),
     remove: (value: string): Changes => ({ remove_set: [value] }),
     // A set is opened by its ID: the tab shows its files.

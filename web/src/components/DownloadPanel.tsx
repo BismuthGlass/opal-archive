@@ -106,7 +106,7 @@ export function BaseTags(props: {
     identifier: [],
     reference: [],
     collection: [],
-    sets: [],
+    set: [],
   });
 
   /** The editor's changes, made to the tab's tags. */

@@ -72,7 +72,7 @@ struct Item {
     extension: String,
     length: Option<f64>,
     /// The sets it is in.
-    sets: Vec<ItemSet>,
+    set: Vec<ItemSet>,
     /// The group of variants it is one of, and how many files not in the
     /// trash are in it, this one included.
     alt_group_id: Option<String>,
@@ -256,7 +256,7 @@ async fn search(
                 media_type: row.get(2)?,
                 extension: row.get(3)?,
                 length: row.get(4)?,
-                sets: Vec::new(),
+                set: Vec::new(),
                 variants: alt_group_id.as_ref().and(row.get(9)?),
                 alt_group_id,
                 has_thumbnail,
@@ -283,7 +283,7 @@ async fn search(
                 files: row.get(2)?,
             })
         })?;
-        item.sets = found.collect::<rusqlite::Result<_>>()?;
+        item.set = found.collect::<rusqlite::Result<_>>()?;
     }
 
     Ok(Json(

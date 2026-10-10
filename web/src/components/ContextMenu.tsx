@@ -359,7 +359,7 @@ function Menu(props: {
   /** The set on show, which the selection can be taken out of. */
   const set = shownSet();
   /** How many of the selection are in it. */
-  const inShown = () => state()?.sets.find((held) => held.set_id === set?.set_id)?.count ?? 0;
+  const inShown = () => state()?.set.find((held) => held.set_id === set?.set_id)?.count ?? 0;
   /** Says what was done to the selection's sets or variants, once it is. */
   const group = async (action: () => Promise<string>) => {
     close();

@@ -175,7 +175,7 @@ impl Api {
 
     /// The sets a file says it is in, as its details give them.
     async fn sets_of(&self, file: i64) -> Value {
-        self.get(&format!("/entities/{file}")).await["sets"].clone()
+        self.get(&format!("/entities/{file}")).await["set"].clone()
     }
 
     /// The files of a set, in its order, each with its index.
@@ -490,7 +490,7 @@ async fn sets_hold_files_in_order() {
     );
     assert_eq!(api.found(&format!("set_id={set}")).await, [a, b, c]);
     assert_eq!(
-        api.metadata(&[a, d]).await["sets"],
+        api.metadata(&[a, d]).await["set"],
         json!([{ "set_id": set, "title": "Mine", "count": 1 }])
     );
 
@@ -581,7 +581,7 @@ async fn sets_hold_files_in_order() {
     );
     assert_eq!(api.found("set_id=site:post:1").await, [b]);
     assert_eq!(
-        api.get(&format!("/search?q=id%3D{b}")).await["items"][0]["sets"],
+        api.get(&format!("/search?q=id%3D{b}")).await["items"][0]["set"],
         json!([
             { "set_id": set, "title": "Mine", "files": 4 },
             { "set_id": other, "title": null, "files": 1 },
@@ -2060,7 +2060,7 @@ async fn an_export_carries_metadata_to_another_library() {
     );
     let entity = to.get(&format!("/entities/{first}")).await;
     assert_eq!((&entity["title"], &entity["score"]), (&json!("Mine"), &json!(6)));
-    assert_eq!(entity["sets"][0]["title"], "My series");
+    assert_eq!(entity["set"][0]["title"], "My series");
     assert_eq!(to.members(series).len(), 2);
 
     // Sidecars written by hand: what can be used of one is, and the rest
@@ -2115,12 +2115,12 @@ async fn an_export_carries_metadata_to_another_library() {
     assert_eq!(entity["file"]["alt_group_id"], "pair:1");
     // It is in the sets it lists, by an ID with a place or by an ID alone:
     // the second is the folder's.
-    let named: Vec<_> = entity["sets"].as_array().unwrap().iter().map(|set| &set["set_id"]).collect();
+    let named: Vec<_> = entity["set"].as_array().unwrap().iter().map(|set| &set["set_id"]).collect();
     assert_eq!(named, ["book:1", "group:1"]);
-    assert_eq!(entity["sets"][1]["title"], "Group");
+    assert_eq!(entity["set"][1]["title"], "Group");
     let chapter = to.get(&format!("/entities/{}", one("name=1.pdf").await)).await;
     assert_eq!(
-        (&chapter["sets"][0]["set_id"], &chapter["sets"][0]["title"]),
+        (&chapter["set"][0]["set_id"], &chapter["set"][0]["title"]),
         (&json!("book:1"), &json!("Chapters"))
     );
     let mut book = vec![loose, chapter["id"].as_i64().unwrap()];
