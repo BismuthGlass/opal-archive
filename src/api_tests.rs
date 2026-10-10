@@ -1013,9 +1013,8 @@ async fn a_download_tab_fetches_tags_and_remembers() {
     assert_eq!(job["errors"], json!(["one thing could not be had"]));
     let files = api.found("kind=file sort=id").await;
     assert_eq!(files.len(), 3);
-    // The tab lists the file that is in no collection; the other two are
-    // listed as their set.
-    assert_eq!(api.in_tab(tab, "file").await, files[..1]);
+    // The tab lists them all: the two that are in a set too, beside it.
+    assert_eq!(api.in_tab(tab, "file").await, files);
     // A view saved before the files came does not outlast them.
     assert_eq!(api.get(&format!("/tabs/{tab}/view")).await, Value::Null);
     let all = api.metadata(&files).await;
@@ -1095,7 +1094,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         [tag("https://example.test/board", 1)]
     );
 
-    // Both collections are listed in the tab, beside the first thing's file.
+    // Both collections are listed in the tab, beside the files.
     let mut made = [sets[0], wholes[0]];
     made.sort();
     assert_eq!(api.in_tab(tab, "collection").await, made);
@@ -1134,7 +1133,7 @@ async fn a_download_tab_fetches_tags_and_remembers() {
         "Mine"
     );
     assert_eq!(counts(&third), [2, 1, 0, 2, 1, 1]);
-    assert_eq!(api.in_tab(tab, "file").await, files[..1]);
+    assert_eq!(api.in_tab(tab, "file").await, files);
     assert_eq!(api.in_tab(tab, "collection").await.len(), 2);
     assert_eq!(api.found("type=set").await, sets);
     assert_eq!(api.found("type=sourceset").await, wholes);
@@ -1425,14 +1424,13 @@ async fn the_inbox_downloads_what_it_is_sent() {
         (&json!("done"), &json!(0), &json!(3))
     );
 
-    // It is all listed under the inbox's tab: the file that is in no
-    // collection, and the collections in place of the files in them.
+    // It is all listed under the inbox's tab: the files and their collections.
     let inbox = api.get("/inbox").await;
     let tab = inbox["tab"].as_i64().unwrap();
-    assert_eq!(inbox["listed"], 3);
+    assert_eq!(inbox["listed"], 5);
     assert_eq!(inbox["queue"].as_array().unwrap().len(), 2);
     assert_eq!(inbox["downloaders"][0]["tags"], json!({ "tags": ["sent"] }));
-    assert_eq!(api.in_tab(tab, "file").await.len(), 1);
+    assert_eq!(api.in_tab(tab, "file").await.len(), 3);
     assert_eq!(api.in_tab(tab, "collection").await.len(), 2);
     assert_eq!(api.found("sent kind=file").await.len(), 3);
     // The request's own tags are given too, beside the downloader's.
@@ -1448,7 +1446,7 @@ async fn the_inbox_downloads_what_it_is_sent() {
     api.ok("DELETE", &format!("/tabs/{tab}"), None).await;
     assert_eq!(api.get("/tabs").await, json!([]));
     let inbox = api.get("/inbox").await;
-    assert_eq!((&inbox["tab"], &inbox["listed"]), (&Value::Null, &json!(3)));
+    assert_eq!((&inbox["tab"], &inbox["listed"]), (&Value::Null, &json!(5)));
     let (_, third) = send("https://example.test/board").await;
     assert_eq!(ended(&api, &third["id"]).await["status"], "done");
     assert_eq!(api.get("/tabs").await, json!([]));
@@ -1456,7 +1454,7 @@ async fn the_inbox_downloads_what_it_is_sent() {
     let again = api.post("/tabs", json!({ "kind": "inbox" })).await;
     assert_eq!(again["id"], tab);
     assert_eq!(api.get("/tabs").await[0]["id"], tab);
-    assert_eq!(api.in_tab(tab, "file").await.len(), 1);
+    assert_eq!(api.in_tab(tab, "file").await.len(), 3);
 
     // Only clearing empties it, and that takes nothing out of the library.
     api.post("/inbox/clear", json!({})).await;

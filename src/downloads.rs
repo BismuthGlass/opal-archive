@@ -771,9 +771,6 @@ struct Download {
     /// directory.
     out: PathBuf,
     status: Arc<Mutex<Status>>,
-    /// Whether what it takes in is listed under the tab. Not when it runs
-    /// for another downloader's thing that is listed as a collection.
-    listed: bool,
     /// How many downloaders handed this on before it came here.
     handed_on: u8,
     /// The files it has taken in, in order, for whoever handed it over.
@@ -796,7 +793,6 @@ impl Download {
             base,
             out,
             status,
-            listed: true,
             handed_on: 0,
             taken: Mutex::new(Vec::new()),
         }
@@ -891,7 +887,6 @@ impl Download {
     fn hand_over<'a>(
         &'a self,
         url: &'a str,
-        listed: bool,
         cancel: &'a Arc<Notify>,
     ) -> Pin<Box<dyn Future<Output = Result<(Vec<i64>, u64, u64), ApiError>> + Send + 'a>> {
         Box::pin(async move {
@@ -907,7 +902,6 @@ impl Download {
             let request = request_for(&self.state, &manifest, url, &options, &[], &out);
             let title = manifest.title.clone();
             let other = Download {
-                listed,
                 handed_on: self.handed_on + 1,
                 ..Download::new(
                     self.state.clone(),
@@ -942,8 +936,8 @@ impl Download {
     /// Takes one downloaded thing into the library: its files go in and get
     /// the source URL, the reference, the tags, and the title and
     /// description where they have none. They are listed under the tab,
-    /// unless the thing asks for a collection: then they are put in it, and
-    /// it is listed in their place. What it hands over to other
+    /// and if the thing asks for a collection they are put in it, and it
+    /// is listed beside them. What it hands over to other
     /// downloaders is fetched by them, and is its files too. Then the
     /// thing is remembered as seen. Returns how many files were new, and
     /// how many the library had.
@@ -963,10 +957,7 @@ impl Download {
         let (title, description) = (text(&item.title), text(&item.description));
         let whole = item.collection.as_ref();
         let whole = whole.filter(|whole| !whole.id.trim().is_empty());
-        // Files that go in a collection are one thing, and the collection
-        // is what the tab lists.
-        let listed = self.listed && whole.is_none();
-        let tab = listed.then_some(self.tab);
+        let tab = Some(self.tab);
         let mut ids = Vec::new();
         let (mut added, mut existing) = (0, 0);
         for path in &item.files {
@@ -991,7 +982,7 @@ impl Download {
             }
         }
         for url in &item.delegate {
-            let (theirs, new, old) = self.hand_over(url.trim(), listed, cancel).await?;
+            let (theirs, new, old) = self.hand_over(url.trim(), cancel).await?;
             added += new;
             existing += old;
             for id in theirs {
@@ -1028,14 +1019,12 @@ impl Download {
             if let Some(reference) = text(&whole.reference) {
                 entities::add_to_list(&tx, &json, REFERENCES, &reference)?;
             }
-            // It is listed under the tab, where its files are not.
-            if self.listed {
-                tx.execute(
-                    "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
-                     SELECT id, ?2 FROM tab WHERE id = ?1",
-                    params![self.tab, id],
-                )?;
-            }
+            // It is listed under the tab beside its files.
+            tx.execute(
+                "INSERT OR IGNORE INTO tab_upload (tab_id, entity_id)
+                 SELECT id, ?2 FROM tab WHERE id = ?1",
+                params![self.tab, id],
+            )?;
             wholes.push((json, text(&whole.description), &whole.tags));
             members = vec![id];
             next = whole.collection.as_deref();

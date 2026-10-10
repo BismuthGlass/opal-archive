@@ -151,8 +151,7 @@ one made.
 
 The collection always gets the manifest's `source` and the tab's tags; it
 does not get the item's own tags, title, description or reference, only
-what `collection` says. It is listed in the tab in place of its files: they
-are one thing, and the tab shows it as one.
+what `collection` says. It is listed in the tab, beside the files.
 
 A collection that names a `collection` of its own is put in that one, as a
 member like any other, and the files are not. Every collection named is
