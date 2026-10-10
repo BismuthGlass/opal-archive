@@ -28,7 +28,7 @@ struct SearchParams {
     tab: Option<i64>,
     /// Set to search within, in place of what `tab` holds: the set a tab
     /// has gone into.
-    set: Option<i64>,
+    set: Option<String>,
     /// A group of variants to search within, as `set` is a set: the files
     /// that share this `alt_group_id`.
     variants: Option<String>,
@@ -46,7 +46,6 @@ struct SearchParams {
 /// A set a result is in.
 #[derive(Serialize)]
 struct ItemSet {
-    id: i64,
     set_id: String,
     title: Option<String>,
     /// How many files not in the trash it holds.
@@ -57,7 +56,7 @@ impl SearchParams {
     fn scope(&self) -> Scope<'_> {
         Scope {
             tab: self.tab,
-            set: self.set,
+            set: self.set.as_deref(),
             variants: self.variants.as_deref(),
             collection: self.collection.as_deref(),
         }
@@ -97,7 +96,7 @@ pub struct Scope<'a> {
     /// A tab: what it holds, if it is an upload, a download or a set tab.
     pub tab: Option<i64>,
     /// A set, in place of what the tab holds.
-    pub set: Option<i64>,
+    pub set: Option<&'a str>,
     /// A group of variants, in place of either.
     pub variants: Option<&'a str>,
     /// A collection, in place of any of those: what is part of it.
@@ -121,7 +120,7 @@ fn compile(
         compiled.filter = format!(
             "({}) AND (EXISTS (SELECT 1 FROM collection l
                                WHERE l.entity_id = e0.id AND l.value = ?)
-                       OR EXISTS (SELECT 1 FROM set_collection l JOIN set_file sf USING (set_key)
+                       OR EXISTS (SELECT 1 FROM set_collection l JOIN set_file sf USING (set_id)
                                   WHERE sf.file_id = e0.id AND l.value = ?))",
             compiled.filter
         );
@@ -136,10 +135,10 @@ fn compile(
     }
     let (tab, set) = (scope.tab, scope.set);
     // What to narrow to: a tab's own list, or a set.
-    let scope: Option<(String, Option<i64>)> = match (set, tab) {
-        (Some(set), _) => Some(("set".to_string(), Some(set))),
+    let scope: Option<(String, Option<String>)> = match (set, tab) {
+        (Some(set), _) => Some(("set".to_string(), Some(set.to_string()))),
         (None, Some(tab)) => conn
-            .query_row("SELECT kind, set_key FROM tab WHERE id = ?1", [tab], |row| {
+            .query_row("SELECT kind, set_id FROM tab WHERE id = ?1", [tab], |row| {
                 Ok((row.get(0)?, row.get(1)?))
             })
             .optional()?,
@@ -157,14 +156,14 @@ fn compile(
         (Some((_, Some(set))), _) => {
             in_set = true;
             compiled.filter = format!(
-                "({}) AND e0.id IN (SELECT file_id FROM set_file WHERE set_key = ?)",
+                "({}) AND e0.id IN (SELECT file_id FROM set_file WHERE set_id = ?)",
                 compiled.filter
             );
-            compiled.filter_params.push(Value::Integer(set));
+            compiled.filter_params.push(Value::Text(set.clone()));
             if !compiled.sorted {
-                let index = "(SELECT set_index FROM set_file WHERE set_key = ? AND file_id = e0.id)";
+                let index = "(SELECT set_index FROM set_file WHERE set_id = ? AND file_id = e0.id)";
                 compiled.order = format!("{index} IS NULL, {index}, e0.id");
-                compiled.order_params = vec![Value::Integer(set); 2];
+                compiled.order_params = vec![Value::Text(set); 2];
             }
         }
         _ => {}
@@ -185,7 +184,7 @@ pub fn matching_ids(
 ) -> Result<Vec<i64>, ApiError> {
     let (compiled, in_set) = compile(conn, source, seed, scope, include_trashed)?;
     let sql = format!(
-        "SELECT e0.id, (SELECT json_group_array(set_key) FROM set_file WHERE file_id = e0.id)
+        "SELECT e0.id, (SELECT json_group_array(set_id) FROM set_file WHERE file_id = e0.id)
          FROM {} WHERE {} ORDER BY {}",
         query::FROM,
         compiled.filter,
@@ -199,10 +198,9 @@ pub fn matching_ids(
     if !collapse || in_set {
         return Ok(found.into_iter().map(|(id, _)| id).collect());
     }
-    let mut listed: HashSet<i64> = HashSet::new();
+    let mut listed: HashSet<String> = HashSet::new();
     let ids = found.into_iter().filter_map(|(id, sets)| {
-        // The table only holds numbers, so this is a list of them.
-        let sets: Vec<i64> = serde_json::from_str(&sets).unwrap_or_default();
+        let sets: Vec<String> = serde_json::from_str(&sets).unwrap_or_default();
         let again = sets.iter().any(|set| listed.contains(set));
         listed.extend(sets);
         (!again).then_some(id)
@@ -271,19 +269,18 @@ async fn search(
     drop(stmt);
     let mut items = items;
     let mut sets = conn.prepare(
-        "SELECT s.id, s.set_id, s.title,
+        "SELECT f.set_id, i.title,
                 (SELECT count(*) FROM set_file o JOIN entity oe ON oe.id = o.file_id
-                 WHERE o.set_key = s.id AND oe.trashed = 0)
-         FROM set_file f JOIN file_set s ON s.id = f.set_key
-         WHERE f.file_id = ?1 ORDER BY s.title IS NULL, s.title, s.set_id",
+                 WHERE o.set_id = f.set_id AND oe.trashed = 0)
+         FROM set_file f LEFT JOIN set_info i USING (set_id)
+         WHERE f.file_id = ?1 ORDER BY f.set_id",
     )?;
     for item in &mut items {
         let found = sets.query_map([item.id], |row| {
             Ok(ItemSet {
-                id: row.get(0)?,
-                set_id: row.get(1)?,
-                title: row.get(2)?,
-                files: row.get(3)?,
+                set_id: row.get(0)?,
+                title: row.get(1)?,
+                files: row.get(2)?,
             })
         })?;
         item.sets = found.collect::<rusqlite::Result<_>>()?;

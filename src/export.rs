@@ -63,8 +63,8 @@ enum Entry {
     File(PathBuf),
     /// The sidecar of a file, written when its turn comes.
     Sidecar(i64),
-    /// The sidecar of a set.
-    SetSidecar(i64),
+    /// The sidecar of a set, by its ID.
+    SetSidecar(String),
     /// The sidecar of a collection, by its name.
     CollectionSidecar(String),
 }
@@ -165,9 +165,9 @@ fn write_zip(
                 Err(rusqlite::Error::QueryReturnedNoRows) => None,
                 Err(err) => return Err(io::Error::other(err)),
             },
-            Entry::SetSidecar(set) => sidecar::write_set(&db.lock().unwrap(), set)
-                .map_err(io::Error::other)?
-                .map(|(meta, _)| meta),
+            Entry::SetSidecar(set) => {
+                sidecar::write_set(&db.lock().unwrap(), &set).map_err(io::Error::other)?
+            }
             Entry::CollectionSidecar(name) => {
                 sidecar::write_collection(&db.lock().unwrap(), &name).map_err(io::Error::other)?
             }
@@ -182,30 +182,30 @@ fn write_zip(
 }
 
 /// The sidecars of the sets the files are in, each named for its set ID.
-/// A set that says nothing of itself has none: its files say which it is.
+/// A set of which nothing is known has none: its files say which it is.
 fn set_sidecars(
     conn: &Connection,
     ids: &str,
     taken: &mut HashSet<String>,
 ) -> rusqlite::Result<Vec<(String, Entry)>> {
     let mut stmt = conn.prepare(
-        "SELECT DISTINCT s.id, s.set_id FROM set_file f JOIN file_set s ON s.id = f.set_key
-         WHERE f.file_id IN (SELECT value FROM json_each(?1)) ORDER BY s.id",
+        "SELECT i.set_id FROM set_info i
+         WHERE i.set_id IN (
+             SELECT set_id FROM set_file WHERE file_id IN (SELECT value FROM json_each(?1))
+         )
+         ORDER BY i.set_id",
     )?;
     let sets = stmt
-        .query_map([ids], |row| Ok((row.get(0)?, row.get(1)?)))?
-        .collect::<rusqlite::Result<Vec<(i64, String)>>>()?;
+        .query_map([ids], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<String>>>()?;
     let mut entries = Vec::new();
-    for (set, set_id) in sets {
-        if !sidecar::write_set(conn, set)?.is_some_and(|(_, says)| says) {
-            continue;
-        }
+    for set_id in sets {
         let name = match safe_name(&set_id).as_str() {
             "" => "set".to_string(),
             name => name.to_string(),
         };
         let name = unique_name(&format!("{name}.json"), false, taken);
-        entries.push((name, Entry::SetSidecar(set)));
+        entries.push((name, Entry::SetSidecar(set_id)));
     }
     Ok(entries)
 }
@@ -224,7 +224,7 @@ fn collection_sidecars(
              SELECT l.value FROM collection l
              WHERE l.entity_id IN (SELECT value FROM json_each(?1))
              UNION
-             SELECT l.value FROM set_collection l JOIN set_file sf USING (set_key)
+             SELECT l.value FROM set_collection l JOIN set_file sf USING (set_id)
              WHERE sf.file_id IN (SELECT value FROM json_each(?1))
          )
          ORDER BY i.name",

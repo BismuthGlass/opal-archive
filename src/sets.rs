@@ -1,14 +1,18 @@
-//! Sets: files that belong together, in an order. A file can be in several:
-//! which, and where in each, is kept in `set_file`. A set is not an
-//! entity: it has no tags and is not searched for, only opened from one of
-//! its files. It has a set ID that tells it from every other, a title, a
-//! description, and the lists that say where it came from.
+//! Sets: files that belong together, in an order. A set is the ID its
+//! files give, as a collection is the name: which sets a file gives, and
+//! where in each it comes, is kept in `set_file`, and files that give the
+//! same ID are a set. A file can be in several.
+//!
+//! What is known of a set itself (a title, a description, where it came
+//! from) is kept by that ID, in `set_info`, once there is something to
+//! keep and not before. A set is not an entity: it has no tags and is not
+//! searched for, only opened from one of its files.
 //!
 //! Variants are looser still: files with the same `alt_group_id`.
 
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Query, State},
     http::StatusCode,
     routing::{get, post, put},
 };
@@ -20,7 +24,6 @@ use crate::{
     AppState,
     entities::{self, ids_json},
     error::ApiError,
-    query::contains_pattern,
 };
 
 /// A table of plain values per set, and the column the value is in.
@@ -30,25 +33,31 @@ pub const IDENTIFIERS: List = ("set_identifier", "value");
 pub const REFERENCES: List = ("set_reference", "value");
 pub const COLLECTIONS: List = ("set_collection", "value");
 
+/// The lists a set has, by the field each is given as.
+const LISTS: [(&str, List); 4] = [
+    ("source_url", SOURCE_URLS),
+    ("identifier", IDENTIFIERS),
+    ("reference", REFERENCES),
+    ("collection", COLLECTIONS),
+];
+
 #[derive(Deserialize)]
-struct NewSet {
-    /// What tells it from every other set; one is made up if not given.
+struct Named {
+    /// The set, as its files give it.
+    set_id: String,
+}
+
+#[derive(Deserialize)]
+struct Joined {
+    /// The set the files are to be in: the one that has this ID, or a new
+    /// one of it. One is made up if it is not given.
     set_id: Option<String>,
+    /// Given to the set if it has no title.
     title: Option<String>,
     /// The files to put in it, in order.
     #[serde(default)]
     files: Vec<i64>,
 }
-
-#[derive(Deserialize)]
-struct ListParams {
-    /// Text the title or the set ID has to contain.
-    #[serde(default)]
-    q: String,
-}
-
-/// Most sets listed at once.
-const MOST_LISTED: i64 = 200;
 
 #[derive(Deserialize)]
 struct FileChanges {
@@ -89,10 +98,9 @@ struct SetChanges {
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/sets", get(list).post(create))
-        .route("/sets/{id}", get(one).patch(change).delete(dissolve))
-        .route("/sets/{id}/files", post(change_files))
-        .route("/sets/{id}/order", put(set_order))
+        .route("/sets", get(one).post(join).patch(change).delete(dissolve))
+        .route("/sets/files", post(change_files))
+        .route("/sets/order", put(set_order))
         .route("/variants", post(group_variants))
 }
 
@@ -107,47 +115,38 @@ fn random() -> String {
     format!("{:08x}", random as u32)
 }
 
+/// Whether there is a set of this ID: files that give it, or something
+/// known of it.
+pub fn exists(conn: &Connection, set_id: &str) -> rusqlite::Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM set_file WHERE set_id = ?1)
+             OR EXISTS (SELECT 1 FROM set_info WHERE set_id = ?1)",
+        [set_id],
+        |row| row.get(0),
+    )
+}
+
 /// A set ID no set has.
 pub fn new_id(conn: &Connection) -> rusqlite::Result<String> {
     loop {
         let id = format!("set:{}", random());
-        let taken: bool = conn.query_row(
-            "SELECT EXISTS (SELECT 1 FROM file_set WHERE set_id = ?1)",
-            [&id],
-            |row| row.get(0),
-        )?;
-        if !taken {
+        if !exists(conn, &id)? {
             return Ok(id);
         }
     }
 }
 
-/// The set with the set ID, or a new one with it. Returns it, and whether
-/// it is new.
-pub fn find_or_make(conn: &Connection, set_id: &str) -> rusqlite::Result<(i64, bool)> {
-    let found = conn
-        .query_row("SELECT id FROM file_set WHERE set_id = ?1", [set_id], |row| {
-            row.get(0)
-        })
-        .optional()?;
-    if let Some(found) = found {
-        return Ok((found, false));
-    }
-    conn.execute("INSERT INTO file_set (set_id) VALUES (?1)", [set_id])?;
-    Ok((conn.last_insert_rowid(), true))
-}
-
 /// Puts files in a set, in the order given, after what it holds. Those
 /// already in it stay where they are. With `free`, only the files that
 /// are in no set at all are put in it.
-pub fn add_files(conn: &Connection, set: i64, files: &[i64], free: bool) -> rusqlite::Result<()> {
+pub fn add_files(conn: &Connection, set: &str, files: &[i64], free: bool) -> rusqlite::Result<()> {
     let mut next: i64 = conn.query_row(
-        "SELECT coalesce(max(set_index), -1) + 1 FROM set_file WHERE set_key = ?1",
+        "SELECT coalesce(max(set_index), -1) + 1 FROM set_file WHERE set_id = ?1",
         [set],
         |row| row.get(0),
     )?;
     let mut put = conn.prepare(
-        "INSERT OR IGNORE INTO set_file (set_key, file_id, set_index)
+        "INSERT OR IGNORE INTO set_file (set_id, file_id, set_index)
          SELECT ?1, entity_id, ?3 FROM file
          WHERE entity_id = ?2
            AND NOT (?4 AND EXISTS (SELECT 1 FROM set_file WHERE file_id = ?2))",
@@ -160,128 +159,114 @@ pub fn add_files(conn: &Connection, set: i64, files: &[i64], free: bool) -> rusq
     Ok(())
 }
 
-/// Deletes the sets that hold no file: there is no way left to open one.
-/// Done when the server starts, and whenever files leave the library or
-/// sets are made for what arrives.
+/// Forgets what was known of sets no file gives any more: there is no way
+/// left to open one. Done when the server starts, and whenever files
+/// leave the library or arrive.
 pub fn prune(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute(
-        "DELETE FROM file_set WHERE id NOT IN (SELECT set_key FROM set_file)",
+        "DELETE FROM set_info WHERE set_id NOT IN (SELECT set_id FROM set_file)",
         [],
     )?;
     Ok(())
 }
 
-/// A set's values in a list.
-pub fn list_of(conn: &Connection, list: List, set: i64) -> rusqlite::Result<Vec<String>> {
-    let (table, column) = list;
-    let mut stmt = conn.prepare(&format!(
-        "SELECT {column} FROM {table} WHERE set_key = ?1 ORDER BY {column}"
-    ))?;
-    stmt.query_map([set], |row| row.get(0))?.collect()
+/// Makes sure there is somewhere to keep what is known of a set.
+fn know(conn: &Connection, set: &str) -> rusqlite::Result<()> {
+    conn.execute("INSERT OR IGNORE INTO set_info (set_id) VALUES (?1)", [set])?;
+    Ok(())
 }
 
-pub fn add_to_list(conn: &Connection, set: i64, list: List, value: &str) -> rusqlite::Result<()> {
-    let (table, column) = list;
+/// Gives a set a title or a description (`field`) if it has none.
+pub fn fill(conn: &Connection, set: &str, field: &str, value: &str) -> rusqlite::Result<()> {
+    know(conn, set)?;
     conn.execute(
-        &format!("INSERT OR IGNORE INTO {table} (set_key, {column}) VALUES (?1, ?2)"),
+        &format!("UPDATE set_info SET {field} = ?2 WHERE set_id = ?1 AND {field} IS NULL"),
         params![set, value],
     )?;
     Ok(())
 }
 
-/// Everything known about a set, if there is one; `files` counts those not
-/// in the trash.
-pub fn describe(conn: &Connection, set: i64) -> rusqlite::Result<Option<Value>> {
-    let found = conn
+pub fn add_to_list(conn: &Connection, set: &str, list: List, value: &str) -> rusqlite::Result<()> {
+    know(conn, set)?;
+    let (table, column) = list;
+    conn.execute(
+        &format!("INSERT OR IGNORE INTO {table} (set_id, {column}) VALUES (?1, ?2)"),
+        params![set, value],
+    )?;
+    Ok(())
+}
+
+/// Forgets a set of which nothing is known any more: it is its ID again.
+fn forget_if_empty(conn: &Connection, set: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "DELETE FROM set_info
+         WHERE set_id = ?1 AND title IS NULL AND description IS NULL
+           AND NOT EXISTS (SELECT 1 FROM set_source_url WHERE set_id = ?1)
+           AND NOT EXISTS (SELECT 1 FROM set_identifier WHERE set_id = ?1)
+           AND NOT EXISTS (SELECT 1 FROM set_reference WHERE set_id = ?1)
+           AND NOT EXISTS (SELECT 1 FROM set_collection WHERE set_id = ?1)",
+        [set],
+    )?;
+    Ok(())
+}
+
+/// Whether anything is known of a set beyond its ID.
+pub fn known(conn: &Connection, set: &str) -> rusqlite::Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM set_info WHERE set_id = ?1)",
+        [set],
+        |row| row.get(0),
+    )
+}
+
+/// What is known of a set, which may be its ID alone; `files` counts those
+/// not in the trash.
+pub fn describe(conn: &Connection, set: &str) -> rusqlite::Result<Value> {
+    let info: Option<(Option<String>, Option<String>)> = conn
         .query_row(
-            "SELECT s.id, s.set_id, s.title, s.description,
-                    (SELECT count(*) FROM set_file f JOIN entity e ON e.id = f.file_id
-                     WHERE f.set_key = s.id AND e.trashed = 0)
-             FROM file_set s WHERE s.id = ?1",
+            "SELECT title, description FROM set_info WHERE set_id = ?1",
             [set],
-            |row| {
-                Ok(json!({
-                    "id": row.get::<_, i64>(0)?,
-                    "set_id": row.get::<_, String>(1)?,
-                    "title": row.get::<_, Option<String>>(2)?,
-                    "description": row.get::<_, Option<String>>(3)?,
-                    "files": row.get::<_, i64>(4)?,
-                }))
-            },
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
-    let Some(mut found) = found else {
-        return Ok(None);
-    };
-    for (name, list) in [
-        ("source_url", SOURCE_URLS),
-        ("identifier", IDENTIFIERS),
-        ("reference", REFERENCES),
-        ("collection", COLLECTIONS),
-    ] {
-        found[name] = json!(list_of(conn, list, set)?);
-    }
-    Ok(Some(found))
-}
-
-/// 404 if there is no such set.
-fn exists(conn: &Connection, set: i64) -> Result<(), ApiError> {
-    conn.query_row("SELECT 1 FROM file_set WHERE id = ?1", [set], |_| Ok(()))
-        .optional()?
-        .ok_or(ApiError::NotFound)
-}
-
-/// A set ID as it is kept, if `wanted` can be one and no other set has it.
-fn free_id(conn: &Connection, set: Option<i64>, wanted: &str) -> Result<String, ApiError> {
-    let wanted = wanted.trim();
-    if wanted.is_empty() {
-        return Err(ApiError::bad_request("a set must have a set ID"));
-    }
-    let taken: bool = conn.query_row(
-        "SELECT EXISTS (SELECT 1 FROM file_set WHERE set_id = ?1 AND id IS NOT ?2)",
-        params![wanted, set],
+    let (title, description) = info.unwrap_or_default();
+    let files: i64 = conn.query_row(
+        "SELECT count(*) FROM set_file f JOIN entity e ON e.id = f.file_id
+         WHERE f.set_id = ?1 AND e.trashed = 0",
+        [set],
         |row| row.get(0),
     )?;
-    if taken {
-        return Err(ApiError::BadRequest(format!(
-            "another set already has the ID `{wanted}`"
-        )));
+    let mut found = json!({
+        "set_id": set,
+        "title": title,
+        "description": description,
+        "files": files,
+    });
+    for (field, (table, column)) in LISTS {
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {column} FROM {table} WHERE set_id = ?1 ORDER BY {column}"
+        ))?;
+        let values = stmt
+            .query_map([set], |row| row.get(0))?
+            .collect::<rusqlite::Result<Vec<String>>>()?;
+        found[field] = json!(values);
     }
-    Ok(wanted.to_string())
+    Ok(found)
 }
 
-/// The sets there are, for picking one: by title, then by set ID, with how
-/// many files each holds.
-async fn list(
-    State(state): State<AppState>,
-    Query(params): Query<ListParams>,
-) -> Result<Json<Value>, ApiError> {
-    let conn = state.db.lock().unwrap();
-    let mut stmt = conn.prepare(
-        "SELECT s.id, s.set_id, s.title,
-                (SELECT count(*) FROM set_file f WHERE f.set_key = s.id)
-         FROM file_set s
-         WHERE s.title LIKE ?1 ESCAPE '\\' OR s.set_id LIKE ?1 ESCAPE '\\'
-         ORDER BY s.title IS NULL, s.title COLLATE NOCASE, s.set_id COLLATE NOCASE LIMIT ?2",
-    )?;
-    let pattern = contains_pattern(params.q.trim());
-    let sets = stmt
-        .query_map(params![pattern, MOST_LISTED], |row| {
-            Ok(json!({
-                "id": row.get::<_, i64>(0)?,
-                "set_id": row.get::<_, String>(1)?,
-                "title": row.get::<_, Option<String>>(2)?,
-                "files": row.get::<_, i64>(3)?,
-            }))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(Json(json!(sets)))
+/// A set ID as it is kept.
+fn named(set_id: &str) -> Result<&str, ApiError> {
+    match set_id.trim() {
+        "" => Err(ApiError::bad_request("a set has a set ID")),
+        set_id => Ok(set_id),
+    }
 }
 
-/// Makes a set of the files given.
-async fn create(
+/// Puts files in the set of an ID: the set that has it, or a new one of
+/// it. Given no ID, a set is made with one made up for it.
+async fn join(
     State(state): State<AppState>,
-    Json(input): Json<NewSet>,
+    Json(input): Json<Joined>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let text = |text: &Option<String>| {
         let text = text.as_deref().map(str::trim);
@@ -290,45 +275,77 @@ async fn create(
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
     let set_id = match text(&input.set_id) {
-        Some(wanted) => free_id(&tx, None, &wanted)?,
+        Some(wanted) => wanted,
         None => new_id(&tx)?,
     };
-    tx.execute(
-        "INSERT INTO file_set (set_id, title) VALUES (?1, ?2)",
-        params![set_id, text(&input.title)],
-    )?;
-    let id = tx.last_insert_rowid();
-    add_files(&tx, id, &input.files, false)?;
+    let new = !exists(&tx, &set_id)?;
+    add_files(&tx, &set_id, &input.files, false)?;
     let held: bool = tx.query_row(
-        "SELECT EXISTS (SELECT 1 FROM set_file WHERE set_key = ?1)",
-        [id],
+        "SELECT EXISTS (SELECT 1 FROM set_file WHERE set_id = ?1)",
+        [&set_id],
         |row| row.get(0),
     )?;
     if !held {
         return Err(ApiError::bad_request("a set is made of at least one file"));
     }
+    if let Some(title) = text(&input.title) {
+        fill(&tx, &set_id, "title", &title)?;
+    }
     tx.commit()?;
-    Ok((StatusCode::CREATED, Json(json!({ "id": id, "set_id": set_id }))))
+    let status = if new { StatusCode::CREATED } else { StatusCode::OK };
+    Ok((status, Json(json!({ "set_id": set_id }))))
 }
 
-async fn one(State(state): State<AppState>, Path(id): Path<i64>) -> Result<Json<Value>, ApiError> {
+async fn one(
+    State(state): State<AppState>,
+    Query(named_as): Query<Named>,
+) -> Result<Json<Value>, ApiError> {
     let conn = state.db.lock().unwrap();
-    describe(&conn, id)?.map(Json).ok_or(ApiError::NotFound)
+    Ok(Json(describe(&conn, named(&named_as.set_id)?)?))
 }
 
-/// Changes what a set says of itself, all or nothing.
+/// Gives a set another ID: its files, what is known of it and its tab all
+/// go by the new one. One that another set has is refused.
+fn rename(conn: &Connection, from: &str, to: &str) -> Result<(), ApiError> {
+    if from == to {
+        return Ok(());
+    }
+    if exists(conn, to)? {
+        return Err(ApiError::BadRequest(format!(
+            "another set already has the ID `{to}`"
+        )));
+    }
+    conn.execute("UPDATE set_file SET set_id = ?2 WHERE set_id = ?1", [from, to])?;
+    // What hangs off it follows.
+    conn.execute("UPDATE set_info SET set_id = ?2 WHERE set_id = ?1", [from, to])?;
+    conn.execute("UPDATE tab SET set_id = ?2 WHERE set_id = ?1", [from, to])?;
+    Ok(())
+}
+
+/// Changes what a set says of itself, all or nothing. The first thing
+/// said is what makes there be anything kept of it; with nothing left
+/// known it is its ID again.
 async fn change(
     State(state): State<AppState>,
-    Path(id): Path<i64>,
+    Query(named_as): Query<Named>,
     Json(input): Json<SetChanges>,
 ) -> Result<Json<Value>, ApiError> {
+    let mut id = named(&named_as.set_id)?.to_string();
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
-    exists(&tx, id)?;
+    if !exists(&tx, &id)? {
+        return Err(ApiError::NotFound);
+    }
+    know(&tx, &id)?;
     for (field, value) in &input.set {
         let value = match (field.as_str(), value) {
-            ("set_id", Value::String(wanted)) => Some(free_id(&tx, Some(id), wanted)?),
-            ("set_id", _) => return Err(ApiError::bad_request("a set must have a set ID")),
+            ("set_id", Value::String(wanted)) => {
+                let wanted = named(wanted)?.to_string();
+                rename(&tx, &id, &wanted)?;
+                id = wanted;
+                continue;
+            }
+            ("set_id", _) => return Err(ApiError::bad_request("a set has a set ID")),
             ("title" | "description", Value::Null) => None,
             ("title" | "description", Value::String(text)) => {
                 Some(text.trim().to_string()).filter(|text| !text.is_empty())
@@ -339,12 +356,12 @@ async fn change(
             _ => return Err(ApiError::BadRequest(format!("`{field}` cannot be set"))),
         };
         tx.execute(
-            &format!("UPDATE file_set SET {field} = ?2 WHERE id = ?1"),
+            &format!("UPDATE set_info SET {field} = ?2 WHERE set_id = ?1"),
             params![id, value],
         )?;
     }
     for url in &input.add_source_url {
-        add_to_list(&tx, id, SOURCE_URLS, &entities::source_url(url)?)?;
+        add_to_list(&tx, &id, SOURCE_URLS, &entities::source_url(url)?)?;
     }
     let plain = [
         (IDENTIFIERS, &input.add_identifier, "identifier"),
@@ -355,7 +372,7 @@ async fn change(
         for value in values {
             match value.trim() {
                 "" => return Err(ApiError::BadRequest(format!("empty {what}"))),
-                value => add_to_list(&tx, id, list, value)?,
+                value => add_to_list(&tx, &id, list, value)?,
             }
         }
     }
@@ -368,47 +385,55 @@ async fn change(
     for ((table, column), values) in removed {
         for value in values {
             tx.execute(
-                &format!("DELETE FROM {table} WHERE set_key = ?1 AND {column} = ?2"),
+                &format!("DELETE FROM {table} WHERE set_id = ?1 AND {column} = ?2"),
                 params![id, value.trim()],
             )?;
         }
     }
-    let changed = describe(&tx, id)?.ok_or(ApiError::NotFound)?;
+    forget_if_empty(&tx, &id)?;
+    let changed = describe(&tx, &id)?;
     tx.commit()?;
     Ok(Json(changed))
 }
 
-/// Takes the set apart: its files stay, in no set.
+/// Takes the set apart: its files stay, no longer in it, and what was
+/// known of it is forgotten.
 async fn dissolve(
     State(state): State<AppState>,
-    Path(id): Path<i64>,
+    Query(named_as): Query<Named>,
 ) -> Result<StatusCode, ApiError> {
-    let conn = state.db.lock().unwrap();
-    match conn.execute("DELETE FROM file_set WHERE id = ?1", [id])? {
-        0 => Err(ApiError::NotFound),
-        _ => Ok(StatusCode::NO_CONTENT),
-    }
-}
-
-/// Puts files in the set, or takes them out of it. A set left with none
-/// stays for now, so that what was taken out by mistake can be put back:
-/// it goes the next time empty sets are cleared away.
-async fn change_files(
-    State(state): State<AppState>,
-    Path(id): Path<i64>,
-    Json(input): Json<FileChanges>,
-) -> Result<Json<Value>, ApiError> {
+    let id = named(&named_as.set_id)?;
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
-    exists(&tx, id)?;
+    if !exists(&tx, id)? {
+        return Err(ApiError::NotFound);
+    }
+    tx.execute("DELETE FROM set_file WHERE set_id = ?1", [id])?;
+    tx.execute("DELETE FROM set_info WHERE set_id = ?1", [id])?;
+    tx.execute("DELETE FROM tab WHERE set_id = ?1", [id])?;
+    tx.commit()?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Puts files in the set, or takes them out of it. What is known of a set
+/// left with none stays for now, so that what was taken out by mistake
+/// can be put back.
+async fn change_files(
+    State(state): State<AppState>,
+    Query(named_as): Query<Named>,
+    Json(input): Json<FileChanges>,
+) -> Result<Json<Value>, ApiError> {
+    let id = named(&named_as.set_id)?;
+    let mut conn = state.db.lock().unwrap();
+    let tx = conn.transaction()?;
     tx.execute(
         "DELETE FROM set_file
-         WHERE set_key = ?1 AND file_id IN (SELECT value FROM json_each(?2))",
+         WHERE set_id = ?1 AND file_id IN (SELECT value FROM json_each(?2))",
         params![id, ids_json(&input.remove)],
     )?;
     add_files(&tx, id, &input.add, false)?;
     let count: i64 = tx.query_row(
-        "SELECT count(*) FROM set_file WHERE set_key = ?1",
+        "SELECT count(*) FROM set_file WHERE set_id = ?1",
         [id],
         |row| row.get(0),
     )?;
@@ -420,20 +445,23 @@ async fn change_files(
 /// in the order they had.
 async fn set_order(
     State(state): State<AppState>,
-    Path(id): Path<i64>,
+    Query(named_as): Query<Named>,
     Json(input): Json<Ids>,
 ) -> Result<StatusCode, ApiError> {
+    let id = named(&named_as.set_id)?;
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
-    exists(&tx, id)?;
     let rest = {
         let mut stmt = tx.prepare(
-            "SELECT file_id FROM set_file WHERE set_key = ?1
+            "SELECT file_id FROM set_file WHERE set_id = ?1
              ORDER BY set_index IS NULL, set_index, file_id",
         )?;
         stmt.query_map([id], |row| row.get::<_, i64>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?
     };
+    if rest.is_empty() {
+        return Err(ApiError::NotFound);
+    }
     let listed: std::collections::HashSet<i64> = input.ids.iter().copied().collect();
     let order = input
         .ids
@@ -441,7 +469,7 @@ async fn set_order(
         .chain(rest.iter().filter(|file| !listed.contains(file)));
     for (index, file) in order.enumerate() {
         tx.execute(
-            "UPDATE set_file SET set_index = ?1 WHERE set_key = ?2 AND file_id = ?3",
+            "UPDATE set_file SET set_index = ?1 WHERE set_id = ?2 AND file_id = ?3",
             params![index as i64, id, file],
         )?;
     }

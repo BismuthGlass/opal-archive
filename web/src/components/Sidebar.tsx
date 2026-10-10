@@ -58,10 +58,7 @@ const DETAIL_FIELDS: DetailField[] = [
  * the value they share or "(mixed)", and tags show how many of the
  * selection carry them.
  */
-export default function Sidebar(props: {
-  /** Asks for the given files to be put into a set. */
-  onGroup: (ids: number[]) => void;
-}) {
+export default function Sidebar() {
   const ids = createMemo(() => [...selected()]);
   const [error, setError] = createSignal<string | null>(null);
   /** An unset field picked from "Add field", shown while it is filled in. */
@@ -114,8 +111,7 @@ export default function Sidebar(props: {
     ),
   );
   const pick = (field: string) => {
-    if (field === "sets") props.onGroup(ids());
-    else if (PLAIN_LISTS.some((list) => list.field === field)) setEditingList(field);
+    if (PLAIN_LISTS.some((list) => list.field === field)) setEditingList(field);
     else setAdding(field);
   };
   /** What is shown, for a modal's title. */
@@ -133,15 +129,6 @@ export default function Sidebar(props: {
   };
   const set = (field: string) => (value: string | number | null) =>
     apply({ set: { [field]: value } });
-
-  const leave = async (set: number) => {
-    try {
-      await api.changeSetFiles(set, { remove: ids() });
-    } catch (err) {
-      setError(errorMessage(err));
-    }
-    changed();
-  };
 
   return (
     <>
@@ -247,12 +234,12 @@ export default function Sidebar(props: {
                   </>
                 )}
               </Show>
-              {/* The plain lists, with what a file belongs with among them:
-                  its variants and its sets, above its collections. */}
+              {/* The plain lists, with a file's variants among them, above
+                  the sets it is in and the collections it is part of. */}
               <For each={PLAIN_LISTS}>
                 {(list) => (
                   <>
-                    <Show when={list.field === "collection"}>
+                    <Show when={list.field === "set"}>
                       <Show when={variantGroup(data())}>
                         {(group) => (
                           <>
@@ -270,9 +257,6 @@ export default function Sidebar(props: {
                             </dd>
                           </>
                         )}
-                      </Show>
-                      <Show when={data().sets.length > 0}>
-                        <SetsRow data={data()} onAdd={() => props.onGroup(ids())} onLeave={leave} />
                       </Show>
                     </Show>
                     <Show when={listed(list, data())}>
@@ -296,12 +280,9 @@ export default function Sidebar(props: {
                     !isSet(data().scalars[detail.field]) &&
                     adding() !== detail.field,
                 ),
-                [
-                  ...(data().sets.length === 0 ? [{ field: "sets", label: "Sets" }] : []),
-                  ...PLAIN_LISTS.filter((list) => !listed(list, data())).map(
-                    ({ field, label }) => ({ field, label }),
-                  ),
-                ],
+                PLAIN_LISTS.filter((list) => !listed(list, data())).map(
+                  ({ field, label }) => ({ field, label }),
+                ),
               ]}
               onPick={pick}
             />
@@ -345,63 +326,6 @@ const variantGroup = (data: Metadata) => {
   const group = data.scalars.alt_group_id;
   return !group.mixed && typeof group.value === "string" ? group.value : undefined;
 };
-
-/**
- * The sets the selection is in, as a row of the details list: each opens
- * when its name is pressed, and the selection can be taken out of it. The
- * label puts the selection into a set, new or existing.
- */
-function SetsRow(props: { data: Metadata; onAdd: () => void; onLeave: (set: number) => void }) {
-  return (
-    <>
-      <dt>
-        <button
-          class="label list-label"
-          title="Put in a set, new or existing"
-          onClick={props.onAdd}
-        >
-          Sets
-          <Icon name="edit-outline" />
-        </button>
-      </dt>
-      <dd>
-        <ul class="links">
-          <For each={props.data.sets}>
-            {(set) => (
-              <li>
-                <button
-                  class="link link-text"
-                  data-tip={setName(set)}
-                  onClick={() => enter(set)}
-                >
-                  {setName(set)}
-                </button>
-                <Show when={set.count < props.data.count}>
-                  <span
-                    class="chip-count"
-                    title={`${set.count} of ${props.data.count} selected are in it`}
-                  >
-                    ({set.count})
-                  </span>
-                </Show>
-                <span class="chip-actions">
-                  <button
-                    class="chip-remove"
-                    aria-label={`Take out of ${setName(set)}`}
-                    title="Take out of this set"
-                    onClick={() => props.onLeave(set.id)}
-                  >
-                    <Icon name="close" />
-                  </button>
-                </span>
-              </li>
-            )}
-          </For>
-        </ul>
-      </dd>
-    </>
-  );
-}
 
 /**
  * The score as seven stars. Clicking a star sets it; clicking the current

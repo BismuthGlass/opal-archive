@@ -67,21 +67,21 @@ pub fn write(conn: &Connection, id: i64) -> rusqlite::Result<Metadata> {
     Ok(filled(meta))
 }
 
-/// The sidecar of a set, and whether it says anything of the set beyond
-/// which it is: one that does not is not worth writing.
-pub fn write_set(conn: &Connection, set: i64) -> rusqlite::Result<Option<(Metadata, bool)>> {
-    let Some(Value::Object(mut meta)) = sets::describe(conn, set)? else {
+/// The sidecar of a set, if anything is known of it but its ID: one that
+/// is its ID alone has none, as its files say that ID themselves.
+pub fn write_set(conn: &Connection, set: &str) -> rusqlite::Result<Option<Metadata>> {
+    if !sets::known(conn, set)? {
+        return Ok(None);
+    }
+    let Value::Object(mut meta) = sets::describe(conn, set)? else {
         return Ok(None);
     };
     // The library's own business, as above.
-    meta.remove("id");
     meta.remove("files");
-    let meta = filled(meta);
-    let says = meta.len() > 1;
     let mut whole = Map::new();
     whole.insert("metadata_type".into(), json!("set"));
-    whole.extend(meta);
-    Ok(Some((whole, says)))
+    whole.extend(filled(meta));
+    Ok(Some(whole))
 }
 
 /// The sidecar of a collection, if anything is known of it but its name:
@@ -275,24 +275,17 @@ pub fn wanted_sets(meta: &Metadata, problems: &mut Vec<String>) -> Vec<(String, 
     wanted
 }
 
-/// The set a set's sidecar is of: the one in the library that has its set
-/// ID, or a new one. A sidecar that gives no set ID is of the set
-/// `otherwise`. Returns it, and whether it is new.
-pub fn set_of(
-    conn: &Connection,
-    meta: &Metadata,
-    otherwise: &str,
-    problems: &mut Vec<String>,
-) -> rusqlite::Result<(i64, bool)> {
-    let id = set_id(meta, problems);
-    sets::find_or_make(conn, id.as_deref().unwrap_or(otherwise))
+/// The set a set's sidecar is of: the one whose ID it gives, or else the
+/// set `otherwise`.
+pub fn set_of(meta: &Metadata, otherwise: &str, problems: &mut Vec<String>) -> String {
+    set_id(meta, problems).unwrap_or_else(|| otherwise.to_string())
 }
 
 /// Gives a set what its sidecar says of it, as `apply` does a file: its
 /// title and description where it has none, and the lists added to.
 pub fn apply_set(
     conn: &Connection,
-    set: i64,
+    set: &str,
     meta: &Metadata,
     problems: &mut Vec<String>,
 ) -> rusqlite::Result<()> {
@@ -300,12 +293,7 @@ pub fn apply_set(
         match meta.get(field) {
             None | Some(Value::Null) => {}
             Some(Value::String(text)) if text.trim().is_empty() => {}
-            Some(Value::String(text)) => {
-                conn.execute(
-                    &format!("UPDATE file_set SET {field} = ?2 WHERE id = ?1 AND {field} IS NULL"),
-                    params![set, text.trim()],
-                )?;
-            }
+            Some(Value::String(text)) => sets::fill(conn, set, field, text.trim())?,
             Some(_) => problems.push(format!("`{field}` must be text")),
         }
     }

@@ -22,8 +22,8 @@ type MetadataType = "file" | "set" | "collection";
 interface SetMetadata {
   metadata_type: "set";
 
-  // Which set: what its files give as their `set_id`.  No two sets
-  // share one.  Unlike the title, which is for people and need not be
+  // Which set: what its files give as their `set_id`.  A set is that
+  // ID, and this sidecar only what is known of it besides.  Unlike the title, which is for people and need not be
   // unique, it says for certain which set is meant:
   // `pinterest:pin:924574998519073090`, or a UUID.
   set_id?: string;

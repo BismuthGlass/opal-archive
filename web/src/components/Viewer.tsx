@@ -47,11 +47,13 @@ export default function Viewer(props: {
   // The sets the result is in, named before its title: the one on show
   // first.
   const sets = () => {
-    const here = shownSet()?.id;
-    return [...(item()?.sets ?? [])].sort((a, b) => Number(b.id === here) - Number(a.id === here));
+    const here = shownSet()?.set_id;
+    return [...(item()?.sets ?? [])].sort(
+      (a, b) => Number(b.set_id === here) - Number(a.set_id === here),
+    );
   };
   /** Leaves the viewer for the set, or the variants: the tab goes into them. */
-  const goInto = (into: { id: number } | { variants: string }) => {
+  const goInto = (into: { set_id: string } | { variants: string }) => {
     props.onMove(null);
     enter(into);
   };
@@ -152,7 +154,7 @@ export default function Viewer(props: {
                     {index() > 0 ? ", " : ""}
                     <button
                       title={
-                        set.id === shownSet()?.id
+                        set.set_id === shownSet()?.set_id
                           ? "The set on show: back to it"
                           : "Go into this set"
                       }

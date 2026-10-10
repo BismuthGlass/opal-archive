@@ -78,6 +78,12 @@ struct EditInput {
     /// Collections to detach.
     #[serde(default)]
     remove_collection: Vec<String>,
+    /// Sets to put the entities in, by set ID, after what each holds.
+    #[serde(default)]
+    add_set: Vec<String>,
+    /// Sets to take them out of.
+    #[serde(default)]
+    remove_set: Vec<String>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -163,16 +169,15 @@ pub fn file_details(conn: &Connection, id: i64) -> rusqlite::Result<Option<Value
 /// The sets a file is in, and where in each.
 pub fn sets_of_file(conn: &Connection, id: i64) -> rusqlite::Result<Vec<Value>> {
     let mut stmt = conn.prepare(
-        "SELECT s.id, s.set_id, s.title, f.set_index
-         FROM set_file f JOIN file_set s ON s.id = f.set_key
-         WHERE f.file_id = ?1 ORDER BY s.title IS NULL, s.title, s.set_id",
+        "SELECT f.set_id, i.title, f.set_index
+         FROM set_file f LEFT JOIN set_info i USING (set_id)
+         WHERE f.file_id = ?1 ORDER BY f.set_id",
     )?;
     stmt.query_map([id], |row| {
         Ok(json!({
-            "id": row.get::<_, i64>(0)?,
-            "set_id": row.get::<_, String>(1)?,
-            "title": row.get::<_, Option<String>>(2)?,
-            "index": row.get::<_, Option<i64>>(3)?,
+            "set_id": row.get::<_, String>(0)?,
+            "title": row.get::<_, Option<String>>(1)?,
+            "index": row.get::<_, Option<i64>>(2)?,
         }))
     })?
     .collect()
@@ -295,16 +300,15 @@ fn counted_tags(conn: &Connection, ids: &str) -> rusqlite::Result<BTreeMap<Strin
 /// The sets any of the entities are in, and how many are in each.
 fn sets_of(conn: &Connection, ids: &str) -> rusqlite::Result<Vec<Value>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT s.id, s.set_id, s.title, count(*)
-         FROM set_file f JOIN file_set s ON s.id = f.set_key
-         WHERE f.file_id {IN_IDS} GROUP BY s.id ORDER BY s.title IS NULL, s.title, s.set_id"
+        "SELECT f.set_id, i.title, count(*)
+         FROM set_file f LEFT JOIN set_info i USING (set_id)
+         WHERE f.file_id {IN_IDS} GROUP BY f.set_id ORDER BY f.set_id"
     ))?;
     stmt.query_map([ids], |row| {
         Ok(json!({
-            "id": row.get::<_, i64>(0)?,
-            "set_id": row.get::<_, String>(1)?,
-            "title": row.get::<_, Option<String>>(2)?,
-            "count": row.get::<_, i64>(3)?,
+            "set_id": row.get::<_, String>(0)?,
+            "title": row.get::<_, Option<String>>(1)?,
+            "count": row.get::<_, i64>(2)?,
         }))
     })?
     .collect()
@@ -530,6 +534,7 @@ async fn edit(
     let added_identifiers = plain_values(&input.add_identifier, "identifier")?;
     let added_references = plain_values(&input.add_reference, "reference")?;
     let added_collections = plain_values(&input.add_collection, "collection")?;
+    let added_sets = plain_values(&input.add_set, "set")?;
     let ids = ids_json(&input.ids);
 
     let mut conn = state.db.lock().unwrap();
@@ -575,6 +580,15 @@ async fn edit(
     }
     for value in &input.remove_collection {
         remove_from_list(&tx, &ids, COLLECTIONS, value.trim())?;
+    }
+    for set in &added_sets {
+        sets::add_files(&tx, set, &input.ids, false)?;
+    }
+    for set in &input.remove_set {
+        tx.execute(
+            &format!("DELETE FROM set_file WHERE set_id = ?2 AND file_id {IN_IDS}"),
+            params![ids, set.trim()],
+        )?;
     }
     let count: i64 = tx.query_row(
         &format!("SELECT count(*) FROM entity WHERE id {IN_IDS}"),

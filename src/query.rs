@@ -162,8 +162,8 @@ fn lookup(name: &str) -> Option<Field> {
         "ext" => Field::Text('f', "extension"),
         "hash" => Field::Text('f', "hash"),
         "media" => Field::Choice('f', "media_type", MEDIA_TYPES),
-        "set_id" => Field::OfSets("set_id"),
-        "set_title" => Field::OfSets("title"),
+        "set_id" => Field::OfSets("s.set_id"),
+        "set_title" => Field::OfSets("i.title"),
         "alt_group_id" => Field::Text('f', "alt_group_id"),
         "score" => Field::Number('e', "score", Unit::Plain),
         "width" => Field::Number('f', "width", Unit::Plain),
@@ -609,7 +609,7 @@ impl Parser<'_> {
                 format!(
                     "(EXISTS (SELECT 1 FROM {table} l
                       WHERE l.entity_id = {} AND {own})
-                      OR EXISTS (SELECT 1 FROM set_{table} l JOIN set_file sf USING (set_key)
+                      OR EXISTS (SELECT 1 FROM set_{table} l JOIN set_file sf USING (set_id)
                       WHERE sf.file_id = {} AND {of_set}))",
                     self.column('e', "id"),
                     self.column('e', "id")
@@ -617,10 +617,10 @@ impl Parser<'_> {
             }
             Field::OfSets(column) => {
                 allow(STRING)?;
-                let matches = self.string_match(&format!("s.{column}"), op, &values);
+                let matches = self.string_match(column, op, &values);
                 format!(
-                    "(EXISTS (SELECT 1 FROM set_file sf JOIN file_set s ON s.id = sf.set_key
-                      WHERE sf.file_id = {} AND {matches}))",
+                    "(EXISTS (SELECT 1 FROM set_file s LEFT JOIN set_info i USING (set_id)
+                      WHERE s.file_id = {} AND {matches}))",
                     self.column('e', "id")
                 )
             }
@@ -952,14 +952,14 @@ impl Parser<'_> {
             Some(Field::List(table, _)) => {
                 format!(
                     "(EXISTS (SELECT 1 FROM {table} l WHERE l.entity_id = {entity})
-                      OR EXISTS (SELECT 1 FROM set_{table} l JOIN set_file sf USING (set_key)
+                      OR EXISTS (SELECT 1 FROM set_{table} l JOIN set_file sf USING (set_id)
                       WHERE sf.file_id = {entity}))"
                 )
             }
             Some(Field::OfSets(column)) => {
                 format!(
-                    "EXISTS (SELECT 1 FROM set_file sf JOIN file_set s ON s.id = sf.set_key
-                     WHERE sf.file_id = {entity} AND s.{column} IS NOT NULL)"
+                    "EXISTS (SELECT 1 FROM set_file s LEFT JOIN set_info i USING (set_id)
+                     WHERE s.file_id = {entity} AND {column} IS NOT NULL)"
                 )
             }
             Some(Field::Rating) => set(self.column('e', "content_rating")),
@@ -1133,11 +1133,12 @@ mod tests {
                     (2, printf('%064d', 2), 'mp4', 'video', 5000000, 'dog.mp4', 1920, 1080, NULL, 90),
                     (3, printf('%064d', 3), 'png', 'image', 2000, 'old.png', 10, 10, NULL, NULL),
                     (5, printf('%064d', 5), 'epub', 'book', 3000, 'book.epub', NULL, NULL, 120, NULL);
-             INSERT INTO file_set (id, set_id, title) VALUES (4, 'pinterest:pin:77', 'Pets');
-             INSERT INTO file_set (id, set_id) VALUES (6, 'book:1');
-             INSERT INTO set_file (set_key, file_id, set_index) VALUES (4, 1, 2), (4, 2, 1), (6, 2, 0);
+             INSERT INTO set_info (set_id, title) VALUES ('pinterest:pin:77', 'Pets');
+             INSERT INTO set_file (set_id, file_id, set_index)
+             VALUES ('pinterest:pin:77', 1, 2), ('pinterest:pin:77', 2, 1), ('book:1', 2, 0);
              UPDATE file SET alt_group_id = 'alt:1' WHERE entity_id IN (2, 5);
-             INSERT INTO set_source_url (set_key, url) VALUES (4, 'https://pins.test/pin/77');
+             INSERT INTO set_source_url (set_id, url)
+             VALUES ('pinterest:pin:77', 'https://pins.test/pin/77');
              INSERT INTO tag (id, field, value)
              VALUES (1, 'tags', 'cat'), (2, 'tags', 'animal:feline'), (3, 'tags', 'dog'),
                     (4, 'creator', 'Abba'), (5, 'creator', 'Beta');
@@ -1146,7 +1147,8 @@ mod tests {
              INSERT INTO identifier (entity_id, value) VALUES (5, 'isbn-1');
              INSERT INTO reference (entity_id, value) VALUES (5, 'ref-1');
              INSERT INTO collection (entity_id, value) VALUES (5, '4chan:g:1');
-             INSERT INTO set_collection (set_key, value) VALUES (4, 'pinterest:someone:board');
+             INSERT INTO set_collection (set_id, value)
+             VALUES ('pinterest:pin:77', 'pinterest:someone:board');
              INSERT INTO source_url (entity_id, url) VALUES (5, 'https://example.com/a');",
         )
         .unwrap();

@@ -126,7 +126,7 @@ is on, for a query of several lines).
 | `GET /search/ids?q=`             | IDs of every result, in order. Takes `seed`, `tab`, `set`, `variants` and `collection` too. With `collapse=1` a set is listed once, as the first of its files found; a search within a set or a variant group is not affected |
 | `GET /entities/{id}`             | Everything about one file, the sets it is in (`sets`: each one's `id`, `set_id`, `title`, and the file's `index` in it) included |
 | `POST /entities/metadata`        | `{ids}` → what those files have in common, and the sets any of them are in |
-| `POST /entities/edit`            | `{ids, set, add, remove, add_source_url, remove_source_url, add_identifier, remove_identifier, add_reference, remove_reference, add_collection, remove_collection}` → the same edit applied to all. `set` takes `alt_group_id` too, which files that are variants of each other share; the `_source_url`, `_identifier` and `_reference` lists change those plain lists |
+| `POST /entities/edit`            | `{ids, set, add, remove, add_source_url, remove_source_url, add_identifier, remove_identifier, add_reference, remove_reference, add_collection, remove_collection, add_set, remove_set}` → the same edit applied to all. `set` takes `alt_group_id` too, which files that are variants of each other share; the `_source_url`, `_identifier` and `_reference` lists change those plain lists |
 | `POST /entities/trash`           | `{ids}` → move to the trash: hidden from searches, nothing removed |
 | `POST /entities/restore`         | `{ids}` → take back out of the trash                           |
 | `POST /entities/delete`          | `{ids}` → delete for good those that are in the trash; files leave storage |
@@ -138,18 +138,17 @@ is on, for a query of several lines).
 | `POST /tags/rename`              | `{field, from, to}` → rename a tag, merging it into `to` if that exists |
 | `POST /tags/alias`               | `{field, alias, target}` → make `alias` stand for `target`; an empty `target` removes the alias |
 | `POST /tags/aliases/apply`       | Replace aliases still on entities with the tags they stand for |
-| `GET /sets?q=`                   | The sets whose title or set ID contains `q`, with how many files each holds, for picking one |
-| `POST /sets`                     | `{files, title, set_id}` → a new set of those files, in that order, besides any sets they are in. Without a `set_id` it is given one; one another set has is refused |
-| `GET /sets/{id}`                 | Everything about one set: `set_id`, `title`, `description`, how many files it holds, and its `source_url`, `identifier`, `reference` and `collection` lists |
-| `PATCH /sets/{id}`               | `{set, add_source_url, remove_source_url, …}` as an edit of entities is written → change it, all or nothing. `set` takes `set_id`, `title` and `description`. A set has no tags |
-| `DELETE /sets/{id}`              | Take the set apart: its files stay in the library               |
-| `POST /sets/{id}/files`          | `{add, remove}` → put files in it, or take them out. A set left with none stays until empty sets are next cleared away, so that a file can be put back |
-| `PUT /sets/{id}/order`           | `{ids}` → set the order of its files; those left out follow    |
+| `POST /sets`                     | `{files, title, set_id}` → put those files in the set of that ID, in that order, after what it holds: the set there is, or a new one. Without a `set_id` one is made up. The title is given to the set if it has none. 201 if the set is new, 200 if it was joined |
+| `GET /sets?set_id=`              | What is known of the set its files give by that ID: `title`, `description`, how many `files` it holds, and its `source_url`, `identifier`, `reference` and `collection` lists. An ID nothing is known of answers with the ID and nothing else |
+| `PATCH /sets?set_id=`            | `{set, add_source_url, remove_source_url, …}` as an edit of entities is written → change what is known of it, all or nothing. `set` takes `title`, `description` and `set_id`, which gives the set another ID. The first change is what keeps anything of it. A set has no tags |
+| `DELETE /sets?set_id=`           | Take the set apart: its files stay in the library               |
+| `POST /sets/files?set_id=`       | `{add, remove}` → put files in it, or take them out             |
+| `PUT /sets/order?set_id=`        | `{ids}` → set the order of its files; those left out follow    |
 | `GET /collections?name=`         | What is known of the collection files and sets give by that name: `title`, `description`, how many `files` are part of it, and its `source_url`, `identifier` and `reference` lists. A name nothing is known of answers with the name and nothing else |
 | `PATCH /collections?name=`       | `{set, add_source_url, remove_source_url, …}` as for a set → change what is known of it, all or nothing. `set` takes `title` and `description`. The first change is what keeps anything of it; with nothing left known it is forgotten |
 | `POST /variants`                 | `{ids}` → make those files variants of each other: they get the `alt_group_id` one of them has, or a new one |
 | `POST /export`                   | Form field `ids=1,2,3` → zip of those files. With `sidecars=1` it is an export: each file has a sidecar with its metadata beside it (`<name>.json`), and each set that says something of itself one of its own, in the format of `schema.md`. `names=` says what the files are called in the zip, as for one file |
-| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, set, downloader, ids}` → new tab, `kind` being `gallery`, `upload`, `set`, `download`, `selection` (which holds the entities in `ids`, and nothing else) or `inbox` (of which there is one: asked for again, it is the one there is, and closed it keeps what it lists) |
+| `GET /tabs`, `POST /tabs`        | List tabs; `{kind, query, set, downloader, ids}` → new tab (`set` being a set ID), `kind` being `gallery`, `upload`, `set`, `download`, `selection` (which holds the entities in `ids`, and nothing else) or `inbox` (of which there is one: asked for again, it is the one there is, and closed it keeps what it lists) |
 | `PATCH /tabs/{id}`, `DELETE …`   | `{query, name}`, either or both → change a tab; close a tab     |
 | `PUT /tabs/order`                | `{ids}` → put the tabs in that order                           |
 | `GET /tabs/{id}/view`, `PUT …`   | The snapshot a tab shows: `{query, ids, custom}`, or `null` if none is saved |

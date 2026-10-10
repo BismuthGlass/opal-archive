@@ -9,16 +9,16 @@ import Detail from "./Detail";
 import GroupPanel from "./GroupPanel";
 
 /** The set on show, for the side panel while nothing in it is selected. */
-export default function SetPanel(props: { set: number }) {
+export default function SetPanel(props: { set: string }) {
   /** Takes the set apart, once it has been agreed to. Its files stay. */
   const dissolve = async (set: FileSet, fail: (message: string) => void) => {
     const files = plural(set.files, "file");
     if (!confirm(`Take this set apart? Its ${files} stay in the library.`)) return;
     try {
-      await api.deleteSet(set.id);
+      await api.deleteSet(set.set_id);
       showToast("Took the set apart");
       // Out of it, if the tab had gone into it; its own tab goes with it.
-      if (inside() && shownSet()?.id === set.id) leave();
+      if (inside() && shownSet()?.set_id === set.set_id) leave();
     } catch (err) {
       fail(errorMessage(err));
     }
@@ -42,8 +42,8 @@ export default function SetPanel(props: { set: number }) {
       )}
       actions={(set, fail) => (
         <>
-          <Show when={activeTab()?.set?.id !== set.id}>
-            <button title="Open this set in a tab of its own" onClick={() => openSet(set.id)}>
+          <Show when={activeTab()?.set?.set_id !== set.set_id}>
+            <button title="Open this set in a tab of its own" onClick={() => openSet(set.set_id)}>
               Open in a tab
             </button>
           </Show>

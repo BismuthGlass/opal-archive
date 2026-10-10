@@ -20,7 +20,9 @@ import { open as openTab, openSelection, shownSet } from "../tabs";
 import { editTag } from "../tagEditing";
 import { fieldLabel, tagQuery } from "../format";
 import { showToast } from "../toast";
+import type { GroupKind } from "./GroupDialog";
 import Icon from "./Icon";
+import type { IconName } from "./Icon";
 
 /** A tag that was right-clicked, or with `under` the namespace of that name. */
 export type MenuTag = { field: string; value: string; under?: boolean };
@@ -79,8 +81,8 @@ async function removeForGood(ids: number[]): Promise<boolean> {
 export default function ContextMenu(props: {
   /** Opens the viewer on a result; with `only`, on those results alone. */
   onPreview: (index: number, only: number[] | null) => void;
-  /** Asks for the given files to be put into a set. */
-  onGroup: (ids: number[]) => void;
+  /** Asks for the given files to be put in a set, or a collection. */
+  onGroup: (kind: GroupKind, ids: number[]) => void;
 }) {
   // Keyed, so the menu is given the value itself and can use it as it closes.
   return (
@@ -239,12 +241,54 @@ function Shell(props: { at: Opened; label: string; children: JSX.Element }) {
   );
 }
 
+/**
+ * An item of the menu that opens a menu of its own beside it, while the
+ * pointer is on either, or when it is pressed.
+ */
+function Submenu(props: { icon: IconName; label: string; children: JSX.Element }) {
+  let item!: HTMLLIElement;
+  const [open, setOpen] = createSignal(false);
+  /** Whether it opens to the left, for want of room on the right. */
+  const [left, setLeft] = createSignal(false);
+  const show = () => {
+    setLeft(item.getBoundingClientRect().right + 190 > window.innerWidth);
+    setOpen(true);
+  };
+  return (
+    <li
+      class="has-submenu"
+      role="none"
+      ref={item}
+      onMouseEnter={show}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        role="menuitem"
+        aria-haspopup="menu"
+        aria-expanded={open()}
+        onClick={() => (open() ? setOpen(false) : show())}
+      >
+        <Icon name={props.icon} />
+        {props.label}
+        <span class="submenu-arrow">
+          <Icon name="chevron-right" />
+        </span>
+      </button>
+      <Show when={open()}>
+        <ul class="context-submenu" classList={{ left: left() }} role="menu" aria-label={props.label}>
+          {props.children}
+        </ul>
+      </Show>
+    </li>
+  );
+}
+
 /** What a right click on the grid brings up. */
 function Menu(props: {
   at: Opened;
   item: Item;
   onPreview: (index: number, only: number[] | null) => void;
-  onGroup: (ids: number[]) => void;
+  onGroup: (kind: GroupKind, ids: number[]) => void;
 }) {
   // Read once, here: after the menu closes, what it was opened with can no
   // longer be asked for.
@@ -315,7 +359,7 @@ function Menu(props: {
   /** The set on show, which the selection can be taken out of. */
   const set = shownSet();
   /** How many of the selection are in it. */
-  const inShown = () => state()?.sets.find((held) => held.id === set?.id)?.count ?? 0;
+  const inShown = () => state()?.sets.find((held) => held.set_id === set?.set_id)?.count ?? 0;
   /** Says what was done to the selection's sets or variants, once it is. */
   const group = async (action: () => Promise<string>) => {
     close();
@@ -397,19 +441,55 @@ function Menu(props: {
         </button>
       </li>
       <li class="menu-divider" role="separator" />
-      <li role="none">
-        <button
-          role="menuitem"
-          title="Put in a set, new or existing, besides any they are in"
-          onClick={() => {
-            close();
-            props.onGroup(ids);
-          }}
-        >
-          <Icon name="photo-library-outline" />
-          Put in a set…
-        </button>
-      </li>
+      {/* Every way of saying files belong together, under one item. */}
+      <Submenu icon="photo-library-outline" label="Group">
+        <li role="none">
+          <button
+            role="menuitem"
+            title="Put in a set, by its ID: one there is already, or a new one"
+            onClick={() => {
+              close();
+              props.onGroup("set", ids);
+            }}
+          >
+            <Icon name="photo-library-outline" />
+            Set…
+          </button>
+        </li>
+        <li role="none">
+          <button
+            role="menuitem"
+            title="Make part of a collection, by its ID: one there is already, or a new one"
+            onClick={() => {
+              close();
+              props.onGroup("collection", ids);
+            }}
+          >
+            <Icon name="folder-outline" />
+            Collection…
+          </button>
+        </li>
+        <li role="none">
+          <button
+            role="menuitem"
+            disabled={ids.length < 2}
+            title={
+              ids.length < 2
+                ? "Select the files that are variants of each other"
+                : "Mark these as variants of each other: they share a variant group"
+            }
+            onClick={() =>
+              group(async () => {
+                await api.groupVariants(ids);
+                return `Grouped ${plural(ids.length, "file")} as variants`;
+              })
+            }
+          >
+            <Icon name="content-copy-outline" />
+            Variant
+          </button>
+        </li>
+      </Submenu>
       {/* In a set: what of the selection is in it can be taken out, and
           what was taken out, and is still listed, put back. */}
       <Show when={set}>
@@ -422,7 +502,7 @@ function Menu(props: {
                   title="Take out of the set on show. The files stay in the library, and stay listed here, marked, until the view is refreshed."
                   onClick={() =>
                     group(async () => {
-                      await api.changeSetFiles(shown().id, { remove: ids });
+                      await api.changeSetFiles(shown().set_id, { remove: ids });
                       return `Took ${plural(inShown(), "file")} out of the set`;
                     })
                   }
@@ -440,7 +520,7 @@ function Menu(props: {
                   onClick={() =>
                     group(async () => {
                       const back = ids.length - inShown();
-                      await api.changeSetFiles(shown().id, { add: ids });
+                      await api.changeSetFiles(shown().set_id, { add: ids });
                       return `Put ${plural(back, "file")} back in the set`;
                     })
                   }
@@ -467,23 +547,6 @@ function Menu(props: {
           >
             <Icon name="close" />
             Ungroup variants
-          </button>
-        </li>
-      </Show>
-      <Show when={ids.length > 1}>
-        <li role="none">
-          <button
-            role="menuitem"
-            title="Mark these as variants of each other: they share a variant group"
-            onClick={() =>
-              group(async () => {
-                await api.groupVariants(ids);
-                return `Grouped ${plural(ids.length, "file")} as variants`;
-              })
-            }
-          >
-            <Icon name="label-outline" />
-            Group as variants
           </button>
         </li>
       </Show>

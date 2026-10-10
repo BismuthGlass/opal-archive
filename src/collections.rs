@@ -126,7 +126,7 @@ pub fn describe(conn: &Connection, name: &str) -> rusqlite::Result<Value> {
         "SELECT count(*) FROM entity e
          WHERE e.trashed = 0
            AND (EXISTS (SELECT 1 FROM collection l WHERE l.entity_id = e.id AND l.value = ?1)
-                OR EXISTS (SELECT 1 FROM set_collection l JOIN set_file sf USING (set_key)
+                OR EXISTS (SELECT 1 FROM set_collection l JOIN set_file sf USING (set_id)
                            WHERE sf.file_id = e.id AND l.value = ?1))",
         [name],
         |row| row.get(0),

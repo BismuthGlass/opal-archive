@@ -30,7 +30,7 @@ export default function Toolbar() {
   const allSelected = () => search.total > 0 && selected().size >= search.total;
   const filtered = () => search.query.trim() !== "";
 
-  const saveOrder = async (id: number) => {
+  const saveOrder = async (id: string) => {
     await api.setOrder(id, await resultIds());
     // The set's own order is now the one on show.
     resetOrder();
@@ -89,7 +89,7 @@ export default function Toolbar() {
                     ? "Save this order as the set's order"
                     : "Drag items to reorder them, then save the order here"
               }
-              onClick={() => saveOrder(set().id)}
+              onClick={() => saveOrder(set().set_id)}
             >
               Update order
             </button>

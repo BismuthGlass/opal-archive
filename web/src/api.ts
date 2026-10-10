@@ -11,8 +11,8 @@ export type Tab = {
   set: SetName | null;
 };
 
-/** Which set, and what it is called: its title, or failing that its set ID. */
-export type SetName = { id: number; set_id: string; title: string | null };
+/** Which set, by its ID, and what it is called: its title, or failing that the ID. */
+export type SetName = { set_id: string; title: string | null };
 
 /**
  * Files that belong together, in an order. A file can be in several, and a
@@ -201,6 +201,9 @@ export type Changes = {
   /** Collections: what something is part of where it came from. */
   add_collection?: string[];
   remove_collection?: string[];
+  /** Sets to put the files in, or take them out of, by set ID. */
+  add_set?: string[];
+  remove_set?: string[];
 };
 
 export const TAG_FIELDS = [
@@ -262,7 +265,7 @@ export const listTabs = () => request<Tab[]>("GET", "/tabs");
 export const createTab = (
   kind: TabKind,
   query: string,
-  set?: number,
+  set?: string,
   /** For a selection tab, the entities it is to hold. */
   ids?: number[],
 ) => request<Tab>("POST", "/tabs", { kind, query, set, ids });
@@ -328,7 +331,7 @@ export const deleteTab = (id: number) => request<void>("DELETE", `/tabs/${id}`);
  * What a search is kept to within a tab: a set's files, a group's
  * variants, or what is part of a collection.
  */
-export type Within = { set: number } | { variants: string } | { collection: string };
+export type Within = { set: string } | { variants: string } | { collection: string };
 
 /**
  * `tab` narrows a search to what an upload or set tab holds, and `within`
@@ -433,15 +436,18 @@ export const applyAliases = () =>
  * What can be changed of a set, written as an edit of entities is: its
  * `set_id`, `title` and `description`, and its plain lists. It has no tags.
  */
-export type SetChanges = Omit<Changes, "add" | "remove">;
+export type SetChanges = Omit<Changes, "add" | "remove" | "add_set" | "remove_set">;
 
 /**
- * Makes a set of the files, in the order given. It is given a set ID if
- * `set_id` is empty.
+ * Puts the files in the set of an ID, in the order given, after what it
+ * holds: the set that has the ID, or a new one of it. With no ID, a set is
+ * made with one made up for it. The title is given to the set if it has
+ * none.
  */
-export const createSet = (files: number[], title: string, set_id = "") =>
-  request<{ id: number; set_id: string }>("POST", "/sets", { files, title, set_id });
-export const getSet = (id: number) => request<FileSet>("GET", `/sets/${id}`);
+export const joinSet = (files: number[], title: string, set_id = "") =>
+  request<{ set_id: string }>("POST", "/sets", { files, title, set_id });
+/** What is known of a set, by its ID: it may be the ID alone. */
+export const getSet = (set_id: string) => request<FileSet>("GET", `/sets?${params({ set_id })}`);
 /**
  * What is known of a collection, by the name files and sets give it. It
  * may be the name alone: nothing is kept of a collection until something
@@ -464,19 +470,18 @@ export const getCollection = (name: string) =>
 export const changeCollection = (name: string, changes: SetChanges) =>
   request<Collection>("PATCH", `/collections?${params({ name })}`, changes);
 
-/** The sets whose title or set ID contains the text, for picking one. */
-export const listSets = (q: string) =>
-  request<(SetName & { files: number })[]>("GET", `/sets?${params({ q })}`);
-export const changeSet = (id: number, changes: SetChanges) =>
-  request<FileSet>("PATCH", `/sets/${id}`, changes);
-/** Takes a set apart: its files stay, in no set. */
-export const deleteSet = (id: number) => request<void>("DELETE", `/sets/${id}`);
+/** Changes what is known of a set; `set.set_id` gives it another ID. */
+export const changeSet = (set_id: string, changes: SetChanges) =>
+  request<FileSet>("PATCH", `/sets?${params({ set_id })}`, changes);
+/** Takes a set apart: its files stay, no longer in it. */
+export const deleteSet = (set_id: string) =>
+  request<void>("DELETE", `/sets?${params({ set_id })}`);
 /** Puts files in a set, or takes them out of it. */
-export const changeSetFiles = (id: number, changes: { add?: number[]; remove?: number[] }) =>
-  request<{ files: number }>("POST", `/sets/${id}/files`, changes);
+export const changeSetFiles = (set_id: string, changes: { add?: number[]; remove?: number[] }) =>
+  request<{ files: number }>("POST", `/sets/files?${params({ set_id })}`, changes);
 /** Sets the order of a set's files. */
-export const setOrder = (id: number, ids: number[]) =>
-  request<void>("PUT", `/sets/${id}/order`, { ids });
+export const setOrder = (set_id: string, ids: number[]) =>
+  request<void>("PUT", `/sets/order?${params({ set_id })}`, { ids });
 /** Makes files variants of each other: they share the group answered. */
 export const groupVariants = (ids: number[]) =>
   request<{ alt_group_id: string }>("POST", "/variants", { ids });

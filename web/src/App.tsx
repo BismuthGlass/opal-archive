@@ -1,5 +1,6 @@
 import { createEffect, createSignal, on, onCleanup, onMount, Show } from "solid-js";
-import SetDialog from "./components/SetDialog";
+import GroupDialog from "./components/GroupDialog";
+import type { GroupKind } from "./components/GroupDialog";
 import SetPanel from "./components/SetPanel";
 import CollectionPanel from "./components/CollectionPanel";
 import ContextMenu, { contextMenuOpen } from "./components/ContextMenu";
@@ -70,8 +71,8 @@ export default function App() {
     setViewingOnly(index === null ? null : only);
     setViewing(index);
   };
-  /** The files being put into a set, while that dialog is open. */
-  const [grouping, setGrouping] = createSignal<number[] | null>(null);
+  /** The files being put in a set or a collection, while that dialog is open. */
+  const [grouping, setGrouping] = createSignal<{ kind: GroupKind; ids: number[] } | null>(null);
   /** The set on show, described when nothing is selected. */
   const shownSet = () => (selected().size === 0 ? setShown() : undefined);
   /** The collection on show, likewise. */
@@ -415,11 +416,11 @@ export default function App() {
                       </Show>
                     }
                   >
-                    {(set) => <SetPanel set={set().id} />}
+                    {(set) => <SetPanel set={set().set_id} />}
                   </Show>
                 }
               >
-                <Sidebar onGroup={setGrouping} />
+                <Sidebar />
               </Show>
             </Module>
           </aside>
@@ -469,7 +470,7 @@ export default function App() {
           <TagsModal ids={target.ids} target={target.name} onClose={() => setTagging(null)} />
         )}
       </Show>
-      <ContextMenu onPreview={view} onGroup={setGrouping} />
+      <ContextMenu onPreview={view} onGroup={(kind, ids) => setGrouping({ kind, ids })} />
       <Tooltip />
       <Show when={toast()}>
         <div class="toast" role="status">
@@ -490,7 +491,9 @@ export default function App() {
           there is nothing left to read. The same goes for the other
           dialogs opened with a value. */}
       <Show when={grouping()} keyed>
-        {(ids) => <SetDialog ids={ids} onClose={() => setGrouping(null)} />}
+        {(group) => (
+          <GroupDialog kind={group.kind} ids={group.ids} onClose={() => setGrouping(null)} />
+        )}
       </Show>
     </>
   );

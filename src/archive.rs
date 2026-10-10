@@ -35,7 +35,6 @@ use axum::{
     extract::{Query, State},
     routing::post,
 };
-use rusqlite::params;
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -117,17 +116,26 @@ struct Sidecars {
 /// Where the files taken in are to go, once they all are.
 #[derive(Default)]
 struct Placing {
-    /// The set of each folder that has been met.
-    folders: HashMap<String, i64>,
-    /// Files to put in the set with a set ID, at an index if they say one.
-    wanted: Vec<(String, Option<i64>, i64)>,
-    /// Files to put in a set the library has.
-    placed: Vec<(i64, Option<i64>, i64)>,
+    /// The set of each folder that has been met, by its set ID.
+    folders: HashMap<String, String>,
+    /// Files to put in a set, at an index if they say one.
+    placed: Vec<(String, Option<i64>, i64)>,
     /// The sets of folders that did not say which set they are: they take
     /// only files that are in no set.
-    unnamed: HashSet<i64>,
-    /// The sets made for this archive.
-    made: Vec<i64>,
+    unnamed: HashSet<String>,
+    /// The sets there were none of before this archive.
+    made: HashSet<String>,
+}
+
+impl Placing {
+    /// Notes a set the archive speaks of, before anything is said of it
+    /// or put in it: one the library did not have is the archive's making.
+    fn meet(&mut self, conn: &rusqlite::Connection, set: &str) -> rusqlite::Result<()> {
+        if !sets::exists(conn, set)? {
+            self.made.insert(set.to_string());
+        }
+        Ok(())
+    }
 }
 
 /// One file in the archive: which, and the folders it is in, then its name.
@@ -338,50 +346,49 @@ pub fn reason(err: ApiError) -> String {
     }
 }
 
-/// The set for a folder of the archive, made if this is the first file to
-/// need it. A folder with a sidecar is the set that says it is: the one
-/// the library has by its set ID, if it has one.
+/// The set for a folder of the archive, by its set ID. A folder with a
+/// sidecar is the set that says it is; one without is a set of its own,
+/// with an ID made up for it and the folder's name for a title.
 fn folder(
     state: &AppState,
     placing: &mut Placing,
     sidecars: &mut Sidecars,
     unpacked: &mut Unpacked,
     folders: &[String],
-) -> Result<i64, ApiError> {
+) -> Result<String, ApiError> {
     let key = folders.join("/");
     if let Some(set) = placing.folders.get(&key) {
-        return Ok(*set);
+        return Ok(set.clone());
     }
     let conn = state.db.lock().unwrap();
     let meta = sidecars.folders.remove(&key);
     let mut problems = Vec::new();
     let fresh = sets::new_id(&conn)?;
-    let (set, new) = match &meta {
-        Some(meta) => sidecar::set_of(&conn, meta, &fresh, &mut problems)?,
-        None => sets::find_or_make(&conn, &fresh)?,
+    let set = match &meta {
+        Some(meta) => sidecar::set_of(meta, &fresh, &mut problems),
+        None => fresh.clone(),
     };
+    placing.meet(&conn, &set)?;
     if let Some(meta) = &meta {
-        sidecar::apply_set(&conn, set, meta, &mut problems)?;
+        sidecar::apply_set(&conn, &set, meta, &mut problems)?;
     }
-    if !meta.as_ref().is_some_and(|meta| meta.contains_key("set_id")) {
-        placing.unnamed.insert(set);
+    if set == fresh {
+        placing.unnamed.insert(set.clone());
     }
-    if new {
+    if placing.made.contains(&set)
+        && let Some(name) = folders.last()
+    {
         // Named for the folder, unless its sidecar had a title.
-        conn.execute(
-            "UPDATE file_set SET title = ?2 WHERE id = ?1 AND title IS NULL",
-            params![set, folders.last()],
-        )?;
-        placing.made.push(set);
+        sets::fill(&conn, &set, "title", name)?;
     }
     unpacked.report(&format!("{key}/{FOLDER_SIDECAR}"), problems);
-    placing.folders.insert(key, set);
+    placing.folders.insert(key, set.clone());
     Ok(set)
 }
 
-/// What is left to do once the files are in: the sets that have sidecars
-/// of their own are found or made, and every file is put in its set, in
-/// the order the sidecars give.
+/// What is left to do once the files are in: what the sidecars of sets
+/// and collections say of them is kept, and every file is put in its
+/// sets, in the order the sidecars give.
 fn gather(
     state: &AppState,
     sidecars: Sidecars,
@@ -396,11 +403,9 @@ fn gather(
         // it is.
         let name = path.rsplit('/').next().unwrap_or(&path);
         let name = name.strip_suffix(".json").unwrap_or(name);
-        let (set, new) = sidecar::set_of(&tx, &meta, name, &mut problems)?;
-        sidecar::apply_set(&tx, set, &meta, &mut problems)?;
-        if new {
-            placing.made.push(set);
-        }
+        let set = sidecar::set_of(&meta, name, &mut problems);
+        placing.meet(&tx, &set)?;
+        sidecar::apply_set(&tx, &set, &meta, &mut problems)?;
         unpacked.report(&path, problems);
     }
     // What is known of a collection is kept whether or not anything here is
@@ -418,20 +423,16 @@ fn gather(
             vec!["its folder holds no file that was taken in".to_string()],
         );
     }
-    // A set with no sidecar here is the one that has the ID, in the
-    // library or from now on.
-    for (set_id, index, file) in placing.wanted {
-        let (set, new) = sets::find_or_make(&tx, &set_id)?;
-        if new {
-            placing.made.push(set);
+    for (set, ..) in &placing.placed {
+        if !placing.made.contains(set) && !sets::exists(&tx, set)? {
+            placing.made.insert(set.clone());
         }
-        placing.placed.push((set, index, file));
     }
     // Each set's files in the order they say they come in; those that do
     // not say follow, as the archive has them.
     placing
         .placed
-        .sort_by_key(|(set, index, _)| (*set, index.is_none(), *index));
+        .sort_by_key(|(set, index, _)| (set.clone(), index.is_none(), *index));
     // The named sets first: what they take is then in a set, and not for a
     // folder that names none.
     let (unnamed, named): (Vec<_>, Vec<_>) = placing
@@ -439,16 +440,16 @@ fn gather(
         .into_iter()
         .partition(|(set, ..)| placing.unnamed.contains(set));
     for (set, _, file) in named {
-        sets::add_files(&tx, set, &[file], false)?;
+        sets::add_files(&tx, &set, &[file], false)?;
     }
     for (set, _, file) in unnamed {
-        sets::add_files(&tx, set, &[file], true)?;
+        sets::add_files(&tx, &set, &[file], true)?;
     }
-    // One that nothing could be put in is not kept.
+    // What was said of a set that nothing could be put in is not kept.
     sets::prune(&tx)?;
     for set in placing.made {
         let kept: bool = tx.query_row(
-            "SELECT EXISTS (SELECT 1 FROM file_set WHERE id = ?1)",
+            "SELECT EXISTS (SELECT 1 FROM set_file WHERE set_id = ?1)",
             [set],
             |row| row.get(0),
         )?;
@@ -565,7 +566,7 @@ async fn upload(
             placing.placed.push((set, None, file.id));
         }
         for (set_id, index) in named {
-            placing.wanted.push((set_id, index, file.id));
+            placing.placed.push((set_id, index, file.id));
         }
     }
     gather(&state, sidecars, placing, &mut unpacked)?;

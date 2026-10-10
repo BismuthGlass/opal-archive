@@ -10,7 +10,7 @@ const isWebAddress = (url: string) => /^https?:\/\//i.test(url);
 
 /**
  * The lists a file has that are not tags: plain values with no
- * suggestions, namespaces or aliases. Each is shown one value to a line,
+ * suggestions, namespaces or aliases. The sets it is in are among them. Each is shown one value to a line,
  * as text rather than as the chips tags are, so that they are not taken
  * for tags; source URLs are links.
  */
@@ -32,6 +32,19 @@ export const PLAIN_LISTS = [
     values: (data: Metadata) => data.reference,
     add: (value: string): Changes => ({ add_reference: [value] }),
     remove: (value: string): Changes => ({ remove_reference: [value] }),
+  },
+  {
+    // The sets a file is in: IDs it gives, as it gives its collections.
+    field: "set",
+    label: "Sets",
+    placeholder: "Add by set ID…",
+    links: false,
+    values: (data: Metadata) =>
+      data.sets.map((set) => ({ value: set.set_id, count: set.count })),
+    add: (value: string): Changes => ({ add_set: [value] }),
+    remove: (value: string): Changes => ({ remove_set: [value] }),
+    // A set is opened by its ID: the tab shows its files.
+    open: (value: string) => void enter({ set_id: value }),
   },
   {
     field: "collection",

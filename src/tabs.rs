@@ -7,7 +7,7 @@ use axum::{
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
 
-use crate::{AppState, downloads, error::ApiError};
+use crate::{AppState, downloads, error::ApiError, sets};
 
 #[derive(Serialize)]
 struct Tab {
@@ -29,8 +29,7 @@ struct Tab {
 
 #[derive(Serialize)]
 struct TabSet {
-    id: i64,
-    /// What it is called by when it has no title.
+    /// Which set, and what it is called by when it has no title.
     set_id: String,
     title: Option<String>,
 }
@@ -41,8 +40,8 @@ struct NewTab {
     kind: String,
     #[serde(default)]
     query: String,
-    /// For a set tab, the set.
-    set: Option<i64>,
+    /// For a set tab, the set, by its ID.
+    set: Option<String>,
     /// For a selection tab, the entities it is to hold.
     #[serde(default)]
     ids: Vec<i64>,
@@ -85,29 +84,28 @@ pub fn router() -> Router<AppState> {
 }
 
 const SELECT_TAB: &str = "
-    SELECT t.id, t.position, t.kind, t.query, t.name, t.set_key, s.set_id, s.title,
+    SELECT t.id, t.position, t.kind, t.query, t.name, t.set_id, s.title,
            t.downloader, t.picked
     FROM tab t
-    LEFT JOIN file_set s ON s.id = t.set_key";
+    LEFT JOIN set_info s ON s.set_id = t.set_id";
 
 fn tab_from_row(row: &Row) -> rusqlite::Result<Tab> {
-    let set = match row.get::<_, Option<i64>>(5)? {
-        Some(id) => Some(TabSet {
-            id,
-            set_id: row.get(6)?,
-            title: row.get(7)?,
+    let set = match row.get::<_, Option<String>>(5)? {
+        Some(set_id) => Some(TabSet {
+            set_id,
+            title: row.get(6)?,
         }),
         None => None,
     };
     // The inbox is kept as a tab of the kind `download`, the only one.
-    let downloader: Option<String> = row.get(8)?;
+    let downloader: Option<String> = row.get(7)?;
     let inbox = downloader.as_deref() == Some(downloads::inbox::ANY);
     Ok(Tab {
         id: row.get(0)?,
         position: row.get(1)?,
         kind: if inbox {
             "inbox".to_string()
-        } else if row.get(9)? {
+        } else if row.get(8)? {
             // Kept as an upload tab that was given what it holds.
             "selection".to_string()
         } else {
@@ -190,15 +188,10 @@ async fn create(
         )?;
         return Ok((StatusCode::CREATED, Json(one(&conn, id)?)));
     }
-    if let Some(set) = input.set {
-        let exists: bool = conn.query_row(
-            "SELECT EXISTS (SELECT 1 FROM file_set WHERE id = ?1)",
-            [set],
-            |row| row.get(0),
-        )?;
-        if !exists {
-            return Err(ApiError::bad_request("no such set"));
-        }
+    if let Some(set) = &input.set
+        && !sets::exists(&conn, set)?
+    {
+        return Err(ApiError::bad_request("no such set"));
     }
     // A downloader has no tab of its own: an upload tab takes its addresses.
     if !["gallery", "upload", "set"].contains(&input.kind.as_str())
@@ -210,7 +203,7 @@ async fn create(
         )));
     }
     conn.execute(
-        "INSERT INTO tab (position, kind, query, set_key)
+        "INSERT INTO tab (position, kind, query, set_id)
          VALUES ((SELECT coalesce(max(position), -1) + 1 FROM tab), ?1, ?2, ?3)",
         params![input.kind, input.query, input.set],
     )?;

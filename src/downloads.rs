@@ -1044,17 +1044,17 @@ impl Download {
         // that is in a set already, as the same picture posted twice, stays
         // in the set it is in.
         if let Some(whole) = whole.filter(|_| !ids.is_empty()) {
-            let (set, new) = sets::find_or_make(&tx, whole.id.trim())?;
-            if new {
-                tx.execute(
-                    "UPDATE file_set SET title = ?2 WHERE id = ?1",
-                    params![set, text(&whole.title)],
-                )?;
+            let set = whole.id.trim();
+            // Titled when it is made, and not again: a title the user took
+            // off stays off.
+            if !sets::exists(&tx, set)?
+                && let Some(title) = text(&whole.title)
+            {
+                sets::fill(&tx, set, "title", &title)?;
             }
-            tx.execute(
-                "UPDATE file_set SET description = ?2 WHERE id = ?1 AND description IS NULL",
-                params![set, text(&whole.description)],
-            )?;
+            if let Some(description) = text(&whole.description) {
+                sets::fill(&tx, set, "description", &description)?;
+            }
             sets::add_files(&tx, set, &ids, false)?;
             if let Some(url) = text(&whole.url) {
                 sets::add_to_list(&tx, set, sets::SOURCE_URLS, &url)?;

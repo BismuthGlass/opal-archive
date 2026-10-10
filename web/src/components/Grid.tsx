@@ -65,11 +65,11 @@ const stoodFor = (item: Item | undefined) =>
  */
 const takenOut = (item: Item | undefined) => {
   const shown = shownSet();
-  return shown !== undefined && item !== undefined && !item.sets.some((set) => set.id === shown.id);
+  return shown !== undefined && item !== undefined && !item.sets.some((set) => set.set_id === shown.set_id);
 };
 
 /** The sets a result is in, but for the one on show. */
-const otherSets = (item: Item) => item.sets.filter((set) => set.id !== shownSet()?.id);
+const otherSets = (item: Item) => item.sets.filter((set) => set.set_id !== shownSet()?.set_id);
 
 function badge(item: Item): string | null {
   if (item.length !== null && item.media_type !== "image") return duration(item.length);

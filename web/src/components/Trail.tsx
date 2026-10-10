@@ -32,7 +32,7 @@ const openInTab = (step: Step) =>
     ? open("gallery", `alt_group_id=${quoteValue(step.variants)}`)
     : "collection" in step
       ? open("gallery", `collection=${quoteValue(step.collection)}`)
-      : openSet(step.id);
+      : openSet(step.set_id);
 
 /**
  * Above the grid while the tab is inside a set or a group of variants: the

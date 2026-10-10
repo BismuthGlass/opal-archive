@@ -78,7 +78,7 @@ export const stepKey = (step: Step) =>
     ? `v${step.variants}`
     : "collection" in step
       ? `c${step.collection}`
-      : `s${step.id}`;
+      : `s${step.set_id}`;
 
 /** What a step keeps a search to. */
 export const stepWithin = (step: Step): api.Within =>
@@ -86,7 +86,7 @@ export const stepWithin = (step: Step): api.Within =>
     ? { variants: step.variants }
     : "collection" in step
       ? { collection: step.collection }
-      : { set: step.id };
+      : { set: step.set_id };
 
 // A tab can go into the set of one of its results, or its variants, or a
 // collection it is part of, and on from there, and back out: the way in
@@ -106,15 +106,16 @@ function saveTrails() {
 
 /** A step as it is now, if what it goes into is still there. */
 async function current(
-  step: { id: number } | { variants: string } | { collection: string },
+  step: { set_id: string } | { variants: string } | { collection: string },
   query: string,
 ): Promise<Step | null> {
   // A group is its ID and nothing more, and a collection its name: there
   // is nothing of either to read.
   if ("variants" in step) return { variants: String(step.variants), query };
   if ("collection" in step) return { collection: String(step.collection), query };
-  const set = await api.getSet(step.id).catch(() => null);
-  return set && { id: set.id, set_id: set.set_id, title: set.title, query };
+  // A set no file gives any more is gone.
+  const set = await api.getSet(step.set_id).catch(() => null);
+  return set && set.files > 0 ? { set_id: set.set_id, title: set.title, query } : null;
 }
 
 /**
@@ -169,7 +170,9 @@ export const shownVariants = (): string | undefined => {
 };
 
 /** Goes into a set, a group of variants or a collection, in the active tab. */
-export async function enter(into: { id: number } | { variants: string } | { collection: string }) {
+export async function enter(
+  into: { set_id: string } | { variants: string } | { collection: string },
+) {
   const tab = activeId();
   // What is on show is already gone into.
   const here =
@@ -177,7 +180,7 @@ export async function enter(into: { id: number } | { variants: string } | { coll
       ? shownVariants() === into.variants
       : "collection" in into
         ? shownCollection() === into.collection
-        : shownSet()?.id === into.id;
+        : shownSet()?.set_id === into.set_id;
   if (tab === null || here) return;
   await guard(async () => {
     const step = await current(into, "");
@@ -289,8 +292,8 @@ export const openSelection = (ids: number[]) =>
   });
 
 /** Shows a set in its own tab, going to the one it has if any. */
-export async function openSet(id: number) {
-  const existing = tabs.find((tab) => tab.set?.id === id);
+export async function openSet(id: string) {
+  const existing = tabs.find((tab) => tab.set?.set_id === id);
   if (existing) return select(existing.id);
   await guard(async () => {
     const tab = await api.createTab("set", "", id);
