@@ -25,12 +25,36 @@ const OPAL_TITLES = {
   done: "Downloaded to OpalArchive. Click to send it again.",
 };
 
-/** Asks the background part of the extension, which asks OpalArchive. */
-function opalAsk(message) {
-  return chrome.runtime.sendMessage(message).catch(() => ({
-    // The extension was reloaded or updated under this page.
-    error: "The extension was restarted: reload the page.",
-  }));
+/**
+ * Asks the background part of the extension, which asks OpalArchive.
+ *
+ * When the extension is reloaded or updated, the pages already open keep
+ * this script, cut off from it: what the extension gives a page is then
+ * not there at all, or fails when used. Either way the answer says so.
+ */
+async function opalAsk(message) {
+  try {
+    return await chrome.runtime.sendMessage(message);
+  } catch {
+    return { error: "The extension was restarted: reload the page." };
+  }
+}
+
+/** What the extension keeps for this browser; nothing of it, if the page is cut off. */
+async function opalKept(wanted) {
+  try {
+    return await chrome.storage.local.get(wanted);
+  } catch {
+    return wanted;
+  }
+}
+
+async function opalKeep(values) {
+  try {
+    await chrome.storage.local.set(values);
+  } catch {
+    // Cut off from the extension: there is nowhere to keep it.
+  }
 }
 
 // The tag types, as OpalArchive has them: each one's name, the short name
@@ -301,7 +325,7 @@ function opalAskTags(anchor, submit) {
       return;
     }
     // Offered again the next time: posts are often tagged in runs.
-    chrome.storage.local.set({ lastTags: tags }).catch(() => {});
+    opalKeep({ lastTags: tags });
     close();
   };
 
@@ -358,9 +382,7 @@ function opalAskTags(anchor, submit) {
   document.addEventListener("pointerdown", outside, true);
 
   // The tags used last can be had again with one press.
-  chrome.storage.local
-    .get({ lastTags: [] })
-    .catch(() => ({ lastTags: [] }))
+  opalKept({ lastTags: [] })
     .then(({ lastTags }) => {
       const again = (Array.isArray(lastTags) ? lastTags : []).filter(
         (tag) => opalType(tag?.field) && typeof tag.value === "string",
