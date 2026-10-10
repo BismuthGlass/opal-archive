@@ -283,7 +283,8 @@ struct NewFile<'a> {
 
 fn insert(conn: &mut Connection, new: &NewFile) -> rusqlite::Result<FileEntity> {
     let tx = conn.transaction()?;
-    tx.execute("INSERT INTO entity (kind) VALUES ('file')", [])?;
+    // What is new to the library starts in the inbox, to be looked over.
+    tx.execute("INSERT INTO entity (kind, inbox) VALUES ('file', 1)", [])?;
     let id = tx.last_insert_rowid();
     tx.execute(
         "INSERT INTO file (entity_id, hash, extension, media_type, size, original_name,

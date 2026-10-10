@@ -82,6 +82,8 @@ struct Item {
     /// it tells this file from any other that has had its ID.
     thumbnail_version: Option<String>,
     trashed: bool,
+    /// In the inbox: new to the library, and not yet archived.
+    inbox: bool,
 }
 
 pub fn router() -> Router<AppState> {
@@ -232,7 +234,8 @@ async fn search(
         "SELECT e0.id, e0.title, f0.media_type, f0.extension, f0.length,
                 f0.has_thumbnail, f0.hash, e0.trashed, f0.alt_group_id,
                 (SELECT count(*) FROM file vf JOIN entity ve ON ve.id = vf.entity_id
-                 WHERE vf.alt_group_id = f0.alt_group_id AND ve.trashed = 0)
+                 WHERE vf.alt_group_id = f0.alt_group_id AND ve.trashed = 0),
+                e0.inbox
          FROM {} WHERE {} ORDER BY {} LIMIT ? OFFSET ?",
         query::FROM,
         compiled.filter,
@@ -263,6 +266,7 @@ async fn search(
                 thumbnail_version: has_thumbnail
                     .then(|| files::thumbnail_version(&hash).to_string()),
                 trashed: row.get(7)?,
+                inbox: row.get(10)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;

@@ -129,6 +129,8 @@ is on, for a query of several lines).
 | `POST /entities/edit`            | `{ids, set, add, remove, add_source_url, remove_source_url, add_identifier, remove_identifier, add_reference, remove_reference, add_collection, remove_collection, add_set, remove_set}` → the same edit applied to all. `set` takes `alt_group_id` too, which files that are variants of each other share; the `_source_url`, `_identifier` and `_reference` lists change those plain lists |
 | `POST /entities/trash`           | `{ids}` → move to the trash: hidden from searches, nothing removed |
 | `POST /entities/restore`         | `{ids}` → take back out of the trash                           |
+| `POST /entities/archive`         | `{ids}` → take out of the inbox, where what is new to the library waits |
+| `POST /entities/unarchive`       | `{ids}` → put back in the inbox                                |
 | `POST /entities/delete`          | `{ids}` → delete for good those that are in the trash; files leave storage |
 | `GET /tags?field=&q=`            | Completions for a tag field, one namespace level at a time     |
 | `POST /tags`                     | `{field, value, description}` → create a tag nothing carries yet; it is kept until deleted |
@@ -165,7 +167,7 @@ is on, for a query of several lines).
 | `POST /tabs/{id}/download/start`, `…/cancel` | `{url}` → start downloading it into the upload tab with the downloader whose site it is of, and answer `{downloader}` with its name, or `null`, with nothing started, if there is none for it; stop the download running |
 | `GET /tabs/{id}/download/seen`, `POST …/seen/forget` | What the tab has downloaded before; `{keys}` → forget those, or all with no `keys` |
 | `GET /settings`, `PATCH /settings` | Application settings as one JSON object; PATCH sets the keys given, `null` removing one |
-| `GET /stats`, `GET /health`      | Library counts, with how many entities are trashed; liveness and schema version |
+| `GET /stats`, `GET /health`      | Library counts, with how many entities are trashed and how many are in the inbox; liveness and schema version |
 
 Uploading from a shell:
 

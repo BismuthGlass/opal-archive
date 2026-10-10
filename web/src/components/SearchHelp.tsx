@@ -112,6 +112,14 @@ const PARTS: Part[] = [
     ],
   },
   {
+    title: "Inbox",
+    note: "What is new to the library is in the inbox until it is archived.",
+    rows: [
+      ["@inbox", "what is in the inbox"],
+      ["-@inbox cat", "cats that have been archived"],
+    ],
+  },
+  {
     title: "Order",
     note: "Keys: added, date, score, title, name, size, width, height, length, pages, id, random. Newest added first if nothing is said.",
     rows: [

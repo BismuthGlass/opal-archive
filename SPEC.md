@@ -171,7 +171,18 @@ A downloader fetches files from a website straight into the library. Each downlo
 
 Deleting is two steps. The first moves a file to the trash: it keeps its file and all its metadata, but no longer shows up in searches. From the trash it can be restored, or deleted for good, which removes the file from storage. Uploading a trashed file again restores it. The key that trashes does both steps: on files that are all in the trash already it deletes them for good, once that is agreed to. In the viewer, what took the deleted file's place is shown next.
 
-Being trashed is a state, not a tag. States are searched with an `@`: `@trashed` lists the trash. It is the only state for now.
+Being trashed is a state, not a tag. States are searched with an `@`: `@trashed` lists the trash.
+
+## The inbox
+
+A file new to the library is in the inbox: it has just arrived, however it did (uploaded, downloaded, fetched, unpacked from a zip), and has yet to be looked over. Archiving it takes it out; it can be put back. Nothing else about the file changes either way, and a plain search finds it in the inbox or out of it.
+
+- Being in the inbox is a state, as being trashed is: `@inbox` lists the inbox, `-@inbox` what was archived.
+- It is the application's own, and no part of a file's metadata: it is not in the schema, an export does not write it, and a sidecar cannot set it. A file from a zip is in the inbox like any other new file.
+- A file the library already has does not go back in the inbox by arriving again.
+- The files the library held before there was an inbox started out of it.
+- A key archives the selection, or the file open in the viewer, and another puts it back; the menu of a right click offers the same, by what the selection is in. A file in the inbox shows a dot on its tile, and says so in the viewer. The status bar counts the inbox, leaving out what is in the trash, and opens it in a tab.
+- The inbox is not Opal Drop, the tab that lists what was sent to be downloaded from outside the interface.
 
 ## Authentication
 

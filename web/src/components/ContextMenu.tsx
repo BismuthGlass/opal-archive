@@ -359,6 +359,9 @@ function Menu(props: {
     action().catch((err) => showToast(errorMessage(err)));
   };
 
+  /** How many of the selection are in the inbox, once that is known. */
+  const inInbox = () => state()?.inbox ?? 0;
+
   /** Whether any of the selection is a variant of something, to be ungrouped. */
   const grouped = () => {
     const group = state()?.scalars.alt_group_id;
@@ -589,6 +592,30 @@ function Menu(props: {
           Remove from view
         </button>
       </li>
+      <Show when={inInbox() > 0}>
+        <li role="none">
+          <button
+            role="menuitem"
+            title="Take out of the inbox: these have been looked over"
+            onClick={() => run(api.archiveEntities)}
+          >
+            <Icon name="archive-outline" />
+            Archive
+          </button>
+        </li>
+      </Show>
+      <Show when={state() !== undefined && inInbox() < state()!.count}>
+        <li role="none">
+          <button
+            role="menuitem"
+            title="Put back in the inbox, to be looked over"
+            onClick={() => run(api.unarchiveEntities)}
+          >
+            <Icon name="unarchive-outline" />
+            Move to inbox
+          </button>
+        </li>
+      </Show>
       <li class="menu-divider" role="separator" />
       <Show
         when={allTrashed()}

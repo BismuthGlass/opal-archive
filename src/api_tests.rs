@@ -426,7 +426,7 @@ async fn deleting_takes_two_steps() {
     assert_eq!(api.metadata(&[a, b]).await["trashed"], 1);
     assert_eq!(
         api.get("/stats").await,
-        json!({ "files": 1, "trashed": 1 })
+        json!({ "files": 1, "trashed": 1, "inbox": 0 })
     );
     // Trashed, it keeps its file and tags.
     assert!(api.stored(a).exists());
@@ -1490,6 +1490,46 @@ async fn website() -> String {
         }
     });
     address
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn what_arrives_is_in_the_inbox_until_archived() {
+    let api = Api::new();
+    let site = website().await;
+    let tab = api.post("/tabs", json!({ "kind": "upload" })).await["id"]
+        .as_i64()
+        .unwrap();
+    // What the library held before is not in it.
+    let old = api.file("old.png");
+    let fetch = json!({ "url": format!("{site}/a%20picture?size=large"), "tab": tab });
+    let (_, file) = api.call("POST", "/files/fetch", Some(fetch.clone())).await;
+    let new = file["id"].as_i64().unwrap();
+
+    assert_eq!(api.found("@inbox").await, [new]);
+    assert_eq!(api.found("-@inbox").await, [old]);
+    assert_eq!(api.metadata(&[old, new]).await["inbox"], 1);
+    assert_eq!(api.get("/stats").await["inbox"], 1);
+    let listed = api.get(&format!("/search?q=id%3D{new}")).await;
+    assert_eq!(listed["items"][0]["inbox"], true);
+
+    let archive = json!({ "ids": [old, new] });
+    assert_eq!(
+        api.post("/entities/archive", archive.clone()).await["changed"],
+        1
+    );
+    assert_eq!(api.found("@inbox").await, [] as [i64; 0]);
+    assert_eq!(api.get("/stats").await["inbox"], 0);
+
+    // Arriving again does not bring back what was archived.
+    api.call("POST", "/files/fetch", Some(fetch)).await;
+    assert_eq!(api.found("@inbox").await, [] as [i64; 0]);
+
+    // It can be put back, and what is trashed there is not waiting.
+    assert_eq!(api.post("/entities/unarchive", archive).await["changed"], 2);
+    assert_eq!(api.found("@inbox sort=id").await, [old, new]);
+    api.post("/entities/trash", json!({ "ids": [old] })).await;
+    assert_eq!(api.found("@inbox").await, [new]);
+    assert_eq!(api.get("/stats").await["inbox"], 1);
 }
 
 #[tokio::test(flavor = "multi_thread")]

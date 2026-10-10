@@ -186,6 +186,11 @@ export default function Viewer(props: {
         <Show when={item() && marks().get(item()!.id)}>
           {(mark) => <span class={`mark-badge mark-${mark()}`}>Mark {mark()}</span>}
         </Show>
+        <Show when={item()?.inbox}>
+          <span class="viewer-new" title="In the inbox: not yet archived">
+            Inbox
+          </span>
+        </Show>
         <Show when={item()?.trashed}>
           <span class="viewer-trashed" title="In the trash">
             <Icon name="delete-outline" />

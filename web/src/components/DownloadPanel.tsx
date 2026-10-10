@@ -95,6 +95,7 @@ export function BaseTags(props: {
   const asSelection = (): Metadata => ({
     count: 1,
     trashed: 0,
+    inbox: 0,
     scalars: {},
     tags: Object.fromEntries(
       Object.entries(props.data.tags).map(([field, values]) => [

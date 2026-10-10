@@ -3,8 +3,9 @@
 
 use rusqlite::types::Value;
 
-/// States an entity can be in, searched as `@trashed`.
-pub const STATES: &[&str] = &["trashed"];
+/// States an entity can be in, searched as `@trashed`: each is a column of
+/// its own, set or not.
+pub const STATES: &[&str] = &["trashed", "inbox"];
 
 /// The tag types with the short name each goes by after an `@`: `@cr:name`
 /// is the creator `name`. A tag with no `@` is a plain one, of type `tags`.
@@ -508,9 +509,10 @@ impl Parser<'_> {
             }
             // Asking about the trash is what lets trashed entities through;
             // see `compile`.
-            self.asks_trashed = true;
-            // `trashed` is the only state so far.
-            return Ok(format!("({} = 1)", self.column('e', "trashed")));
+            if state == "trashed" {
+                self.asks_trashed = true;
+            }
+            return Ok(format!("({} = 1)", self.column('e', &state)));
         };
         let Some(field) = tag_type(name) else {
             let known: Vec<String> = TAG_PREFIXES.iter().map(|(_, p)| format!("@{p}")).collect();
@@ -1262,6 +1264,17 @@ mod tests {
         assert_eq!(found(&conn, "ext=png @trashed"), [3]);
         let all = compile("cat", 7, &Aliases::new(), true).unwrap();
         assert!(!all.filter.contains("trashed"));
+    }
+
+    #[test]
+    fn inbox_is_a_state() {
+        let conn = library();
+        conn.execute("UPDATE entity SET inbox = 1 WHERE id IN (2, 3)", [])
+            .unwrap();
+        // What is in the trash is left out of the inbox as of anything.
+        assert_eq!(found(&conn, "@inbox"), [2]);
+        assert_eq!(found(&conn, "@inbox @trashed"), [3]);
+        assert_eq!(found(&conn, "-@inbox sort=id"), [1, 5]);
     }
 
     #[test]

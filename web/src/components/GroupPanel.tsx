@@ -32,6 +32,7 @@ const asSelection = (info: GroupInfo): Metadata => {
   return {
     count: 1,
     trashed: 0,
+    inbox: 0,
     scalars: {},
     tags: {},
     source_url: counted(info.source_url),

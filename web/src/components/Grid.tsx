@@ -360,6 +360,9 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                             <Icon name="delete-outline" />
                           </span>
                         </Show>
+                        <Show when={current().inbox}>
+                          <span class="new-mark" title="In the inbox: not yet archived" />
+                        </Show>
                         <Show when={takenOut(current())}>
                           <span
                             class="out-mark"

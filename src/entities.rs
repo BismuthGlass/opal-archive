@@ -93,6 +93,8 @@ pub fn router() -> Router<AppState> {
         .route("/entities/edit", post(edit))
         .route("/entities/trash", post(trash))
         .route("/entities/restore", post(restore))
+        .route("/entities/archive", post(archive))
+        .route("/entities/unarchive", post(unarchive))
         .route("/entities/delete", post(delete))
 }
 
@@ -329,9 +331,15 @@ async fn metadata(
         [&ids],
         |row| row.get(0),
     )?;
+    let inbox: i64 = conn.query_row(
+        &format!("SELECT count(*) FROM entity WHERE inbox = 1 AND id {IN_IDS}"),
+        [&ids],
+        |row| row.get(0),
+    )?;
     Ok(Json(json!({
         "count": count,
         "trashed": trashed,
+        "inbox": inbox,
         "scalars": scalars,
         "tags": counted_tags(&conn, &ids)?,
         "source_url": counted(&conn, &ids, SOURCE_URLS)?,
@@ -623,6 +631,32 @@ async fn restore(
     Json(input): Json<Ids>,
 ) -> Result<Json<Value>, ApiError> {
     set_trashed(&state, &input.ids, false)
+}
+
+/// Takes entities out of the inbox, or puts them back in it.
+fn set_inbox(state: &AppState, ids: &[i64], inbox: bool) -> Result<Json<Value>, ApiError> {
+    let conn = state.db.lock().unwrap();
+    let changed = conn.execute(
+        &format!("UPDATE entity SET inbox = ?2 WHERE inbox <> ?2 AND id {IN_IDS}"),
+        params![ids_json(ids), inbox],
+    )?;
+    Ok(Json(json!({ "changed": changed })))
+}
+
+/// Archives entities: they have been looked over, and leave the inbox they
+/// arrived in. Nothing else about them changes.
+async fn archive(
+    State(state): State<AppState>,
+    Json(input): Json<Ids>,
+) -> Result<Json<Value>, ApiError> {
+    set_inbox(&state, &input.ids, false)
+}
+
+async fn unarchive(
+    State(state): State<AppState>,
+    Json(input): Json<Ids>,
+) -> Result<Json<Value>, ApiError> {
+    set_inbox(&state, &input.ids, true)
 }
 
 /// The second step: deletes for good those of the entities that are in the

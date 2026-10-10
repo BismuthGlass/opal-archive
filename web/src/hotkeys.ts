@@ -30,6 +30,18 @@ export const ACTIONS = [
     key: "shift+m",
   },
   {
+    id: "archive",
+    label: "Archive",
+    description: "Takes out of the inbox, where what is new to the library waits to be looked over.",
+    key: "e",
+  },
+  {
+    id: "unarchive",
+    label: "Move to inbox",
+    description: "Puts back in the inbox.",
+    key: "shift+e",
+  },
+  {
     id: "trash",
     label: "Trash",
     description: "Moves to the trash. What is all in the trash already is deleted for good, once agreed to.",

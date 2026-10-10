@@ -277,6 +277,23 @@ export default function App() {
     changed();
   };
 
+  /** Takes out of the inbox, or with `back` puts in it again. */
+  const archive = async (target: { ids: number[]; name: string }, back: boolean) => {
+    try {
+      const { changed } = await (back ? api.unarchiveEntities : api.archiveEntities)(target.ids);
+      showToast(
+        changed === 0
+          ? `${back ? "Already" : "Nothing was"} in the inbox`
+          : back
+            ? `Moved ${target.name} to the inbox`
+            : `Archived ${target.name}`,
+      );
+    } catch (err) {
+      showToast(errorMessage(err));
+    }
+    changed();
+  };
+
   /** The digit a key stands for, with Shift still down or not. */
   const digitOf = (event: KeyboardEvent) => {
     const digit = /^\d$/.test(event.key) ? event.key : /^(?:Digit|Numpad)(\d)$/.exec(event.code)?.[1];
@@ -361,6 +378,8 @@ export default function App() {
         hide(on);
       } else if (action === "trash" || action === "restore") {
         trash(on, action === "restore");
+      } else if (action === "archive" || action === "unarchive") {
+        archive(on, action === "unarchive");
       } else {
         setRating(on);
         showToast(`Rate ${on.name}: press 1 to 7, or 0 to clear`, true);
@@ -510,6 +529,16 @@ export default function App() {
           {(counts) => (
             <span class="library">
               {plural(counts().files, "file")} in the library
+              <Show when={counts().inbox > 0}>
+                {", "}
+                <button
+                  class="link"
+                  title="Show what is in the inbox: new to the library, and not yet archived"
+                  onClick={() => open("gallery", "@inbox")}
+                >
+                  {counts().inbox} in the inbox
+                </button>
+              </Show>
               <Show when={counts().trashed > 0}>
                 {", "}
                 <button

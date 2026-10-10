@@ -18,6 +18,7 @@ metroid:samus                         has the tag "metroid:samus"
 media=video -@cr:*                    videos with no creator
 @bu:reference                         what is kept in the bucket "reference"
 @trashed                              what is in the trash
+@inbox                                what is new, and not yet archived
 set_id=pinterest:pin:123              the files of that set
 alt_group_id=alt:3f9a1c2e             the variants of that group
 width>=1920 length<30s sort=-score    attribute filters and ordering
@@ -141,7 +142,8 @@ matches the tags that are actually stored. Write `\*` for a literal asterisk.
 
 ### States
 
-`@` with a single word and no colon is a state. The only one so far is
+`@` with a single word and no colon is a state. There are two.
+
 `@trashed`: deleted once, and not yet for good.
 
 ```
@@ -152,6 +154,17 @@ cat (@trashed or -@trashed) cats, trashed or not
 
 Trashed entities are left out of every search that does not mention
 `@trashed`, so plain searches never show them.
+
+`@inbox`: new to the library, and not yet archived.
+
+```
+@inbox                      what is in the inbox
+@inbox media=image          the pictures in it
+cat -@inbox                 cats that have been archived
+```
+
+Unlike the trash, the inbox hides nothing: a plain search finds what is in
+it along with the rest.
 
 ### String fields
 

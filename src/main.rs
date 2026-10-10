@@ -152,5 +152,11 @@ async fn stats(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
             |row| row.get::<_, i64>(0),
         )
     };
-    Ok(Json(json!({ "files": count(false)?, "trashed": count(true)? })))
+    // What is in the trash is not waiting to be looked over.
+    let inbox: i64 = conn.query_row(
+        "SELECT count(*) FROM entity WHERE inbox = 1 AND trashed = 0",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(Json(json!({ "files": count(false)?, "trashed": count(true)?, "inbox": inbox })))
 }

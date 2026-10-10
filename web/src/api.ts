@@ -112,8 +112,11 @@ export type InboxState = {
   }[];
 };
 
-/** Files not in the trash, and how many are in it. */
-export type Stats = { files: number; trashed: number };
+/**
+ * Files not in the trash, how many are in it, and how many of the rest
+ * are in the inbox.
+ */
+export type Stats = { files: number; trashed: number; inbox: number };
 
 export type MediaType = "image" | "video" | "audio" | "book" | "other";
 
@@ -154,6 +157,8 @@ export type Item = {
   thumbnail_version: string | null;
   /** In the trash: deleted once, not yet for good. */
   trashed: boolean;
+  /** In the inbox: new to the library, and not yet archived. */
+  inbox: boolean;
 };
 
 export type SearchPage = { total: number; offset: number; items: Item[] };
@@ -174,6 +179,8 @@ export type Metadata = {
   count: number;
   /** How many of them are in the trash. */
   trashed: number;
+  /** How many of them are in the inbox. */
+  inbox: number;
   scalars: Record<string, Scalar>;
   tags: Record<string, { value: string; count: number; description: string | null }[]>;
   source_url: { value: string; count: number }[];
@@ -386,6 +393,12 @@ export const trashEntities = (ids: number[]) =>
   request<{ changed: number }>("POST", "/entities/trash", { ids });
 export const restoreEntities = (ids: number[]) =>
   request<{ changed: number }>("POST", "/entities/restore", { ids });
+/** Takes entities out of the inbox they arrived in: they have been looked over. */
+export const archiveEntities = (ids: number[]) =>
+  request<{ changed: number }>("POST", "/entities/archive", { ids });
+/** Puts entities back in the inbox. */
+export const unarchiveEntities = (ids: number[]) =>
+  request<{ changed: number }>("POST", "/entities/unarchive", { ids });
 /** Deletes trashed entities for good; any not in the trash are left alone. */
 export const deleteEntities = (ids: number[]) =>
   request<{ deleted: number }>("POST", "/entities/delete", { ids });
