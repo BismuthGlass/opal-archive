@@ -692,6 +692,33 @@ button.toolbar-note:hover {
 
 /* How many results have a mark, above the grid; and the mark of the file
    open in the viewer. */
+/* The counts of the marks above the grid, joined into one strip with
+   rounded ends: each a segment in its mark's colour. */
+.mark-counts {
+  display: inline-flex;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.toolbar .mark-counts button.mark-badge:not(.link) {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 0;
+}
+
+/* The ends have the room the rounding takes from them. */
+.toolbar .mark-counts button.mark-badge:first-child:not(.link) {
+  padding-left: 9px;
+}
+
+.toolbar .mark-counts button.mark-badge:last-child:not(.link) {
+  padding-right: 9px;
+}
+
+.toolbar .mark-counts button.mark-badge:hover {
+  filter: brightness(1.12);
+}
+
 .mark-badge,
 .toolbar button.mark-badge:not(.link) {
   min-width: 24px;

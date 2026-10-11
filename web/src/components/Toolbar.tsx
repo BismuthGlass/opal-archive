@@ -59,23 +59,28 @@ export default function Toolbar() {
             Clear
           </button>
         </Show>
-        {/* One badge for each mark in use, with how many results have it. */}
-        <For each={Array.from({ length: MARKS }, (_, index) => index + 1)}>
-          {(mark) => (
-            <Show when={markCounts()[mark] > 0}>
-              <button
-                class={`mark-badge mark-${mark}`}
-                aria-label={`Mark ${mark}: ${plural(markCounts()[mark], "item")}`}
-                title={`${plural(markCounts()[mark], "item")} with mark ${mark}. Click to select, Ctrl or Cmd and click to add to the selection, right click for more.`}
-                // Cmd stands in for Ctrl, as it does on a tile.
-                onClick={(event) => selectMarked(mark, event.ctrlKey || event.metaKey)}
-                onContextMenu={(event) => openMarkMenu(event, mark)}
-              >
-                {markCounts()[mark]}
-              </button>
-            </Show>
-          )}
-        </For>
+        {/* One count for each mark in use, of how many results have it:
+            joined end to end, as one strip of the marks' colours. */}
+        <Show when={markCounts().some((count) => count > 0)}>
+          <span class="mark-counts">
+            <For each={Array.from({ length: MARKS }, (_, index) => index + 1)}>
+              {(mark) => (
+                <Show when={markCounts()[mark] > 0}>
+                  <button
+                    class={`mark-badge mark-${mark}`}
+                    aria-label={`Mark ${mark}: ${plural(markCounts()[mark], "item")}`}
+                    title={`${plural(markCounts()[mark], "item")} with mark ${mark}. Click to select, Ctrl or Cmd and click to add to the selection, right click for more.`}
+                    // Cmd stands in for Ctrl, as it does on a tile.
+                    onClick={(event) => selectMarked(mark, event.ctrlKey || event.metaKey)}
+                    onContextMenu={(event) => openMarkMenu(event, mark)}
+                  >
+                    {markCounts()[mark]}
+                  </button>
+                </Show>
+              )}
+            </For>
+          </span>
+        </Show>
         <Show when={shownSet()}>
           {(set) => (
             <button
