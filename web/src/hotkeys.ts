@@ -33,7 +33,7 @@ export const ACTIONS = [
     id: "markAs",
     label: "Mark as",
     description: "Then press 1 to 5 to give that mark, which “Mark” gives from then on, or 0 to take the mark off.",
-    key: "shift+m",
+    key: "n",
   },
   {
     id: "archive",
