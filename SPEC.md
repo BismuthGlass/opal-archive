@@ -127,8 +127,9 @@ The side panel ends in a drawer that shows the selected file: bigger than its ti
 
 The viewer shows one file over the whole window. Its top bar names the file: the sets it is in, its title, and after that its file name behind an icon of a file, so that the two are not confused. A file that came without a name is named by its hash.
 
-- The file's tags are listed in the bottom left corner, right against the edges and over what is shown, as the side panel lists them: one to a line in their types' colours, those of the aggregated types together and each other type under its name. Each is on a strip of the theme's colour, light or dark, no wider than its name, so that it can be read over any picture. They stop short of the button to step back; more than fit can be scrolled.
-- A button in the top bar opens a menu of what the viewer shows, each to be put away or brought back: the player, the file name, the tags. All are shown at first. What is chosen is a setting.
+- A button in the top bar, or the I key, opens an info pane down the left side, beside what is shown. It says all there is of the file, to read and not to change, so it is small and close: its name, type, dimensions, length or pages, size on disk, when it was added and its ID; then its title, date, rating, score, version and description, where they are set; then its tags as the side panel lists them, one to a line in their types' colours, those of the aggregated types together and each other type under its name; then its links. The pane is in the theme's colours. It is closed at first.
+- Another button opens a menu of what the top bar shows, each to be put away or brought back: the player, the file name. Both are shown at first.
+- Whether the pane is open and what the bar shows are settings.
 
 ## Stacked and saved queries
 

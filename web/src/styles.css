@@ -2295,62 +2295,96 @@ span.chip-label:hover {
   line-height: 0;
 }
 
-/* The file's tags, in the bottom left corner, right against the edges and
-   over what is shown. Their colours are the theme's, so each is on a
-   strip of the theme's ground, light or dark and a little seen through,
-   no wider than its name. They stop short of the button to step back, and
-   scroll when they are more. */
-.viewer-tags {
-  --tag-ground: rgb(255 255 255 / 0.85);
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  z-index: 1;
-  max-width: min(240px, 40%);
-  max-height: calc(50vh - 52px);
+.viewer-info-button[aria-pressed="true"] {
+  color: #b8c5ff;
+}
+
+/* Under the top bar: the info pane, when it is open, beside what is shown. */
+.viewer-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* All there is to say of the file, to read and not to change, so small
+   and close: what the file is, then its tags, in the theme's colours as
+   the tags' own are. */
+.viewer-info {
+  flex: none;
+  width: 240px;
+  padding: 8px 10px 12px;
   overflow-y: auto;
-  color: var(--text);
-}
-
-@media (prefers-color-scheme: dark) {
-  .viewer-tags {
-    --tag-ground: rgb(16 16 18 / 0.7);
-  }
-}
-
-.viewer-tags .tag-lines {
-  gap: 1px;
-  padding: 0;
-  margin-top: 1px;
-}
-
-.viewer-tags .tag-line,
-.viewer-tags .label {
-  padding: 0 6px;
-  background: var(--tag-ground);
-  border-radius: 0 4px 4px 0;
-}
-
-.viewer-tags .label {
-  display: block;
-  width: fit-content;
-  margin: 4px 0 0;
   font-size: 12px;
+  line-height: 1.3;
+  color: var(--text);
+  background: var(--surface);
+  border-top-right-radius: 8px;
+}
+
+.viewer-info dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1px 8px;
+  margin: 0;
+}
+
+.viewer-info dt,
+.viewer-info h3 {
   color: var(--muted);
 }
 
-.viewer-tags .tag-name {
+.viewer-info dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.viewer-info h3 {
+  padding-top: 6px;
+  margin: 8px 0 2px;
+  font-size: inherit;
+  font-weight: normal;
+  border-top: 1px solid var(--border);
+}
+
+.viewer-info .tag-lines {
+  padding: 0;
+  line-height: inherit;
+}
+
+.viewer-info .tag-name {
   overflow-wrap: anywhere;
 }
 
+.viewer-links {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.viewer-links li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer .viewer-links a {
+  color: var(--accent);
+}
+
+/* The button to step back stands clear of the pane. */
+.viewer.with-info .viewer-step.previous {
+  left: 240px;
+}
+
 .viewer-body {
-  position: relative;
   display: grid;
   /* One cell with a definite size, so the media's percentage limits resolve
      against it and tall images shrink to fit instead of overflowing. */
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   flex: 1;
   place-items: center;
+  min-width: 0;
   min-height: 0;
   padding: 0 48px 16px;
 }

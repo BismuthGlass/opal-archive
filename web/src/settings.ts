@@ -25,7 +25,10 @@ export type Settings = {
   tagTypeOrder?: string[];
   /** How the viewer plays through results by itself. */
   player?: { seconds?: number; random?: boolean };
-  /** The parts of the viewer put away or kept: one not named is shown. */
+  /**
+   * The parts of the viewer put away or kept. One not named is shown,
+   * but for the info pane, which is closed until it is opened.
+   */
   viewer?: Partial<Record<ViewerPart, boolean>>;
   /** Queries kept to be used again, in the order they are offered. */
   savedQueries?: SavedQuery[];
@@ -36,7 +39,7 @@ export type Settings = {
 };
 
 /** What of the viewer can be shown or put away. */
-export type ViewerPart = "player" | "filename" | "tags";
+export type ViewerPart = "player" | "filename" | "info";
 
 export const downloadNames = (): api.Naming => settings.downloadNames ?? "original";
 export const collapsesSets = (): boolean => settings.collapseSets ?? false;

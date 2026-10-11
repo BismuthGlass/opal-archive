@@ -12,7 +12,7 @@ import {
 } from "solid-js";
 import * as api from "../api";
 import { contentUrl } from "../api";
-import { fieldLabel, setName } from "../format";
+import { dateTime, duration, fieldLabel, fileSize, setName } from "../format";
 import { dataVersion, ensureRange, itemAt, marks, search } from "../search";
 import { downloadNames, saveSetting, settings } from "../settings";
 import type { ViewerPart } from "../settings";
@@ -28,11 +28,19 @@ const SKIP_SECONDS = 1;
 /** After a step, how long further scrolling is let pass, in milliseconds. */
 const WHEEL_PAUSE = 100;
 
-/** What of the viewer can be put away, as the menu that does it lists them. */
+/** What of the top bar can be put away, as the menu that does it lists them. */
 const PARTS: { part: ViewerPart; label: string }[] = [
   { part: "player", label: "Player" },
   { part: "filename", label: "File name" },
-  { part: "tags", label: "Tags" },
+];
+/** What the info pane says of the file besides its tags, where it is set. */
+const DETAILS = [
+  { field: "title", label: "Title" },
+  { field: "date", label: "Date" },
+  { field: "content_rating", label: "Rating" },
+  { field: "score", label: "Score" },
+  { field: "version", label: "Version" },
+  { field: "description", label: "Description" },
 ];
 
 /**
@@ -55,8 +63,11 @@ export default function Viewer(props: {
 
   createEffect(() => ensureRange(props.index, props.index));
 
-  /** Whether a part of the viewer is on show: all are, until put away. */
-  const shows = (part: ViewerPart) => settings.viewer?.[part] ?? true;
+  /**
+   * Whether a part of the viewer is on show. What is in the top bar is,
+   * until put away; the info pane is not, until opened.
+   */
+  const shows = (part: ViewerPart) => settings.viewer?.[part] ?? part !== "info";
   const toggle = (part: ViewerPart) =>
     saveSetting("viewer", { ...settings.viewer, [part]: !shows(part) }).catch(() => {});
   const [choosing, setChoosing] = createSignal(false);
@@ -74,7 +85,10 @@ export default function Viewer(props: {
   // What is shown of the file is only asked for while it is shown. `latest`
   // keeps the last file's on screen until the next one's arrives.
   const [entity] = createResource(
-    () => (shows("filename") && item() ? ([item()!.id, dataVersion()] as const) : null),
+    () =>
+      (shows("filename") || shows("info")) && item()
+        ? ([item()!.id, dataVersion()] as const)
+        : null,
     ([id]) => api.getEntity(id),
   );
   /** What the file is called: the name it came under, or else its hash. */
@@ -84,22 +98,25 @@ export default function Viewer(props: {
     return file.original_name ?? (file.extension ? `${file.hash}.${file.extension}` : file.hash);
   };
   const [metadata] = createResource(
-    () => (shows("tags") && item() ? ([item()!.id, dataVersion()] as const) : null),
+    () => (shows("info") && item() ? ([item()!.id, dataVersion()] as const) : null),
     ([id]) => api.getMetadata([id]),
   );
+  /** What the info pane is about, once both answers are in. */
+  const info = () => {
+    const [file, data] = [entity.latest, metadata.latest];
+    return shows("info") && file && data ? { file, data } : undefined;
+  };
   /**
    * The file's tags as the side panel lists them: those of the aggregated
    * types in one list, then each other type that has any under its name.
    */
-  const tagLists = () => {
-    const tags = shows("tags") ? metadata.latest?.tags : undefined;
-    if (!tags) return [];
+  const tagLists = (tags: api.Metadata["tags"]) => {
     const of = (field: string) => (tags[field] ?? []).map((tag) => ({ field, value: tag.value }));
     return [
-      { label: null as string | null, tags: aggregatedTypes().flatMap(of) },
+      { label: "Tags", tags: aggregatedTypes().flatMap(of) },
       ...orderedTypes()
         .filter((field) => !tagType(field).aggregate)
-        .map((field) => ({ label: fieldLabel(field) as string | null, tags: of(field) })),
+        .map((field) => ({ label: fieldLabel(field), tags: of(field) })),
     ].filter((list) => list.tags.length > 0);
   };
 
@@ -137,9 +154,8 @@ export default function Viewer(props: {
     // Pinching to zoom arrives as a wheel with Control held.
     if (event.ctrlKey || event.deltaY === 0 || modalOpen()) return;
     if ((event.target as HTMLElement).matches?.("input")) return;
-    // Over the tags, the wheel scrolls them when there are more than fit.
-    const list = (event.target as HTMLElement).closest?.(".viewer-tags");
-    if (list && list.scrollHeight > list.clientHeight) return;
+    // Over the info pane, the wheel is for scrolling it.
+    if ((event.target as HTMLElement).closest?.(".viewer-info")) return;
     const now = performance.now();
     if (now - steppedAt < WHEEL_PAUSE) return;
     steppedAt = now;
@@ -199,6 +215,7 @@ export default function Viewer(props: {
     }
     else if (event.key === "ArrowLeft") step(-1);
     else if (event.key === "ArrowRight") step(1);
+    else if (event.key === "i" && !event.ctrlKey && !event.metaKey && !event.altKey) toggle("info");
     else return;
     event.preventDefault();
     // Keep the page's own shortcuts from also acting on the key.
@@ -208,7 +225,14 @@ export default function Viewer(props: {
   onCleanup(() => window.removeEventListener("keydown", onKeyDown, true));
 
   return (
-    <div class="viewer" role="dialog" aria-modal="true" aria-label="Viewer" onWheel={onWheel}>
+    <div
+      class="viewer"
+      classList={{ "with-info": shows("info") }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Viewer"
+      onWheel={onWheel}
+    >
       <header>
         <span class="viewer-title">
           <Show when={sets().length > 0}>
@@ -309,12 +333,21 @@ export default function Viewer(props: {
             </button>
           </div>
         </Show>
+        <button
+          class="viewer-info-button"
+          aria-pressed={shows("info")}
+          aria-label="Info"
+          title={shows("info") ? "Close the info pane (I)" : "Show the file's details and tags (I)"}
+          onClick={() => toggle("info")}
+        >
+          <Icon name="info-outline" />
+        </button>
         <div class="viewer-chooser" ref={chooser}>
           <button
             aria-haspopup="menu"
             aria-expanded={choosing()}
             aria-label="What is shown"
-            title="Choose what the viewer shows"
+            title="Choose what the bar shows"
             onClick={() => setChoosing(!choosing())}
           >
             <Icon name="visibility-outline" />
@@ -350,76 +383,133 @@ export default function Viewer(props: {
           <Icon name="close" />
         </button>
       </header>
-      {/* Clicking the backdrop, but not the media, closes. */}
-      <div
-        class="viewer-body"
-        onClick={(e) => e.target === e.currentTarget && !dismissing && props.onMove(null)}
-      >
-        <Show when={tagLists().length > 0}>
-          <aside class="viewer-tags" aria-label="Tags">
-            <For each={tagLists()}>
-              {(list) => (
+      <div class="viewer-main">
+        <Show when={shows("info")}>
+          <aside class="viewer-info" aria-label="Info">
+            <Show when={info()}>
+              {(about) => (
                 <>
-                  <Show when={list.label}>
-                    <span class="label">{list.label}:</span>
-                  </Show>
-                  <ul class="tag-lines">
-                    <For each={list.tags}>
-                      {(tag) => (
-                        <li class="tag-line">
-                          <span class="tag-name" style={tagTextStyle(tag.field)}>
-                            {tag.value}
-                          </span>
-                        </li>
+                  <dl>
+                    <dt>Name</dt>
+                    <dd>{about().file.file.original_name ?? "—"}</dd>
+                    <dt>Type</dt>
+                    <dd>
+                      {about().file.file.media_type}
+                      {about().file.file.extension && ` (${about().file.file.extension})`}
+                    </dd>
+                    <Show when={about().file.file.width && about().file.file.height}>
+                      <dt>Size</dt>
+                      <dd>
+                        {about().file.file.width} × {about().file.file.height}
+                      </dd>
+                    </Show>
+                    <Show when={about().file.file.length !== null}>
+                      <dt>Length</dt>
+                      <dd>{duration(about().file.file.length!)}</dd>
+                    </Show>
+                    <Show when={about().file.file.page_count !== null}>
+                      <dt>Pages</dt>
+                      <dd>{about().file.file.page_count}</dd>
+                    </Show>
+                    <dt>On disk</dt>
+                    <dd>{fileSize(about().file.file.size)}</dd>
+                    <dt>Added</dt>
+                    <dd>{dateTime(about().file.date_added)}</dd>
+                    <dt>ID</dt>
+                    <dd>{about().file.id}</dd>
+                    <For each={DETAILS}>
+                      {(detail) => (
+                        <Show when={about().data.scalars[detail.field]?.value != null}>
+                          <dt>{detail.label}</dt>
+                          <dd>{about().data.scalars[detail.field].value}</dd>
+                        </Show>
                       )}
                     </For>
-                  </ul>
+                  </dl>
+                  <For each={tagLists(about().data.tags)}>
+                    {(list) => (
+                      <>
+                        <h3>{list.label}</h3>
+                        <ul class="tag-lines">
+                          <For each={list.tags}>
+                            {(tag) => (
+                              <li class="tag-line">
+                                <span class="tag-name" style={tagTextStyle(tag.field)}>
+                                  {tag.value}
+                                </span>
+                              </li>
+                            )}
+                          </For>
+                        </ul>
+                      </>
+                    )}
+                  </For>
+                  <Show when={about().data.source_url.length > 0}>
+                    <h3>Links</h3>
+                    <ul class="viewer-links">
+                      <For each={about().data.source_url}>
+                        {(link) => (
+                          <li>
+                            <a href={link.value} target="_blank" rel="noreferrer">
+                              {link.value}
+                            </a>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
+                  </Show>
                 </>
               )}
-            </For>
+            </Show>
           </aside>
         </Show>
-        <Show when={item()} keyed>
-          {(current) => (
-            <Switch
-              fallback={
-                <p class="viewer-note">
-                  No preview for this file. <a href={contentUrl(current.id, downloadNames())}>Download it</a>
-                </p>
-              }
-            >
-              <Match when={current.media_type === "image"}>
-                <img
-                  src={contentUrl(current.id)}
-                  alt={current.title ?? ""}
-                  onLoad={() => setShown(true)}
-                  onError={() => setShown(true)}
-                />
-              </Match>
-              <Match when={current.media_type === "video"}>
-                <video
-                  src={contentUrl(current.id)}
-                  controls
-                  autoplay
-                  onEnded={() => playing() && advance()}
-                  onError={() => playing() && advance()}
-                />
-              </Match>
-              <Match when={current.media_type === "audio"}>
-                <audio
-                  src={contentUrl(current.id)}
-                  controls
-                  autoplay
-                  onEnded={() => playing() && advance()}
-                  onError={() => playing() && advance()}
-                />
-              </Match>
-              <Match when={current.extension === "pdf"}>
-                <iframe src={contentUrl(current.id)} title={current.title ?? "Document"} />
-              </Match>
-            </Switch>
-          )}
-        </Show>
+        {/* Clicking the backdrop, but not the media, closes. */}
+        <div
+          class="viewer-body"
+          onClick={(e) => e.target === e.currentTarget && !dismissing && props.onMove(null)}
+        >
+          <Show when={item()} keyed>
+            {(current) => (
+              <Switch
+                fallback={
+                  <p class="viewer-note">
+                    No preview for this file. <a href={contentUrl(current.id, downloadNames())}>Download it</a>
+                  </p>
+                }
+              >
+                <Match when={current.media_type === "image"}>
+                  <img
+                    src={contentUrl(current.id)}
+                    alt={current.title ?? ""}
+                    onLoad={() => setShown(true)}
+                    onError={() => setShown(true)}
+                  />
+                </Match>
+                <Match when={current.media_type === "video"}>
+                  <video
+                    src={contentUrl(current.id)}
+                    controls
+                    autoplay
+                    onEnded={() => playing() && advance()}
+                    onError={() => playing() && advance()}
+                  />
+                </Match>
+                <Match when={current.media_type === "audio"}>
+                  <audio
+                    src={contentUrl(current.id)}
+                    controls
+                    autoplay
+                    onEnded={() => playing() && advance()}
+                    onError={() => playing() && advance()}
+                  />
+                </Match>
+                <Match when={current.extension === "pdf"}>
+                  <iframe src={contentUrl(current.id)} title={current.title ?? "Document"} />
+                </Match>
+              </Switch>
+            )}
+          </Show>
+        </div>
       </div>
       <button class="viewer-step previous" aria-label="Previous" onClick={() => step(-1)}>
         <Icon name="chevron-left" />
