@@ -64,6 +64,29 @@ import {
 } from "./tabs";
 import Trail, { goBack } from "./components/Trail";
 
+// The side panel can be dragged wider or narrower, between these, in pixels.
+const PANEL_LEAST = 260;
+const PANEL_MOST = 720;
+const PANEL_WIDTH_KEY = "opalarchive.panel.width";
+
+function storedPanelWidth(): number | null {
+  try {
+    const width = Number(localStorage.getItem(PANEL_WIDTH_KEY));
+    return width >= PANEL_LEAST && width <= PANEL_MOST ? width : null;
+  } catch {
+    return null;
+  }
+}
+
+function storePanelWidth(width: number | null) {
+  try {
+    if (width === null) localStorage.removeItem(PANEL_WIDTH_KEY);
+    else localStorage.setItem(PANEL_WIDTH_KEY, String(width));
+  } catch {
+    // Storage unavailable; the width just won't survive a reload.
+  }
+}
+
 export default function App() {
   /** Result index shown in the viewer, if it is open. */
   const [viewing, setViewing] = createSignal<number | null>(null);
@@ -93,6 +116,32 @@ export default function App() {
   /** The mark the mark key gives: the one last given with a key of its own. */
   let usualMark = 1;
   const [panelOpen, setPanelOpen] = createStoredFlag("opalarchive.panel", true);
+  /** How wide the side panel was dragged to be; until then, as the stylesheet has it. */
+  const [panelWidth, setPanelWidth] = createSignal(storedPanelWidth());
+  /** Dragging the panel's edge sets its width; it is kept when the drag ends. */
+  const resizePanel = (event: PointerEvent) => {
+    const grip = event.currentTarget as HTMLElement;
+    const left = grip.parentElement!.getBoundingClientRect().left;
+    event.preventDefault();
+    grip.setPointerCapture(event.pointerId);
+    const move = (moved: PointerEvent) => {
+      // Never so wide that the files are left less than half the window.
+      const most = Math.max(PANEL_LEAST, Math.min(PANEL_MOST, window.innerWidth / 2));
+      setPanelWidth(Math.round(Math.max(PANEL_LEAST, Math.min(most, moved.clientX - left))));
+    };
+    const done = () => {
+      grip.removeEventListener("pointermove", move);
+      storePanelWidth(panelWidth());
+    };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", done, { once: true });
+    grip.addEventListener("pointercancel", done, { once: true });
+  };
+  /** A double click on the edge puts the width back as it was made. */
+  const resetPanelWidth = () => {
+    setPanelWidth(null);
+    storePanelWidth(null);
+  };
 
   onMount(() => {
     load();
@@ -447,7 +496,17 @@ export default function App() {
       <div class="workspace">
         {/* The panel is a stack of modules; add new ones here. */}
         <Show when={panelOpen()}>
-          <aside class="panel" aria-label="Side panel">
+          <aside
+            class="panel"
+            aria-label="Side panel"
+            style={{ "--panel-width": panelWidth() === null ? undefined : `${panelWidth()}px` }}
+          >
+            <div
+              class="panel-grip"
+              title="Drag to resize; double-click to put it back"
+              onPointerDown={resizePanel}
+              onDblClick={resetPanelWidth}
+            />
             <div class="panel-modules">
             <Module
               id="search"

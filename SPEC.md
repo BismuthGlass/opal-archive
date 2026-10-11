@@ -121,6 +121,8 @@ The count of each mark above the grid, and selecting by mark, take in only what 
 
 ## Preview
 
+The side panel can be made wider or narrower by dragging its right edge, within limits that leave the files at least half the window; a double click on the edge puts it back. Its width is remembered by the browser.
+
 The side panel ends in a drawer that shows the selected file: bigger than its tile, without opening the viewer. Of several selected, it shows the one selected last. Closed, the drawer is only its heading at the bottom of the panel; open, it takes the lower part of the panel, half of it at first and then as far as its top edge is dragged, and the rest of the panel scrolls above it, so that all of it can still be reached. Whether it is open and how tall are remembered by the browser. It shows what the viewer can: pictures, video and audio, which wait to be played, and PDFs.
 
 ## Stacked and saved queries
