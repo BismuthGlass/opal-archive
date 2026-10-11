@@ -834,6 +834,9 @@ struct Download {
     manifest: Manifest,
     /// The tags given to everything downloaded, besides the source.
     base: BaseTags,
+    /// Tags given to everything downloaded as they stand, without the
+    /// child tags they would bring: a request's, when it says so.
+    exact: BaseTags,
     /// Where the script puts its files, under the server's temporary
     /// directory.
     out: PathBuf,
@@ -858,6 +861,7 @@ impl Download {
             tab,
             manifest,
             base,
+            exact: BaseTags::new(),
             out,
             status,
             handed_on: 0,
@@ -970,6 +974,7 @@ impl Download {
             let title = manifest.title.clone();
             let other = Download {
                 handed_on: self.handed_on + 1,
+                exact: self.exact.clone(),
                 ..Download::new(
                     self.state.clone(),
                     self.tab,
@@ -1136,6 +1141,10 @@ impl Download {
             // An alias stands for the tag it defers to.
             let value = tags::resolve(&tx, &field, value)?;
             tags::add(&tx, &tagged, &field, &value)?;
+        }
+        for (field, value) in each(&self.exact) {
+            let value = tags::resolve(&tx, &field, value)?;
+            entities::attach_tag(&tx, &tagged, &field, &value)?;
         }
         tx.execute(
             "INSERT OR IGNORE INTO tab_download_seen (tab_id, key)

@@ -174,7 +174,7 @@ function opalAskTags(anchor, submit) {
   const box = opalElement("form", "opalarchive-popup");
   box.innerHTML = `
     <label for="opalarchive-tags">Tags to add</label>
-    <div class="opalarchive-pills" hidden></div>
+    <ul class="opalarchive-tags" hidden></ul>
     <input id="opalarchive-tags" type="text" role="combobox" autocomplete="off"
            spellcheck="false" aria-autocomplete="list" aria-expanded="true"
            aria-controls="opalarchive-suggestions"
@@ -188,14 +188,26 @@ function opalAskTags(anchor, submit) {
       <button type="submit">Download</button>
     </div>`;
   const input = box.querySelector("input");
-  const pills = box.querySelector(".opalarchive-pills");
+  const pills = box.querySelector(".opalarchive-tags");
   const list = box.querySelector(".opalarchive-suggestions");
   const error = box.querySelector(".opalarchive-error");
   const last = box.querySelector(".opalarchive-last");
   const download = box.querySelector('[type="submit"]');
 
-  /** The tags added so far. */
+  /**
+   * The tags added so far. A child tag, here because a tag that brings it
+   * was added, has `via`: the key of that tag.
+   */
   const tags = [];
+  const keyOf = (tag) => `${tag.field}\n${tag.value.toLowerCase()}`;
+  /** The child tags still being asked for; sending waits for them. */
+  let looking = Promise.resolve();
+  /**
+   * Whether every tag's children could be asked for and shown. If so the
+   * tags are sent to be given as they stand; if not, OpalArchive is left
+   * to bring the children itself.
+   */
+  let shown = true;
   /** The suggestions on show, and the one highlighted; -1 is the typed text. */
   let options = [];
   let active = -1;
@@ -208,26 +220,63 @@ function opalAskTags(anchor, submit) {
     error.hidden = !text;
   };
 
+  /** Takes a tag off, and with it the child tags it brought. */
+  const takeOff = (tag) => {
+    const key = keyOf(tag);
+    for (const had of [...tags]) {
+      if (had === tag || had.via === key) tags.splice(tags.indexOf(had), 1);
+    }
+  };
+
+  /** One tag as a line of the list, and under it, set in, the tags it brought. */
+  const line = (tag) => {
+    const row = opalElement("li", "opalarchive-line");
+    const name = opalElement("span", "opalarchive-tag", tag.value);
+    opalTagStyle(name, tag.field);
+    name.title = `${opalLabel(tag.field)}: ${tag.value}`;
+    const off = opalElement("button", "opalarchive-off", "×");
+    off.type = "button";
+    off.setAttribute("aria-label", `Take off ${tag.value}`);
+    off.addEventListener("click", () => {
+      takeOff(tag);
+      showTags();
+      input.focus();
+    });
+    row.append(name, off);
+    const brought = tags.filter((had) => had.via === keyOf(tag));
+    if (brought.length > 0) {
+      const under = opalElement("ul", "opalarchive-brought");
+      under.append(...brought.map(line));
+      row.append(under);
+    }
+    return row;
+  };
+
   const showTags = () => {
-    pills.replaceChildren(
-      ...tags.map((tag) => {
-        const pill = opalElement("span", "opalarchive-tag");
-        opalTagStyle(pill, tag.field);
-        pill.title = `${opalLabel(tag.field)}: ${tag.value}`;
-        pill.append(opalElement("span", "", tag.value));
-        const off = opalElement("button", "opalarchive-off", "×");
-        off.type = "button";
-        off.setAttribute("aria-label", `Take off ${tag.value}`);
-        off.addEventListener("click", () => {
-          tags.splice(tags.indexOf(tag), 1);
-          showTags();
-          input.focus();
-        });
-        pill.append(off);
-        return pill;
-      }),
-    );
+    // A child whose parent is not here, kept from last time, stands alone.
+    const keys = new Set(tags.map(keyOf));
+    pills.replaceChildren(...tags.filter((tag) => !tag.via || !keys.has(tag.via)).map(line));
     pills.hidden = tags.length === 0;
+  };
+
+  /** Puts the child tags a tag brings under it, once OpalArchive has said what they are. */
+  const bring = (tag) => {
+    const answer = opalAsk({ type: "children", field: tag.field, value: tag.value }).then((found) => {
+      if (!Array.isArray(found)) {
+        // Not to be had: an OpalArchive from before child tags, say.
+        shown = false;
+        return;
+      }
+      // Taken off while its children were being asked for.
+      if (!tags.includes(tag) || !box.isConnected) return;
+      for (const child of found) {
+        if (opalType(child?.field) && typeof child.value === "string" && !has(child.field, child.value)) {
+          tags.push({ field: child.field, value: child.value, via: keyOf(tag) });
+        }
+      }
+      showTags();
+    });
+    looking = Promise.all([looking, answer]);
   };
 
   const showOptions = () => {
@@ -317,7 +366,11 @@ function opalAskTags(anchor, submit) {
       return false;
     }
     if (!name) return false;
-    if (!has(field, name)) tags.push({ field, value: name });
+    if (!has(field, name)) {
+      const tag = { field, value: name };
+      tags.push(tag);
+      bring(tag);
+    }
     showTags();
     write("");
     return true;
@@ -349,7 +402,10 @@ function opalAskTags(anchor, submit) {
     const typed = opalRead(input.value);
     if (input.value.trim() && typed.naming === null && !add(typed.field, typed.value)) return;
     download.disabled = true;
-    const wrong = await submit(tags.map(opalText));
+    // What is sent is what is shown, once all of it is.
+    await looking;
+    if (!box.isConnected) return;
+    const wrong = await submit(tags.map(opalText), shown ? false : undefined);
     if (!box.isConnected) return;
     if (wrong) {
       complain(wrong);
@@ -387,7 +443,7 @@ function opalAskTags(anchor, submit) {
       else add(typed.field, typed.value);
     } else if (event.key === "Backspace" && input.value === "" && tags.length > 0) {
       // With nothing typed, it takes the last tag off.
-      tags.pop();
+      takeOff(tags[tags.length - 1]);
       showTags();
     }
   });
@@ -590,7 +646,7 @@ function opalButton(url, many) {
       : `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${path}"/></svg>`;
   };
   /** The address and tags last sent, to be sent again if asked. */
-  let sent = { url: "", tags: [] };
+  let sent = { url: "", tags: [], children: undefined };
   /** Shows that it failed, on the button and, unless `quiet`, in the corner. */
   const fail = (why, quiet = false) => {
     show("failed", `OpalArchive: ${why}. Click to try again.`);
@@ -600,7 +656,7 @@ function opalButton(url, many) {
       title: "Download failed",
       url: sent.url,
       messages: why.split("; ").filter(Boolean),
-      retry: () => busy || send(sent.tags).then((wrong) => wrong && fail(wrong)),
+      retry: () => busy || send(sent.tags, sent.children).then((wrong) => wrong && fail(wrong)),
     });
   };
 
@@ -630,13 +686,17 @@ function opalButton(url, many) {
     show("idle");
   };
 
-  /** Sends the post with these tags. Answers with what went wrong, if anything. */
-  const send = async (tags) => {
+  /**
+   * Sends the post with these tags. `children` is false when they are to
+   * be given as they stand, the child tags they bring being among them
+   * already. Answers with what went wrong, if anything.
+   */
+  const send = async (tags, children) => {
     const before = button.dataset.state;
     busy = true;
     show("sending");
-    sent = { url: url(), tags };
-    const request = await opalAsk({ type: "send", url: sent.url, tags });
+    sent = { url: url(), tags, children };
+    const request = await opalAsk({ type: "send", url: sent.url, tags, children });
     if (request.error) {
       busy = false;
       // The box that asked says why; the button is as it was.

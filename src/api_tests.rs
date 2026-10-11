@@ -1697,6 +1697,35 @@ async fn a_file_is_fetched_from_its_address() {
 }
 
 #[tokio::test]
+async fn a_request_says_whether_its_tags_bring_their_children() {
+    // Sent as it is by default, a tag brings its children; sent by what has
+    // shown them already, it comes as it stands.
+    for (children, brought) in [(None, 3), (Some(false), 0)] {
+        let api = Api::new();
+        api.fake_downloader();
+        api.post(
+            "/tags/child",
+            json!({ "field": "tags", "value": "once", "child_field": "genre", "child": "implied" }),
+        )
+        .await;
+        let mut request = json!({ "url": "https://example.test/board", "tags": ["once"] });
+        if let Some(children) = children {
+            request["children"] = json!(children);
+        }
+        let (_, sent) = api.call("POST", "/inbox", Some(request)).await;
+        for _ in 0..500 {
+            let request = api.get(&format!("/inbox/queue/{}", sent["id"])).await;
+            if request["status"] != "queued" && request["status"] != "running" {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert_eq!(api.found("once").await.len(), 3);
+        assert_eq!(api.found("@ge:implied").await.len(), brought);
+    }
+}
+
+#[tokio::test]
 async fn the_inbox_downloads_what_it_is_sent() {
     let api = Api::new();
     api.fake_downloader();

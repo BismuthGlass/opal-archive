@@ -27,6 +27,14 @@ struct Request {
     /// in the interface: `cat`, or with its type `@cr:someone`.
     #[serde(default)]
     tags: Vec<String>,
+    /// Whether those tags bring their child tags. The extension says no
+    /// when it has shown the children and sends the ones still wanted.
+    #[serde(default = "yes")]
+    children: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// Tags as they are typed, by field: a plain one is of type `tags`, and one
@@ -164,8 +172,8 @@ async fn enqueue(
         // was closed it stays closed, and lists it all the same.
         tab(&conn)?;
         conn.execute(
-            "INSERT INTO inbox_queue (url, downloader, tags) VALUES (?1, ?2, ?3)",
-            params![url, manifest.name, json!(tags).to_string()],
+            "INSERT INTO inbox_queue (url, downloader, tags, children) VALUES (?1, ?2, ?3, ?4)",
+            params![url, manifest.name, json!(tags).to_string(), input.children],
         )?;
         request(&conn, conn.last_insert_rowid())?
     };
@@ -318,9 +326,17 @@ fn work(state: &AppState) {
                     .query_row(
                         "UPDATE inbox_queue SET status = 'running'
                          WHERE id = (SELECT min(id) FROM inbox_queue WHERE status = 'queued')
-                         RETURNING id, url, downloader, tags",
+                         RETURNING id, url, downloader, tags, children",
                         [],
-                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                        |row| {
+                            Ok((
+                                row.get(0)?,
+                                row.get(1)?,
+                                row.get(2)?,
+                                row.get(3)?,
+                                row.get(4)?,
+                            ))
+                        },
                     )
                     .optional()
                     .unwrap_or(None);
@@ -331,12 +347,19 @@ fn work(state: &AppState) {
                 }
                 next
             };
-            let Some((id, url, downloader, tags)): Option<(i64, String, String, String)> = next
+            let Some((id, url, downloader, tags, children)): Option<(
+                i64,
+                String,
+                String,
+                String,
+                bool,
+            )> = next
             else {
                 return;
             };
             let own: BaseTags = serde_json::from_str(&tags).unwrap_or_default();
-            let (status, message, added, existing) = run(&state, &url, &downloader, own).await;
+            let (status, message, added, existing) =
+                run(&state, &url, &downloader, own, children).await;
             let _ = state.db.lock().unwrap().execute(
                 "UPDATE inbox_queue
                  SET status = ?2, message = ?3, added = ?4, existing = ?5,
@@ -354,8 +377,10 @@ async fn run(
     state: &AppState,
     url: &str,
     downloader: &str,
-    // The tags the request brought, given besides the downloader's.
+    // The tags the request brought, given besides the downloader's, and
+    // whether they bring their child tags.
     own: BaseTags,
+    children: bool,
 ) -> (&'static str, String, i64, i64) {
     let failed = |message: String| ("failed", message, 0, 0);
     let manifest = match manifest(state, downloader) {
@@ -370,8 +395,13 @@ async fn run(
         Ok(ready) => ready,
         Err(err) => return failed(err.to_string()),
     };
+    // Tags that bring their children go with the downloader's own, which
+    // do; the others are kept apart, to be given as they stand.
+    let mut exact = BaseTags::new();
     for (field, values) in own {
-        let had = base.entry(field).or_default();
+        let had = if children { &mut base } else { &mut exact }
+            .entry(field)
+            .or_default();
         for value in values {
             if !had.contains(&value) {
                 had.push(value);
@@ -395,7 +425,10 @@ async fn run(
             cancel: stop.clone(),
         },
     );
-    let download = Download::new(state.clone(), tab, manifest, base, out, status);
+    let download = Download {
+        exact,
+        ..Download::new(state.clone(), tab, manifest, base, out, status)
+    };
     let outcome = download.run(request, stop).await;
     let _ = tokio::fs::remove_dir_all(&download.out).await;
     let mut status = download.status.lock().unwrap();

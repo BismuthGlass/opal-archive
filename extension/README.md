@@ -8,7 +8,9 @@ an address, which goes into Opal Drop's queue (see `downloaders/README.md`).
   asks for tags to give what is downloaded, entered as in OpalArchive's own
   tagger: typing suggests the tags there are, `@cr:name` is a tag of
   another type, Enter adds one, and Shift+Enter (or Download) sends the
-  post. Shift-click on the button sends it at once, with no tags. The
+  post. The tags are listed one to a line, and a tag that has child tags
+  shows them under it as soon as it is added: any of them can be taken
+  off before sending. Shift-click on the button sends it at once, with no tags. The
   button turns into a spinner while the post waits and downloads, then a
   tick, or a cross. A download that goes wrong is also said in the bottom
   right corner of the page: pressing the notice opens it, with why and a

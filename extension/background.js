@@ -29,13 +29,19 @@ async function ask(method, path, body) {
 
 /**
  * Puts an address in OpalArchive's queue, with any tags to give what it
- * downloads. Answers with the request made.
+ * downloads. Answers with the request made. `children` is false when the
+ * tags are to be given as they stand, the child tags they bring having
+ * been shown already; left out, OpalArchive brings them itself.
  */
-const send = (url, tags = []) => ask("POST", "/inbox", { url, tags });
+const send = (url, tags = [], children) =>
+  ask("POST", "/inbox", children === false ? { url, tags, children } : { url, tags });
 /** What has become of a request. */
 const status = (id) => ask("GET", `/inbox/queue/${id}`);
 /** The tags of a type that match what has been typed, as OpalArchive suggests them. */
 const suggest = (field, q) => ask("GET", `/tags?${new URLSearchParams({ field, q })}`);
+/** Every tag that adding one brings: its child tags, and theirs. */
+const childrenOf = (field, value) =>
+  ask("GET", `/tags/children?${new URLSearchParams({ field, value })}`);
 /** OpalArchive's settings: the colours given to the tag types are among them. */
 const settings = () => ask("GET", "/settings");
 
@@ -88,11 +94,13 @@ async function sendLogin(name, sites) {
 chrome.runtime.onMessage.addListener((message, _sender, respond) => {
   const answer =
     message?.type === "send"
-      ? send(message.url, message.tags)
+      ? send(message.url, message.tags, message.children)
       : message?.type === "status"
         ? status(message.id)
         : message?.type === "suggest"
           ? suggest(message.field, message.q)
+          : message?.type === "children"
+            ? childrenOf(message.field, message.value)
           : message?.type === "settings"
             ? settings()
             : message?.type === "logins"

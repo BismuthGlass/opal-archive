@@ -183,10 +183,28 @@
   font-weight: 600;
 }
 
-.opalarchive-popup .opalarchive-pills {
+/* The tags added so far, one to a line; a long list scrolls. */
+.opalarchive-popup .opalarchive-tags {
+  max-height: 190px;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+/* Under a tag, set in: the child tags it brought. */
+.opalarchive-popup .opalarchive-brought {
+  flex: 0 0 100%;
+  padding: 0 0 0 16px;
+  margin: 0;
+  list-style: none;
+}
+
+.opalarchive-popup .opalarchive-line {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 12px;
+  gap: 2px;
+  align-items: center;
 }
 
 /* A tag, written in its type's colour for the theme, with no background:
@@ -199,12 +217,6 @@
   max-width: 100%;
   overflow-wrap: anywhere;
   color: var(--opal-tag-on-light, inherit);
-}
-
-/* Its name is bold if its type is: everything in the box is given a font
-   of its own, so the weight has to be handed down. */
-.opalarchive-popup .opalarchive-tag > span {
-  font-weight: inherit;
 }
 
 .opalarchive-popup .opalarchive-off {

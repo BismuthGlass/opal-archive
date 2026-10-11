@@ -266,6 +266,7 @@ Every multi-value text field of the schema (tags, creator, character, flaws, med
 - It happens once, when the parent is added to a file that did not carry it. Taking the parent off leaves the children on, and a child taken off does not come back unless the parent is taken off and added again.
 - It happens wherever tags are added by hand or by a tab: in the tagger, and for the tags an upload, download or inbox tab gives. Importing a file's metadata from a sidecar adds only the tags written there.
 - In the tagger the children show as soon as their parent is put on, waiting with it and listed under it, set in, whatever their type, rather than in their own place. Each can be called off before saving, and calling the parent off calls them off too. What is saved is what is shown, on every file selected.
+- The browser extension's box of tags shows them the same way: one tag to a line, the children a tag brings under it, each to be taken off before sending. What it sends is given as it stands. An extension that could not ask for the children sends the tags alone, and they bring their children as they are given.
 - Giving a tag a child changes nothing on the files that already carry the tag.
 - Child tags follow a renamed tag, and go when either tag is deleted. An alias has no children: adding it adds the tag it defers to, and that tag's children.
 
