@@ -32,6 +32,7 @@ const WHEEL_PAUSE = 100;
 const PARTS: { part: ViewerPart; label: string }[] = [
   { part: "player", label: "Player" },
 ];
+
 /** How narrow and how wide the info pane can be dragged, and where its width is kept. */
 const INFO_LEAST = 180;
 const INFO_MOST = 520;
@@ -55,15 +56,52 @@ function storeInfoWidth(width: number | null) {
   }
 }
 
-/** What the info pane says of the file besides its tags, where it is set. */
-const DETAILS = [
-  { field: "title", label: "Title" },
-  { field: "date", label: "Date" },
-  { field: "content_rating", label: "Rating" },
-  { field: "score", label: "Score" },
-  { field: "version", label: "Version" },
-  { field: "description", label: "Description" },
+/**
+ * What the info pane says of the file besides its tags, in the order it
+ * says it: what the file is, then what has been set of it. Each has a row
+ * when there is something to say, unless it has been put away.
+ */
+const ROWS = [
+  { key: "name", label: "Name" },
+  { key: "type", label: "Type" },
+  { key: "size", label: "Size" },
+  { key: "length", label: "Length" },
+  { key: "pages", label: "Pages" },
+  { key: "disk", label: "On disk" },
+  { key: "added", label: "Added" },
+  { key: "id", label: "ID" },
+  { key: "title", label: "Title" },
+  { key: "date", label: "Date" },
+  { key: "content_rating", label: "Rating" },
+  { key: "score", label: "Score" },
+  { key: "version", label: "Version" },
+  { key: "description", label: "Description" },
 ];
+
+/** What a row says of a file, or nothing where there is nothing to say. */
+function rowValue(key: string, entity: api.Entity, data: api.Metadata) {
+  const file = entity.file;
+  switch (key) {
+    case "name":
+      return file.original_name;
+    case "type":
+      return file.media_type + (file.extension ? ` (${file.extension})` : "");
+    case "size":
+      return file.width && file.height ? `${file.width} × ${file.height}` : null;
+    case "length":
+      return file.length === null ? null : duration(file.length);
+    case "pages":
+      return file.page_count;
+    case "disk":
+      return fileSize(file.size);
+    case "added":
+      return dateTime(entity.date_added);
+    case "id":
+      return entity.id;
+    default:
+      return data.scalars[key]?.value ?? null;
+  }
+}
 
 /**
  * Full-window view of one result. Left / right step through the results,
@@ -92,14 +130,24 @@ export default function Viewer(props: {
   const shows = (part: ViewerPart) => settings.viewer?.[part] ?? part !== "info";
   const toggle = (part: ViewerPart) =>
     saveSetting("viewer", { ...settings.viewer, [part]: !shows(part) }).catch(() => {});
-  const [choosing, setChoosing] = createSignal(false);
+  /** Which menu of what is shown is open: the top bar's, or the info pane's. */
+  const [menu, setMenu] = createSignal<"bar" | "pane" | null>(null);
   let chooser: HTMLDivElement | undefined;
+  let paneChooser: HTMLDivElement | undefined;
+  /** What of the info pane has been put away: rows, lists of tags, the links. */
+  const hidden = () => settings.viewer?.hidden ?? [];
+  const toggleHidden = (key: string) =>
+    saveSetting("viewer", {
+      ...settings.viewer,
+      hidden: hidden().includes(key) ? hidden().filter((k) => k !== key) : [...hidden(), key],
+    }).catch(() => {});
   // A press anywhere else closes the menu of what is shown, and does no
   // more than that: on the backdrop it does not close the viewer too.
   let dismissing = false;
   const pressed = (event: PointerEvent) => {
-    dismissing = choosing() && !chooser?.contains(event.target as Node);
-    if (dismissing) setChoosing(false);
+    const target = event.target as Node;
+    dismissing = menu() !== null && !chooser?.contains(target) && !paneChooser?.contains(target);
+    if (dismissing) setMenu(null);
   };
   onMount(() => window.addEventListener("pointerdown", pressed, true));
   onCleanup(() => window.removeEventListener("pointerdown", pressed, true));
@@ -144,18 +192,28 @@ export default function Viewer(props: {
     return shows("info") && file && data ? { file, data } : undefined;
   };
   /**
-   * The file's tags as the side panel lists them: those of the aggregated
-   * types in one list, then each other type that has any under its name.
+   * The lists the file's tags are in, as the side panel has them: those of
+   * the aggregated types in one, then one for each other type.
    */
-  const tagLists = (tags: api.Metadata["tags"]) => {
-    const of = (field: string) => (tags[field] ?? []).map((tag) => ({ field, value: tag.value }));
-    return [
-      { label: "Tags", tags: aggregatedTypes().flatMap(of) },
-      ...orderedTypes()
-        .filter((field) => !tagType(field).aggregate)
-        .map((field) => ({ label: fieldLabel(field), tags: of(field) })),
-    ].filter((list) => list.tags.length > 0);
-  };
+  const tagGroups = () => [
+    { key: "tags", label: "Tags", fields: aggregatedTypes() },
+    ...orderedTypes()
+      .filter((field) => !tagType(field).aggregate)
+      .map((field) => ({ key: `tags:${field}`, label: fieldLabel(field), fields: [field] })),
+  ];
+  /** Those of them that hold something and have not been put away. */
+  const tagLists = (tags: api.Metadata["tags"]) =>
+    tagGroups()
+      .filter((group) => !hidden().includes(group.key))
+      .map((group) => ({
+        label: group.label,
+        tags: group.fields.flatMap((field) =>
+          (tags[field] ?? []).map((tag) => ({ field, value: tag.value })),
+        ),
+      }))
+      .filter((list) => list.tags.length > 0);
+  /** All that can be put away, as the pane's menu lists it. */
+  const paneParts = () => [...ROWS, ...tagGroups(), { key: "links", label: "Links" }];
 
   // The sets the result is in, named before its title: the one on show
   // first.
@@ -247,7 +305,7 @@ export default function Viewer(props: {
       if (event.key === "Escape") (event.target as HTMLElement).blur();
       else return;
     } else if (event.key === "Escape") {
-      if (choosing()) setChoosing(false);
+      if (menu()) setMenu(null);
       else props.onMove(null);
     } else if (event.key === "ArrowLeft") step(-1);
     else if (event.key === "ArrowRight") step(1);
@@ -273,43 +331,51 @@ export default function Viewer(props: {
           class="viewer-side"
           style={{ "--info-width": infoWidth() === null ? undefined : `${infoWidth()}px` }}
         >
+          <div class="viewer-info-head" ref={paneChooser}>
+            <span>Info</span>
+            <button
+              aria-haspopup="menu"
+              aria-expanded={menu() === "pane"}
+              aria-label="What the pane shows"
+              title="Choose what the pane shows"
+              onClick={() => setMenu(menu() === "pane" ? null : "pane")}
+            >
+              <Icon name="visibility-outline" />
+            </button>
+            <Show when={menu() === "pane"}>
+              <ul class="context-menu viewer-menu" role="menu">
+                <li class="context-menu-title">Show</li>
+                <For each={paneParts()}>
+                  {(entry) => (
+                    <li>
+                      <button
+                        role="menuitemcheckbox"
+                        aria-checked={!hidden().includes(entry.key)}
+                        onClick={() => toggleHidden(entry.key)}
+                      >
+                        <span class="viewer-check">
+                          <Show when={!hidden().includes(entry.key)}>
+                            <Icon name="check" />
+                          </Show>
+                        </span>
+                        {entry.label}
+                      </button>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          </div>
           <aside class="viewer-info" aria-label="Info">
             <Show when={info()}>
               {(about) => (
                 <>
                   <dl>
-                    <dt>Name</dt>
-                    <dd>{about().file.file.original_name ?? "—"}</dd>
-                    <dt>Type</dt>
-                    <dd>
-                      {about().file.file.media_type}
-                      {about().file.file.extension && ` (${about().file.file.extension})`}
-                    </dd>
-                    <Show when={about().file.file.width && about().file.file.height}>
-                      <dt>Size</dt>
-                      <dd>
-                        {about().file.file.width} × {about().file.file.height}
-                      </dd>
-                    </Show>
-                    <Show when={about().file.file.length !== null}>
-                      <dt>Length</dt>
-                      <dd>{duration(about().file.file.length!)}</dd>
-                    </Show>
-                    <Show when={about().file.file.page_count !== null}>
-                      <dt>Pages</dt>
-                      <dd>{about().file.file.page_count}</dd>
-                    </Show>
-                    <dt>On disk</dt>
-                    <dd>{fileSize(about().file.file.size)}</dd>
-                    <dt>Added</dt>
-                    <dd>{dateTime(about().file.date_added)}</dd>
-                    <dt>ID</dt>
-                    <dd>{about().file.id}</dd>
-                    <For each={DETAILS}>
-                      {(detail) => (
-                        <Show when={about().data.scalars[detail.field]?.value != null}>
-                          <dt>{detail.label}</dt>
-                          <dd>{about().data.scalars[detail.field].value}</dd>
+                    <For each={ROWS.filter((row) => !hidden().includes(row.key))}>
+                      {(row) => (
+                        <Show when={rowValue(row.key, about().file, about().data) != null}>
+                          <dt>{row.label}</dt>
+                          <dd>{rowValue(row.key, about().file, about().data)}</dd>
                         </Show>
                       )}
                     </For>
@@ -332,7 +398,7 @@ export default function Viewer(props: {
                       </>
                     )}
                   </For>
-                  <Show when={about().data.source_url.length > 0}>
+                  <Show when={about().data.source_url.length > 0 && !hidden().includes("links")}>
                     <h3>Links</h3>
                     <ul class="viewer-links">
                       <For each={about().data.source_url}>
@@ -462,14 +528,14 @@ export default function Viewer(props: {
           <div class="viewer-chooser" ref={chooser}>
             <button
               aria-haspopup="menu"
-              aria-expanded={choosing()}
+              aria-expanded={menu() === "bar"}
               aria-label="What is shown"
               title="Choose what the bar shows"
-              onClick={() => setChoosing(!choosing())}
+              onClick={() => setMenu(menu() === "bar" ? null : "bar")}
             >
               <Icon name="visibility-outline" />
             </button>
-            <Show when={choosing()}>
+            <Show when={menu() === "bar"}>
               <ul class="context-menu viewer-menu" role="menu">
                 <li class="context-menu-title">Show</li>
                 <For each={PARTS}>

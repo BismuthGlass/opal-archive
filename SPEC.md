@@ -129,6 +129,7 @@ The viewer shows one file over the whole window. Its top bar names the file: the
 
 - A button at the start of the top bar, before the title, or the I key, opens an info pane down the whole left side of the window, beside what is shown and its bar. It says all there is of the file, to read and not to change, so it is small and close: its name, type, dimensions, length or pages, size on disk, when it was added and its ID; then its title, date, rating, score, version and description, where they are set; then its tags as the side panel lists them, one to a line in their types' colours, those of the aggregated types together and each other type under its name; then its links. The pane is in the theme's colours. It is closed at first.
 - The pane can be made wider or narrower by dragging its right edge, within limits that leave what is shown at least half the window; a double click on the edge puts it back. Its width is remembered by the browser.
+- A button at the top of the pane opens a menu of what it shows, each to be put away or brought back: every row, every list of tags, the links. What is put away is a setting.
 - Another button opens a menu of what the top bar shows, each to be put away or brought back: for now, the player.
 - Whether the pane is open and what the bar shows are settings.
 

@@ -29,7 +29,10 @@ export type Settings = {
    * The parts of the viewer put away or kept. One not named is shown,
    * but for the info pane, which is closed until it is opened.
    */
-  viewer?: Partial<Record<ViewerPart, boolean>>;
+  viewer?: Partial<Record<ViewerPart, boolean>> & {
+    /** What of the info pane has been put away: rows, lists of tags, the links. */
+    hidden?: string[];
+  };
   /** Queries kept to be used again, in the order they are offered. */
   savedQueries?: SavedQuery[];
   /** What files are called when they are downloaded or exported. */
