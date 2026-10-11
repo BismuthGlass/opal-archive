@@ -2295,21 +2295,22 @@ span.chip-label:hover {
   line-height: 0;
 }
 
-/* The file's tags, down the left edge and over what is shown. Their
-   colours are the theme's, so they are on the theme's ground: light or
-   dark, and a little seen through. */
+/* The file's tags, in the bottom left corner, right against the edges and
+   over what is shown. Their colours are the theme's, so they are on the
+   theme's ground: light or dark, and a little seen through. They stop
+   short of the button to step back, and scroll when they are more. */
 .viewer-tags {
   position: absolute;
-  top: 0;
-  left: 48px;
+  bottom: 0;
+  left: 0;
   z-index: 1;
-  max-width: min(260px, 40%);
-  max-height: calc(100% - 16px);
-  padding: 6px 12px 8px 0;
+  max-width: min(240px, 40%);
+  max-height: calc(50vh - 52px);
+  padding: 4px 8px 6px 0;
   overflow-y: auto;
   color: var(--text);
   background: rgb(255 255 255 / 0.85);
-  border-radius: 8px;
+  border-top-right-radius: 8px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -2320,14 +2321,14 @@ span.chip-label:hover {
 
 .viewer-tags .label {
   display: block;
-  padding-left: 12px;
-  margin-top: 6px;
+  padding-left: 8px;
+  margin-top: 4px;
   font-size: 12px;
   color: var(--muted);
 }
 
 .viewer-tags .tag-lines {
-  padding-left: 12px;
+  padding-left: 8px;
 }
 
 .viewer-tags .tag-name {

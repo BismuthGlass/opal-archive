@@ -127,7 +127,7 @@ The side panel ends in a drawer that shows the selected file: bigger than its ti
 
 The viewer shows one file over the whole window. Its top bar names the file: the sets it is in, its title, and after that its file name behind an icon of a file, so that the two are not confused. A file that came without a name is named by its hash.
 
-- The file's tags are listed down the left edge, over what is shown, as the side panel lists them: one to a line in their types' colours, those of the aggregated types together and each other type under its name. They are on a ground of the theme's colour, light or dark, so that they can be read over any picture. More than fit can be scrolled.
+- The file's tags are listed in the bottom left corner, right against the edges and over what is shown, as the side panel lists them: one to a line in their types' colours, those of the aggregated types together and each other type under its name. They are on a ground of the theme's colour, light or dark, so that they can be read over any picture. They stop short of the button to step back; more than fit can be scrolled.
 - A button in the top bar opens a menu of what the viewer shows, each to be put away or brought back: the player, the file name, the tags. All are shown at first. What is chosen is a setting.
 
 ## Stacked and saved queries
