@@ -186,25 +186,32 @@
 .opalarchive-popup .opalarchive-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 2px 12px;
 }
 
-.opalarchive-popup .opalarchive-pill {
+/* A tag, written in its type's colour for the theme, with no background:
+   the colours come inline, from OpalArchive's settings. A type with none
+   is written as the rest of the text is. */
+.opalarchive-popup .opalarchive-tag {
   display: inline-flex;
   gap: 2px;
   align-items: center;
   max-width: 100%;
-  padding: 1px 8px;
   overflow-wrap: anywhere;
-  border-radius: 999px;
+  color: var(--opal-tag-on-light, inherit);
+}
+
+/* Its name is bold if its type is: everything in the box is given a font
+   of its own, so the weight has to be handed down. */
+.opalarchive-popup .opalarchive-tag > span {
+  font-weight: inherit;
 }
 
 .opalarchive-popup .opalarchive-off {
-  margin-right: -4px;
   padding: 0 3px;
   font-size: 14px;
   line-height: 1;
-  color: inherit;
+  color: var(--opal-muted);
   background: none;
   border: none;
   opacity: 0.6;
@@ -517,6 +524,10 @@
 @media (prefers-color-scheme: dark) {
   .opalarchive-button {
     color: #a6a7ab;
+  }
+
+  .opalarchive-popup .opalarchive-tag {
+    color: var(--opal-tag-on-dark, inherit);
   }
 
   .opalarchive-popup,

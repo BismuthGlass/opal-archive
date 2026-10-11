@@ -58,25 +58,26 @@ async function opalKeep(values) {
 }
 
 // The tag types, as OpalArchive has them: each one's name, the short name
-// it goes by after an @, and the colours of its pills unless the user has
-// chosen others. `@cr:name` is the creator `name`; a tag with no @ is a
-// plain one, of type `tags`.
+// it goes by after an @, and the colour its tags are written in on a light
+// theme and on a dark one, unless the user has chosen others. A type with
+// no colour is written as the rest of the text is. `@cr:name` is the
+// creator `name`; a tag with no @ is a plain one, of type `tags`.
 const OPAL_TYPES = [
-  ["tags", "ta", "#e3e6ea", "#22262b"],
-  ["creator", "cr", "#ffd8a8", "#5c2a00"],
-  ["character", "ch", "#c5efcf", "#0b4a1e"],
-  ["source_work", "sw", "#d5dbff", "#1b236e"],
-  ["person", "pe", "#ffd2df", "#6b0f2c"],
-  ["genre", "ge", "#e5d3ff", "#3e1378"],
-  ["style", "st", "#c6f0f1", "#06484c"],
-  ["medium", "me", "#f2e2c2", "#513a06"],
-  ["flaws", "fl", "#ffd0cb", "#7a1410"],
-  ["language", "la", "#d1ebff", "#0a3c65"],
-  ["source", "so", "#e2e8c6", "#374209"],
-  ["usage_tags", "us", "#ffe8a3", "#594200"],
-  ["ai_usage_tags", "ai", "#d8d5e8", "#2e2949"],
+  ["tags", "ta", null, null],
+  ["creator", "cr", "#a85400", "#ffd8a8"],
+  ["character", "ch", "#1a7a35", "#c5efcf"],
+  ["source_work", "sw", "#3040b0", "#d5dbff"],
+  ["person", "pe", "#b0204f", "#ffd2df"],
+  ["genre", "ge", "#6a2bc0", "#e5d3ff"],
+  ["style", "st", "#0a777d", "#c6f0f1"],
+  ["medium", "me", "#7d5a0a", "#f2e2c2"],
+  ["flaws", "fl", "#b3261e", "#ffd0cb"],
+  ["language", "la", "#1565a8", "#d1ebff"],
+  ["source", "so", "#556b0f", "#e2e8c6"],
+  ["usage_tags", "us", "#8a6500", "#ffe8a3"],
+  ["ai_usage_tags", "ai", "#54497f", "#d8d5e8"],
   ["bucket", "bu", "#3b4252", "#f1f3f7"],
-].map(([field, prefix, bg, fg]) => ({ field, prefix, bg, fg }));
+].map(([field, prefix, light, dark]) => ({ field, prefix, light, dark, bold: false }));
 
 /** How many suggestions are listed at once. */
 const OPAL_SUGGESTIONS = 8;
@@ -109,17 +110,44 @@ function opalRead(text) {
   };
 }
 
-/** The colours the user has given the tag types in OpalArchive, asked for once. */
+/** How light a `#rrggbb` colour is, from 0 to 1. */
+function opalLightness(colour) {
+  const part = (at) => parseInt(colour.slice(at, at + 2), 16) / 255;
+  return 0.2126 * part(1) + 0.7152 * part(3) + 0.0722 * part(5);
+}
+
+/**
+ * A type as the user has it in OpalArchive's settings, over its defaults.
+ * One saved when tags were pills has a background and a text colour
+ * instead: of the two, the darker shows on a light theme and the lighter
+ * on a dark one.
+ */
+function opalChosen(type, chosen) {
+  const { bg, fg, ...rest } = chosen ?? {};
+  const old = {};
+  if (bg && fg) [old.light, old.dark] = opalLightness(bg) < opalLightness(fg) ? [bg, fg] : [fg, bg];
+  else if (bg) old.dark = bg;
+  else if (fg) old.light = fg;
+  return { ...type, ...old, ...rest };
+}
+
+/** What the user has set for the tag types in OpalArchive, asked for once. */
 let opalColours = null;
-function opalPillStyle(element, field) {
-  const type = opalType(field);
-  element.style.background = type.bg;
-  element.style.color = type.fg;
+/**
+ * Has an element written as a tag of a type is: in the type's colour for
+ * the theme, which the stylesheet picks, and in bold if the type is.
+ */
+function opalTagStyle(element, field) {
+  const show = (type) => {
+    for (const [name, colour] of [["--opal-tag-on-light", type.light], ["--opal-tag-on-dark", type.dark]]) {
+      if (colour) element.style.setProperty(name, colour);
+      else element.style.removeProperty(name);
+    }
+    element.style.fontWeight = type.bold ? "700" : "";
+  };
+  show(opalType(field));
   opalColours ??= opalAsk({ type: "settings" }).then((settings) => settings?.tagTypes ?? {});
-  opalColours.then((chosen) => {
-    if (chosen[field]?.bg) element.style.background = chosen[field].bg;
-    if (chosen[field]?.fg) element.style.color = chosen[field].fg;
-  });
+  opalColours.then((chosen) => show(opalChosen(opalType(field), chosen[field])));
 }
 
 /** An element with a class, and text if any. */
@@ -183,8 +211,8 @@ function opalAskTags(anchor, submit) {
   const showTags = () => {
     pills.replaceChildren(
       ...tags.map((tag) => {
-        const pill = opalElement("span", "opalarchive-pill");
-        opalPillStyle(pill, tag.field);
+        const pill = opalElement("span", "opalarchive-tag");
+        opalTagStyle(pill, tag.field);
         pill.title = `${opalLabel(tag.field)}: ${tag.value}`;
         pill.append(opalElement("span", "", tag.value));
         const off = opalElement("button", "opalarchive-off", "×");
@@ -209,12 +237,17 @@ function opalAskTags(anchor, submit) {
         row.setAttribute("role", "option");
         row.setAttribute("aria-selected", String(index === active));
         if (option.kind === "type") {
-          const sample = opalElement("span", "opalarchive-pill", opalLabel(option.field));
-          opalPillStyle(sample, option.field);
+          const sample = opalElement("span", "opalarchive-tag", opalLabel(option.field));
+          opalTagStyle(sample, option.field);
           row.append(sample, opalElement("span", "opalarchive-note", `@${opalType(option.field).prefix}:`));
         } else {
           const value = opalElement("span", "opalarchive-value");
-          if (option.alias) value.append(opalElement("span", "opalarchive-note", `${option.alias} → `));
+          if (option.alias) {
+            // Found by an alias: the alias, struck out, then the tag it stands for.
+            const alias = opalElement("span", "opalarchive-note");
+            alias.append(opalElement("s", "", option.alias), " → ");
+            value.append(alias);
+          }
           value.append(option.value);
           const note = option.has
             ? "already added"
