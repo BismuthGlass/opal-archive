@@ -23,9 +23,8 @@ import { DropTarget, UploadBox } from "./components/Upload";
 import Viewer from "./components/Viewer";
 import * as api from "./api";
 import { errorMessage, plural } from "./format";
-import { actionFor, keyFor, keyLabel } from "./hotkeys";
+import { actionFor } from "./hotkeys";
 import {
-  MARKS,
   PAGE,
   clearSelection,
   changed,
@@ -91,9 +90,7 @@ export default function App() {
   const [scoring, setScoring] = createSignal<{ ids: number[]; name: string } | null>(null);
   /** What the next digit rates, after the rating key. */
   const [rating, setRating] = createSignal<{ ids: number[]; name: string } | null>(null);
-  /** What the next digit marks, after the mark-as key. */
-  const [marking, setMarking] = createSignal<{ ids: number[]; name: string } | null>(null);
-  /** The mark the mark key gives: the one last picked with the mark-as key. */
+  /** The mark the mark key gives: the one last given with a key of its own. */
   let usualMark = 1;
   const [panelOpen, setPanelOpen] = createStoredFlag("opalarchive.panel", true);
 
@@ -311,12 +308,6 @@ export default function App() {
     changed();
   };
 
-  /** The digit a key stands for, with Shift still down or not. */
-  const digitOf = (event: KeyboardEvent) => {
-    const digit = /^\d$/.test(event.key) ? event.key : /^(?:Digit|Numpad)(\d)$/.exec(event.code)?.[1];
-    return digit === undefined ? null : Number(digit);
-  };
-
   // On the window and capturing, so that it hears keys before the viewer
   // does and can keep the ones it uses from it.
   const onKeyDown = (event: KeyboardEvent) => {
@@ -355,33 +346,6 @@ export default function App() {
       }
     }
 
-    // After the mark-as key, likewise, the next key is the mark.
-    const marked = marking();
-    if (marked) {
-      // Letting go of Shift, or holding it, is not an answer.
-      if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return;
-      setMarking(null);
-      hideToast();
-      const digit = digitOf(event);
-      const number = digit !== null && digit <= MARKS ? digit : null;
-      if (number !== null || event.key === "Escape") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        if (number) {
-          // Picked once, it is what the mark key gives from then on. Given
-          // to what already has it, it would be taken off: it is kept on.
-          usualMark = number;
-          if (!toggleMark(marked.ids, number)) toggleMark(marked.ids, number);
-          showToast(
-            `Gave ${marked.name} mark ${number}. ${keyLabel(keyFor("mark"))} now gives mark ${number}`,
-          );
-        } else if (number === 0) {
-          mark(marked, null);
-        }
-        return;
-      }
-    }
-
     const action = actionFor(event);
     // Where a file stands in the view is the gallery's to change: in the
     // viewer those keys are left to it.
@@ -395,12 +359,12 @@ export default function App() {
         setTagging(on);
       } else if (action === "mark") {
         mark(on, usualMark);
-      } else if (action === "markAs") {
-        setMarking(on);
-        showToast(
-          `Mark ${on.name}: press 1 to ${MARKS}, which the mark key then gives too, or 0 to take every mark off`,
-          true,
-        );
+      } else if (action === "unmark") {
+        mark(on, null);
+      } else if (/^mark\d$/.test(action)) {
+        // Each mark has a key of its own, which the mark key then repeats.
+        usualMark = Number(action.slice(4));
+        mark(on, usualMark);
       } else if (action === "moveToStart" || action === "moveToEnd") {
         const end = action === "moveToEnd";
         moveItems(on.ids, end ? search.total : 0)

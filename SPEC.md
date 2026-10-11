@@ -109,6 +109,8 @@ While something is selected, "Go to first" above the grid, or the G key, goes to
 
 A file can be given any of five marks, numbered and coloured, and several at once: giving one leaves the others on. They are there to sort through what is on show. Marks change nothing in the library, and are remembered by the browser.
 
+Each mark has a key of its own, 1 to 5 unless changed in the settings, which gives the mark to what is selected or takes it off what already has it; 0 takes every mark off. M gives the mark last given again.
+
 Marks belong to the tab, not to one view of it. A file marked in a search is marked in its set too, once the tab goes into it, and in its variants and its collection; a file marked there is still marked after going back out. Another tab has marks of its own.
 
 The count of each mark above the grid, and selecting by mark, take in only what the view on show lists. Clearing a mark takes it off everything in the tab that has it.
