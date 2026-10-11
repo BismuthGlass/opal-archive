@@ -36,7 +36,7 @@ Uploaded files should be brought into internal storage, with their hash for a fi
 
 Thumbnails should also be stored for each file (in a separate dir).
 
-The panel at the top of an upload tab can be folded down to one row, to leave the files more room; folded, it still says how an upload or a download is going. Whether it is folded is remembered by the browser, for every upload tab.
+The panel at the top of an upload tab can be put away, to leave the files more room, by a handle that hangs under it: only the handle is left, on a line where the panel was. Away, the panel still shows how an upload or a download is going, while one is, and stays to say that uploads failed. Whether it is away is remembered by the browser, for every upload tab.
 
 An upload tab also takes web addresses, in a field beside its button. An address of a site there is a downloader for (a post, a board, a thread) is given to that downloader, which downloads what is there into the tab: see Downloaders. Any other address has to be of a file itself: the server fetches the file and takes it in as an upload, with the address as its source URL; a page is refused, and nothing is looked for inside it. Several addresses can be pasted at once, of either sort, and are taken one after the other.
 

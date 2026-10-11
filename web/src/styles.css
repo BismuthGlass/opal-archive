@@ -2954,29 +2954,63 @@ kbd {
   border-radius: 8px;
 }
 
-/* The button that folds a tab's panel down to its first row, and opens
-   it again: an arrow, and folded, what the panel is. */
-.download-row > button.panel-fold:not(.primary) {
+/* An upload tab's panel, with the handle it is put away by: a small tab
+   hanging from the middle of its lower edge. */
+.upload-drawer {
+  display: flex;
   flex: none;
-  gap: 0;
-  padding: 2px 6px 2px 8px;
-  color: var(--muted);
-  background: none;
-  border: none;
+  flex-direction: column;
 }
 
-.download-row > button.panel-fold:hover {
+.drawer-handle {
+  display: flex;
+  justify-content: center;
+  /* Over the panel's own edge, so the two are one shape. */
+  margin: -1px 12px 0;
+}
+
+.drawer-handle button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px 1px 8px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top-color: var(--surface);
+  border-radius: 0 0 8px 8px;
+}
+
+.drawer-handle button:hover {
   color: var(--text);
 }
 
-.panel-fold .chevron.open {
+/* The arrow points up, to put the panel away, and down to bring it back. */
+.drawer-handle .chevron {
+  margin: 0 2px 0 0;
+  line-height: 0;
+  transform: rotate(-90deg);
+}
+
+.upload-drawer.folded .drawer-handle .chevron {
   transform: rotate(90deg);
 }
 
-/* Folded, the panel is as thin as its one row. */
-.download-panel.folded {
-  padding-top: 4px;
-  padding-bottom: 4px;
+/* Put away, the handle hangs from a line where the panel was. */
+.upload-drawer.folded .drawer-handle {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.upload-drawer.folded .drawer-handle button {
+  margin-top: -1px;
+}
+
+/* While something arrives with the panel away, the handle hangs from
+   what is left of the panel instead. */
+.upload-drawer.folded .download-panel + .drawer-handle {
+  margin-top: -1px;
+  border-top: none;
 }
 
 .download-panel > p,
