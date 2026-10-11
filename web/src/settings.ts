@@ -37,6 +37,8 @@ export type Settings = {
   savedQueries?: SavedQuery[];
   /** What files are called when they are downloaded or exported. */
   downloadNames?: api.Naming;
+  /** How many results a page of a view holds, if not the usual number. */
+  pageSize?: number;
   /** Whether a view lists a set once, as one tile, rather than every file of it. */
   collapseSets?: boolean;
 };

@@ -3,10 +3,11 @@ import { plural } from "../format";
 import * as api from "../api";
 import {
   MARKS,
-  PAGE,
   goToPage,
   markCounts,
+  markNames,
   pageCount,
+  pageSize,
   resetOrder,
   resultIds,
   search,
@@ -21,8 +22,8 @@ import Icon from "./Icon";
  * of its marks, and the pages of it.
  */
 export default function Toolbar() {
-  const from = () => search.page * PAGE + 1;
-  const to = () => Math.min(search.total, (search.page + 1) * PAGE);
+  const from = () => search.page * pageSize() + 1;
+  const to = () => Math.min(search.total, (search.page + 1) * pageSize());
   const filtered = () => search.query.trim() !== "";
 
   const saveOrder = async (id: string) => {
@@ -52,12 +53,16 @@ export default function Toolbar() {
                 <Show when={markCounts()[mark] > 0}>
                   <button
                     class={`mark-badge mark-${mark}`}
-                    aria-label={`Mark ${mark}: ${plural(markCounts()[mark], "item")}`}
+                    aria-label={`Mark ${mark}${markNames()[mark] ? ` (${markNames()[mark]})` : ""}: ${plural(markCounts()[mark], "item")}`}
                     title={`${plural(markCounts()[mark], "item")} with mark ${mark}. Click to select, Ctrl or Cmd and click to add to the selection, right click for more.`}
                     // Cmd stands in for Ctrl, as it does on a tile.
                     onClick={(event) => selectMarked(mark, event.ctrlKey || event.metaKey)}
                     onContextMenu={(event) => openMarkMenu(event, mark)}
                   >
+                    {/* What the mark has been named here, before its count. */}
+                    <Show when={markNames()[mark]}>
+                      <span class="mark-name">{markNames()[mark]}</span>
+                    </Show>
                     {markCounts()[mark]}
                   </button>
                 </Show>

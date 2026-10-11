@@ -22,7 +22,6 @@ import {
   marks,
   moveItems,
   noteScroll,
-  PAGE,
   scrollTo,
   setSought,
   sought,
@@ -30,6 +29,7 @@ import {
   searchCount,
   selected,
   setScrollTo,
+  pageSize,
 } from "../search";
 import { stats } from "../stats";
 import { activeTab, enter, inside, shownCollection, shownSet, shownVariants } from "../tabs";
@@ -108,8 +108,8 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
   const tile = () => (width() - 2 * PADDING - (columns() - 1) * GAP) / columns();
   const rowHeight = () => tile() + GAP;
   /** Result index of the first tile on this page, and how many it has. */
-  const first = () => search.page * PAGE;
-  const count = () => Math.max(0, Math.min(PAGE, search.total - first()));
+  const first = () => search.page * pageSize();
+  const count = () => Math.max(0, Math.min(pageSize(), search.total - first()));
   const rows = () => Math.ceil(count() / columns());
 
   const visible = createMemo(() => {

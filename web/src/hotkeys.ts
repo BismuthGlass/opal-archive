@@ -26,32 +26,62 @@ export const ACTIONS = [
   {
     id: "mark1",
     label: "Mark 1",
-    description: "Gives mark 1, beside any other marks, or takes it off what already has it.",
+    description: "Gives mark 1, beside any other marks.",
     key: "1",
   },
   {
     id: "mark2",
     label: "Mark 2",
-    description: "Gives mark 2, beside any other marks, or takes it off what already has it.",
+    description: "Gives mark 2, beside any other marks.",
     key: "2",
   },
   {
     id: "mark3",
     label: "Mark 3",
-    description: "Gives mark 3, beside any other marks, or takes it off what already has it.",
+    description: "Gives mark 3, beside any other marks.",
     key: "3",
   },
   {
     id: "mark4",
     label: "Mark 4",
-    description: "Gives mark 4, beside any other marks, or takes it off what already has it.",
+    description: "Gives mark 4, beside any other marks.",
     key: "4",
   },
   {
     id: "mark5",
     label: "Mark 5",
-    description: "Gives mark 5, beside any other marks, or takes it off what already has it.",
+    description: "Gives mark 5, beside any other marks.",
     key: "5",
+  },
+  {
+    id: "unmark1",
+    label: "Take off mark 1",
+    description: "Takes mark 1 off, and leaves any other marks.",
+    key: "shift+1",
+  },
+  {
+    id: "unmark2",
+    label: "Take off mark 2",
+    description: "Takes mark 2 off, and leaves any other marks.",
+    key: "shift+2",
+  },
+  {
+    id: "unmark3",
+    label: "Take off mark 3",
+    description: "Takes mark 3 off, and leaves any other marks.",
+    key: "shift+3",
+  },
+  {
+    id: "unmark4",
+    label: "Take off mark 4",
+    description: "Takes mark 4 off, and leaves any other marks.",
+    key: "shift+4",
+  },
+  {
+    id: "unmark5",
+    label: "Take off mark 5",
+    description: "Takes mark 5 off, and leaves any other marks.",
+    key: "shift+5",
   },
   {
     id: "unmark",
@@ -62,7 +92,7 @@ export const ACTIONS = [
   {
     id: "mark",
     label: "Mark again",
-    description: "Gives the mark last given with its own key, mark 1 at first, or takes it off what already has it.",
+    description: "Gives the mark last given with its own key, mark 1 at first.",
     key: "m",
   },
   {
@@ -126,7 +156,10 @@ const MODIFIERS = new Set(["control", "alt", "meta", "shift"]);
  * `ctrl+shift+t`; null while only modifiers are down.
  */
 export function keyOf(event: KeyboardEvent): string | null {
-  const key = event.key.toLowerCase();
+  // With Shift a digit types a symbol, and which one depends on the
+  // keyboard: the digit on the key is what is meant.
+  const digit = event.shiftKey ? /^Digit(\d)$/.exec(event.code)?.[1] : undefined;
+  const key = digit ?? event.key.toLowerCase();
   if (MODIFIERS.has(key)) return null;
   const parts = [];
   if (event.ctrlKey) parts.push("ctrl");

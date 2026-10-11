@@ -3,6 +3,7 @@ import { ACTIONS, bind, isDefault, keyFor, keyLabel, keyOf } from "../hotkeys";
 import type { Action } from "../hotkeys";
 import { errorMessage, fieldLabel } from "../format";
 import { savedQueries, setSavedQueries } from "../savedQueries";
+import { DEFAULT_PAGE, LEAST_PAGE, MOST_PAGE, pageSize } from "../search";
 import { collapsesSets, downloadNames, saveSetting } from "../settings";
 import type { SavedQuery } from "../settings";
 import type { Naming } from "../api";
@@ -104,6 +105,35 @@ function Gallery() {
     <>
       <h3>Gallery</h3>
       <ul class="setting-rows">
+        <li>
+          <label class="setting-choice">
+            <input
+              type="number"
+              class="setting-number"
+              min={LEAST_PAGE}
+              max={MOST_PAGE}
+              step="10"
+              aria-label="Files per page"
+              value={pageSize()}
+              onChange={(event) => {
+                const wanted = Math.round(Number(event.currentTarget.value));
+                const size = Math.max(LEAST_PAGE, Math.min(MOST_PAGE, wanted || DEFAULT_PAGE));
+                event.currentTarget.value = String(size);
+                setError("");
+                saveSetting("pageSize", size === DEFAULT_PAGE ? null : size).catch((err) =>
+                  setError(errorMessage(err)),
+                );
+              }}
+            />
+            <div class="setting-text">
+              <span class="setting-label">Files per page</span>
+              <span class="hint">
+                The most a page of a view lists, from {LEAST_PAGE} to {MOST_PAGE}; {DEFAULT_PAGE}{" "}
+                unless set. Fewer makes for pages that load and scroll faster.
+              </span>
+            </div>
+          </label>
+        </li>
         <li>
           <label class="setting-choice">
             <input

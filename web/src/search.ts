@@ -2,10 +2,16 @@ import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import * as api from "./api";
 import type { Item } from "./api";
+import { settings } from "./settings";
 import { refreshStats } from "./stats";
 
+/** How many results a page holds unless the settings say otherwise, and the bounds they keep to. */
+export const DEFAULT_PAGE = 200;
+export const LEAST_PAGE = 10;
+export const MOST_PAGE = 1000;
 /** Results are shown, and fetched, in pages of this many. */
-export const PAGE = 200;
+export const pageSize = () =>
+  Math.max(LEAST_PAGE, Math.min(MOST_PAGE, Math.round(settings.pageSize ?? DEFAULT_PAGE)));
 
 type SearchError = { message: string; position?: number; line?: number };
 
@@ -63,6 +69,9 @@ type TabMarks = ReadonlyMap<number, Marks>;
  * round. Nothing in the library is changed by them.
  */
 const [marks, setMarks] = createSignal<TabMarks>(new Map());
+/** What the marks of the tab on show have been named, for those that have. */
+type MarkNames = Readonly<Record<number, string>>;
+const [markNames, setMarkNames] = createSignal<MarkNames>({});
 /** Bumped when what the view lists changes: what of the marked is in it does too. */
 const [listing, setListing] = createSignal(0);
 
@@ -99,6 +108,42 @@ function writeMarks() {
   } catch {
     // Storage unavailable or full; the marks just won't survive a reload.
   }
+}
+
+// The names of marks are kept the same way, tab by tab.
+const MARK_NAMES_KEY = "opalarchive.markNames";
+const tabMarkNames = new Map<number, MarkNames>(readMarkNames());
+
+function readMarkNames(): [number, MarkNames][] {
+  try {
+    return JSON.parse(localStorage.getItem(MARK_NAMES_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function writeMarkNames() {
+  try {
+    localStorage.setItem(MARK_NAMES_KEY, JSON.stringify([...tabMarkNames]));
+  } catch {
+    // Storage unavailable or full; the names just won't survive a reload.
+  }
+}
+
+/**
+ * Names a mark of the tab on show, or with nothing takes its name away.
+ * The name only says what the mark is being used for.
+ */
+export function nameMark(mark: number, name: string | null) {
+  const next = { ...markNames() };
+  if (name?.trim()) next[mark] = name.trim();
+  else delete next[mark];
+  setMarkNames(next);
+  const tab = tabOf(viewKey);
+  if (tab === null) return;
+  if (Object.keys(next).length > 0) tabMarkNames.set(tab, next);
+  else tabMarkNames.delete(tab);
+  writeMarkNames();
 }
 
 /** The tab a view is of: its key starts with the tab's number. */
@@ -140,7 +185,7 @@ export function noteScroll(top: number) {
 /** The result the grid is to bring into view and point out, until it has. */
 const [sought, setSought] = createSignal<number | null>(null);
 
-export { search, selected, marks, searchCount, dataVersion, scrollTo, setScrollTo, sought, setSought };
+export { search, selected, marks, markNames, searchCount, dataVersion, scrollTo, setScrollTo, sought, setSought };
 
 // Responses from an older generation are dropped.
 let generation = 0;
@@ -254,7 +299,7 @@ const known = new Map<number, Item>();
 let anchor: number | null = null;
 
 export const itemAt = (index: number): Item | undefined =>
-  pages[Math.floor(index / PAGE)]?.[index % PAGE];
+  pages[Math.floor(index / pageSize())]?.[index % pageSize()];
 
 /** Keeps the view as it now is, here and, shortly, with its tab. */
 function remember() {
@@ -273,9 +318,9 @@ function remember() {
 /** A page of the view. Its items are asked for by ID, trashed or not. */
 async function fetchPage(page: number): Promise<Item[]> {
   for (;;) {
-    const slice = ids.slice(page * PAGE, (page + 1) * PAGE);
+    const slice = ids.slice(page * pageSize(), (page + 1) * pageSize());
     if (slice.some((id) => !known.has(id))) {
-      const result = await api.search(`id=${slice.join(",")}`, 0, PAGE, 0, null, true);
+      const result = await api.search(`id=${slice.join(",")}`, 0, pageSize(), 0, null, true);
       for (const item of result.items) known.set(item.id, item);
     }
     // What was deleted for good is the one thing that has to leave.
@@ -307,7 +352,7 @@ function loadPage(page: number) {
     });
 }
 
-export const pageCount = () => Math.max(1, Math.ceil(search.total / PAGE));
+export const pageCount = () => Math.max(1, Math.ceil(search.total / pageSize()));
 const lastPage = () => pageCount() - 1;
 
 export function goToPage(page: number) {
@@ -328,9 +373,22 @@ function keepListed() {
 
 /** Makes sure the pages covering these result indices are loaded. */
 export function ensureRange(first: number, last: number) {
-  for (let page = Math.floor(first / PAGE); page <= Math.floor(last / PAGE); page++) {
+  for (let page = Math.floor(first / pageSize()); page <= Math.floor(last / pageSize()); page++) {
     loadPage(page);
   }
+}
+
+/**
+ * Deals the results into pages again, after the size of a page changed
+ * from `before`: what headed the page on show is still on the one shown.
+ */
+export function repage(before: number) {
+  const first = search.page * before;
+  generation += 1;
+  requested = new Set();
+  setPages(reconcile({}));
+  setSearch("page", Math.floor(first / pageSize()));
+  if (!search.idle) loadPage(search.page);
 }
 
 /** Drops what is loaded and loads the page on show again. */
@@ -432,6 +490,7 @@ export function runSearch(
   setSelected(left?.selected ?? new Set<number>());
   setLastSelected(null);
   setMarks(tabMarks.get(tabOf(key) ?? -1) ?? new Map<number, Marks>());
+  setMarkNames(tabMarkNames.get(tabOf(key) ?? -1) ?? {});
   setListing((n) => n + 1);
   setSearchCount((n) => n + 1);
   // After the count: the grid goes to the top first, then to where it was.
@@ -494,6 +553,7 @@ export function forgetViews(tab: number) {
   if (viewKey.startsWith(`${tab}:`)) viewKey = "";
   writeLefts();
   if (tabMarks.delete(tab)) writeMarks();
+  if (tabMarkNames.delete(tab)) writeMarkNames();
   if (viewTab === tab) {
     // Nothing more is saved for it either.
     clearTimeout(saving);
@@ -606,9 +666,14 @@ export async function showFirstSelected(): Promise<boolean> {
   const chosen = selected();
   const index = (await resultIds()).findIndex((id) => chosen.has(id));
   if (index < 0) return false;
-  goToPage(Math.floor(index / PAGE));
-  setSought(index);
+  showResult(index);
   return true;
+}
+
+/** Goes to a result: turns to its page, scrolls to it and points it out. */
+export function showResult(index: number) {
+  goToPage(Math.floor(index / pageSize()));
+  setSought(index);
 }
 
 /**
@@ -732,12 +797,17 @@ export function markCounts(): number[] {
   return counts;
 }
 
+/** Where in the results those with a mark are, in the order they are listed. */
+export async function markedIndexes(mark: number): Promise<number[]> {
+  const given = marks();
+  return (await resultIds()).flatMap((id, index) => (given.get(id)?.includes(mark) ? [index] : []));
+}
+
 /**
- * Gives a mark to these, beside any others they have, or takes it off if
- * they all have it already. Says whether it was given.
+ * Gives a mark to these, beside any others they have, or with `given`
+ * false takes it off them.
  */
-export function toggleMark(marked: number[], mark: number): boolean {
-  const given = marked.some((id) => !marks().get(id)?.includes(mark));
+export function setMark(marked: number[], mark: number, given: boolean) {
   const next = new Map(marks());
   for (const id of marked) {
     const rest = (next.get(id) ?? []).filter((had) => had !== mark);
@@ -746,7 +816,6 @@ export function toggleMark(marked: number[], mark: number): boolean {
     else next.delete(id);
   }
   putMarks(next);
-  return given;
 }
 
 /** Takes every mark off these. */

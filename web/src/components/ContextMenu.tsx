@@ -9,7 +9,11 @@ import {
   clearMark,
   clearSelection,
   markCounts,
+  markedIndexes,
+  markNames,
   moveItems,
+  nameMark,
+  pageSize,
   removeFromView,
   resetOrder,
   resultIds,
@@ -31,9 +35,13 @@ import type { IconName } from "./Icon";
 /** A tag that was right-clicked, or with `under` the namespace of that name. */
 export type MenuTag = { field: string; value: string; under?: boolean };
 
+/** Opens the viewer on a result; with `only`, on those results alone, which `what` names. */
+type Preview = (index: number, only: number[] | null, what?: string) => void;
+
 /**
  * Where the menu is, and the item, tag or mark that was right-clicked; or
- * with `view`, that it is the menu of the view, opened from its button.
+ * with `view`, that it is the menu of the view, opened from its button; or
+ * with `shown`, the file on show in the viewer and how to go to it.
  */
 type Opened = {
   x: number;
@@ -42,6 +50,7 @@ type Opened = {
   tag?: MenuTag;
   mark?: number;
   view?: true;
+  shown?: { item: Item; goTo: () => void };
 };
 
 const [opened, setOpened] = createSignal<Opened | null>(null);
@@ -65,6 +74,12 @@ export function openTagMenu(event: MouseEvent, tag: MenuTag) {
 export function openMarkMenu(event: MouseEvent, mark: number) {
   event.preventDefault();
   setOpened({ x: event.clientX, y: event.clientY, mark });
+}
+
+/** Opens the menu of the file on show in the viewer, at the pointer. */
+export function openViewerMenu(event: MouseEvent, item: Item, goTo: () => void) {
+  event.preventDefault();
+  setOpened({ x: event.clientX, y: event.clientY, shown: { item, goTo } });
 }
 
 /** When the menu was last put away: a press on its own button does that first. */
@@ -103,8 +118,7 @@ export async function removeForGood(ids: number[]): Promise<boolean> {
  * the selection is in the trash already.
  */
 export default function ContextMenu(props: {
-  /** Opens the viewer on a result; with `only`, on those results alone. */
-  onPreview: (index: number, only: number[] | null) => void;
+  onPreview: Preview;
   /** Asks for the given files to be put in a set, or a collection. */
   onGroup: (kind: GroupKind, ids: number[]) => void;
 }) {
@@ -113,9 +127,11 @@ export default function ContextMenu(props: {
     <Show when={opened()} keyed>
       {(at) =>
         at.view ? (
-          <ViewMenu at={at} />
+          <ViewMenu at={at} onPreview={props.onPreview} />
+        ) : at.shown ? (
+          <ViewerMenu at={at} shown={at.shown} />
         ) : at.mark ? (
-          <MarkMenu at={at} mark={at.mark} />
+          <MarkMenu at={at} mark={at.mark} onPreview={props.onPreview} />
         ) : at.tag ? (
           <TagMenu at={at} tag={at.tag} />
         ) : (
@@ -127,8 +143,14 @@ export default function ContextMenu(props: {
 }
 
 /** What the button above the grid brings up: the view's selection, and its order. */
-function ViewMenu(props: { at: Opened }) {
+function ViewMenu(props: { at: Opened; onPreview: Preview }) {
   const none = () => selected().size === 0;
+  /** Opens the viewer on the selected alone, in the order they are listed. */
+  const previewSelected = async () => {
+    const chosen = selected();
+    const only = (await resultIds()).flatMap((id, index) => (chosen.has(id) ? [index] : []));
+    if (only.length > 0) props.onPreview(only[0], only);
+  };
   /** Does one thing and puts the menu away. */
   const then = (action: () => unknown) => () => {
     close();
@@ -136,6 +158,29 @@ function ViewMenu(props: { at: Opened }) {
   };
   return (
     <Shell at={props.at} label="Selection and order of this view">
+      <li role="none">
+        <button
+          role="menuitem"
+          disabled={search.total === 0}
+          title="Open the viewer on the first result of this page, to step through them all"
+          onClick={then(() => props.onPreview(search.page * pageSize(), null))}
+        >
+          <Icon name="visibility-outline" />
+          Preview
+        </button>
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          disabled={none()}
+          title="Open the viewer on the selected items alone"
+          onClick={then(previewSelected)}
+        >
+          <Icon name="visibility-outline" />
+          Preview selected
+        </button>
+      </li>
+      <li class="menu-divider" role="separator" />
       <li role="none">
         <button
           role="menuitem"
@@ -154,7 +199,7 @@ function ViewMenu(props: { at: Opened }) {
           title="Go to the first selected item, on whichever page it is"
           onClick={then(showFirstSelected)}
         >
-          <Icon name="visibility-outline" />
+          <Icon name="subdirectory-arrow-right" />
           Go to selected
         </button>
       </li>
@@ -198,12 +243,37 @@ function ViewMenu(props: { at: Opened }) {
 }
 
 /** What a right click on a mark's count brings up. */
-function MarkMenu(props: { at: Opened; mark: number }) {
+function MarkMenu(props: { at: Opened; mark: number; onPreview: Preview }) {
   const mark = props.mark;
+  // Read once, here: the menu is gone by the time it is used.
+  const named = markNames()[mark];
+  /** Opens the viewer on what has the mark alone, as on a group of its own. */
+  const preview = async () => {
+    close();
+    const only = await markedIndexes(mark);
+    if (only.length > 0) props.onPreview(only[0], only, `with mark ${mark}`);
+  };
+  /** Asks what the mark is for here. Nothing given leaves it as it was. */
+  const name = () => {
+    close();
+    const given = prompt(`What is mark ${mark} for, in this tab?`, named ?? "");
+    if (given !== null) nameMark(mark, given);
+  };
   return (
     <Shell at={props.at} label={`Actions on mark ${mark}`}>
       <li class="context-menu-title" role="none">
-        Mark {mark}: {plural(markCounts()[mark], "item")}
+        Mark {mark}
+        {named ? ` (${named})` : ""}: {plural(markCounts()[mark], "item")}
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          title="Open the viewer on what has this mark alone"
+          onClick={preview}
+        >
+          <Icon name="visibility-outline" />
+          Preview
+        </button>
       </li>
       <li role="none">
         <button
@@ -217,6 +287,31 @@ function MarkMenu(props: { at: Opened; mark: number }) {
           Select
         </button>
       </li>
+      <li class="menu-divider" role="separator" />
+      <li role="none">
+        <button
+          role="menuitem"
+          title="Say what this mark is for in this tab. The name is shown beside its count."
+          onClick={name}
+        >
+          <Icon name="edit-outline" />
+          {named ? "Rename…" : "Name…"}
+        </button>
+      </li>
+      <Show when={named}>
+        <li role="none">
+          <button
+            role="menuitem"
+            onClick={() => {
+              close();
+              nameMark(mark, null);
+            }}
+          >
+            <Icon name="undo" />
+            Clear name
+          </button>
+        </li>
+      </Show>
       <li role="none">
         <button
           role="menuitem"
@@ -228,6 +323,40 @@ function MarkMenu(props: { at: Opened; mark: number }) {
         >
           <Icon name="close" />
           Clear mark
+        </button>
+      </li>
+    </Shell>
+  );
+}
+
+/** What a right click in the viewer brings up, for the file on show. */
+function ViewerMenu(props: { at: Opened; shown: { item: Item; goTo: () => void } }) {
+  const { item, goTo } = props.shown;
+  return (
+    <Shell at={props.at} label="Actions on this file">
+      <li role="none">
+        <button
+          role="menuitem"
+          title="Close the viewer and go to this file in the view"
+          onClick={() => {
+            close();
+            goTo();
+          }}
+        >
+          <Icon name="subdirectory-arrow-right" />
+          Go to file
+        </button>
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          onClick={() => {
+            close();
+            location.href = api.contentUrl(item.id, downloadNames());
+          }}
+        >
+          <Icon name="download" />
+          Download
         </button>
       </li>
     </Shell>
@@ -392,7 +521,7 @@ function Submenu(props: { icon: IconName; label: string; children: JSX.Element }
 function Menu(props: {
   at: Opened;
   item: Item;
-  onPreview: (index: number, only: number[] | null) => void;
+  onPreview: Preview;
   onGroup: (kind: GroupKind, ids: number[]) => void;
 }) {
   // Read once, here: after the menu closes, what it was opened with can no

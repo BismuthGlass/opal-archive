@@ -701,6 +701,17 @@ button.primary {
   border-radius: 0;
 }
 
+/* What a mark has been named in this tab, before its count: lighter, and
+   cut short when it is long. */
+.mark-name {
+  max-width: 14ch;
+  margin-right: 5px;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The ends have the room the rounding takes from them. */
 .toolbar .mark-counts button.mark-badge:first-child:not(.link) {
   padding-left: 9px;
@@ -2657,6 +2668,11 @@ span.chip-label:hover {
   gap: 12px;
   align-items: center;
   cursor: pointer;
+}
+
+.setting-number {
+  flex: none;
+  width: 8ch;
 }
 
 .dialog button.keycap,

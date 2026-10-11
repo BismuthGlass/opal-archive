@@ -105,7 +105,9 @@ What a view lists is decided when its search is calculated, and stays put after 
 
 The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab or downloaded into a download tab, files put into the set a tab shows).
 
-A menu button at the start of the bar above the grid holds what is done to the view as a whole: selecting every result, going to what is selected, clearing the selection, and under Order, shuffling the results or putting them back in the order the search gives, which is greyed out while they are in it. How many are selected is said at the foot of the window.
+A view is shown in pages of 200 files, or of as many as the settings say, from 10 to 1000.
+
+A menu button at the start of the bar above the grid holds what is done to the view as a whole: opening the viewer on it, or on what is selected alone; selecting every result, going to what is selected, clearing the selection, and under Order, shuffling the results or putting them back in the order the search gives, which is greyed out while they are in it. How many are selected is said at the foot of the window.
 
 "Go to selected" there, or the G key, goes to the first selected file in the view: it turns to the page the file is on, scrolls it to the middle and points it out for a moment.
 
@@ -113,11 +115,13 @@ A menu button at the start of the bar above the grid holds what is done to the v
 
 A file can be given any of five marks, numbered and coloured, and several at once: giving one leaves the others on. They are there to sort through what is on show. Marks change nothing in the library, and are remembered by the browser.
 
-Each mark has a key of its own, 1 to 5 unless changed in the settings, which gives the mark to what is selected or takes it off what already has it; 0 takes every mark off. M gives the mark last given again.
+Each mark has a key that gives it to what is selected, 1 to 5 unless changed in the settings, and another that takes it off, Shift with the same digit; 0 takes every mark off. M gives the mark last given again.
 
 Marks belong to the tab, not to one view of it. A file marked in a search is marked in its set too, once the tab goes into it, and in its variants and its collection; a file marked there is still marked after going back out. Another tab has marks of its own.
 
 The count of each mark above the grid, and selecting by mark, take in only what the view on show lists. A click on a mark's count selects what has that mark; with Ctrl, it adds them to what is selected, or takes them out if they are all selected already. Clearing a mark takes it off everything in the tab that has it.
+
+A right click on a mark's count offers the rest: to open the viewer on what has the mark alone, as on a group of its own, counted as "2 / 5 with mark 1"; and to name the mark, or clear its name. A name only says what the mark is being used for: it is shown before the mark's count and nowhere else, belongs to the tab, and is remembered by the browser.
 
 ## Preview
 
@@ -127,6 +131,7 @@ The side panel ends in a drawer that shows the selected file: bigger than its ti
 
 The viewer shows one file over the whole window. Its top bar names the file: the sets it is in, and its title.
 
+- A right click on what is shown offers to go to the file, which closes the viewer, turns the view to the file's page and points it out there; and to download it.
 - A button at the start of the top bar, before the title, or the I key, opens an info pane down the whole left side of the window, beside what is shown and its bar. It says all there is of the file, to read and not to change, so it is small and close: its name, type, dimensions, length or pages, size on disk, when it was added and its ID; then its title, date, rating, score, version and description, where they are set; then its tags as the side panel lists them, one to a line in their types' colours, those of the aggregated types together and each other type under its name; then its links. The pane is in the theme's colours. It is closed at first.
 - The pane can be made wider or narrower by dragging its right edge, within limits that leave what is shown at least half the window; a double click on the edge puts it back. Its width is remembered by the browser.
 - A button at the top of the pane opens a menu of what it shows, each to be put away or brought back: every row, every list of tags, the links. What is put away is a setting.

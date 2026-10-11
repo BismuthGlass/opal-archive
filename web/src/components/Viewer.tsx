@@ -18,6 +18,7 @@ import { downloadNames, saveSetting, settings } from "../settings";
 import type { ViewerPart } from "../settings";
 import { enter, shownSet, shownVariants } from "../tabs";
 import { aggregatedTypes, orderedTypes, tagTextStyle, tagType } from "../tagTypes";
+import { contextMenuOpen, openViewerMenu } from "./ContextMenu";
 import Icon from "./Icon";
 import { modalOpen } from "./Modal";
 
@@ -112,7 +113,11 @@ function rowValue(key: string, entity: api.Entity, data: api.Metadata) {
 export default function Viewer(props: {
   index: number;
   only?: number[];
+  /** What those are, as the count says it: "selected", "with mark 2". */
+  what?: string;
   onMove: (index: number | null) => void;
+  /** Closes the viewer and goes to a result in the view. */
+  onGoTo: (index: number) => void;
 }) {
   const item = () => itemAt(props.index);
   /** How many there are to step through, and which of them is on show. */
@@ -247,7 +252,7 @@ export default function Viewer(props: {
   let steppedAt = 0;
   const onWheel = (event: WheelEvent) => {
     // Pinching to zoom arrives as a wheel with Control held.
-    if (event.ctrlKey || event.deltaY === 0 || modalOpen()) return;
+    if (event.ctrlKey || event.deltaY === 0 || modalOpen() || contextMenuOpen()) return;
     if ((event.target as HTMLElement).matches?.("input")) return;
     // Over the info pane, the wheel is for scrolling it.
     if ((event.target as HTMLElement).closest?.(".viewer-info")) return;
@@ -298,8 +303,8 @@ export default function Viewer(props: {
   });
 
   const onKeyDown = (event: KeyboardEvent) => {
-    // A modal over the viewer has the keyboard.
-    if (modalOpen()) return;
+    // A modal over the viewer has the keyboard, and so has a menu.
+    if (modalOpen() || contextMenuOpen()) return;
     // Typing the seconds is not stepping through results.
     if ((event.target as HTMLElement).matches?.("input")) {
       if (event.key === "Escape") (event.target as HTMLElement).blur();
@@ -424,7 +429,15 @@ export default function Viewer(props: {
           />
         </div>
       </Show>
-      <div class="viewer-stage">
+      <div
+        class="viewer-stage"
+        // A right click on what is shown, or around it, is the file's menu.
+        onContextMenu={(event) => {
+          const current = item();
+          if ((event.target as HTMLElement).matches?.("input") || !current) return;
+          openViewerMenu(event, current, () => props.onGoTo(props.index));
+        }}
+      >
         <header>
           <button
             aria-pressed={shows("info")}
@@ -485,9 +498,9 @@ export default function Viewer(props: {
               <Icon name="delete-outline" />
             </span>
           </Show>
-          <span class="viewer-count" title={props.only ? "Only what was selected is shown" : undefined}>
+          <span class="viewer-count" title={props.only ? `Only what is ${props.what ?? "selected"} is shown` : undefined}>
             {place() + 1} / {count()}
-            {props.only ? " selected" : ""}
+            {props.only ? ` ${props.what ?? "selected"}` : ""}
           </span>
           <Show when={shows("player")}>
             <div class="viewer-player">
@@ -559,9 +572,6 @@ export default function Viewer(props: {
               </ul>
             </Show>
           </div>
-          <Show when={item()}>
-            {(current) => <a href={contentUrl(current().id, downloadNames())}>Download</a>}
-          </Show>
           <button aria-label="Close" onClick={() => props.onMove(null)}>
             <Icon name="close" />
           </button>

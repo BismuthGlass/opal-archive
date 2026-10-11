@@ -25,12 +25,13 @@ import * as api from "./api";
 import { errorMessage, plural } from "./format";
 import { actionFor } from "./hotkeys";
 import {
-  PAGE,
   clearSelection,
   changed,
   dataVersion,
   goToPage,
   itemAt,
+  pageSize,
+  repage,
   runSearch,
   search,
   deleted,
@@ -39,8 +40,9 @@ import {
   removeFromView,
   selectAll,
   showFirstSelected,
+  showResult,
   selected,
-  toggleMark,
+  setMark,
   unmark,
 } from "./search";
 import { collapsesSets, loadSettings } from "./settings";
@@ -92,13 +94,21 @@ export default function App() {
   const [viewing, setViewing] = createSignal<number | null>(null);
   /** The result indexes the viewer keeps to, when it shows only some. */
   const [viewingOnly, setViewingOnly] = createSignal<number[] | null>(null);
-  /** Opens the viewer on a result, or moves it, or with `null` closes it. */
-  const view = (index: number | null, only: number[] | null = viewingOnly()) => {
+  /** What those are, as the viewer's count says it: "selected", "with mark 2". */
+  const [viewingWhat, setViewingWhat] = createSignal("selected");
+  /**
+   * Opens the viewer on a result, or moves it, or with `null` closes it.
+   * `what` says what the results it keeps to are, if not the selected.
+   */
+  const view = (index: number | null, only: number[] | null = viewingOnly(), what?: string) => {
     // The grid follows the viewer across pages.
-    if (index !== null) goToPage(Math.floor(index / PAGE));
+    if (index !== null) goToPage(Math.floor(index / pageSize()));
+    if (index !== null && only !== viewingOnly()) setViewingWhat(what ?? "selected");
     setViewingOnly(index === null ? null : only);
     setViewing(index);
   };
+  // A page of another size: the results are dealt into pages again.
+  createEffect(on(pageSize, (_now, before) => before !== undefined && repage(before), { defer: true }));
   /** The files being put in a set or a collection, while that dialog is open. */
   const [grouping, setGrouping] = createSignal<{ kind: GroupKind; ids: number[] } | null>(null);
   /** The set on show, described when nothing is selected. */
@@ -266,15 +276,15 @@ export default function App() {
     changed();
   };
 
-  const mark = (target: { ids: number[]; name: string }, number: number | null) => {
+  /** Gives a mark, or with `given` false takes it off; with no number, takes every mark off. */
+  const mark = (target: { ids: number[]; name: string }, number: number | null, given = true) => {
     if (number === null) {
       unmark(target.ids);
       showToast(`Took every mark off ${target.name}`);
-    } else if (toggleMark(target.ids, number)) {
-      showToast(`Gave ${target.name} mark ${number}`);
-    } else {
-      showToast(`Took mark ${number} off ${target.name}`);
+      return;
     }
+    setMark(target.ids, number, given);
+    showToast(given ? `Gave ${target.name} mark ${number}` : `Took mark ${number} off ${target.name}`);
   };
 
   /** Deletes what is in the trash for good, once it has been agreed to. */
@@ -414,6 +424,9 @@ export default function App() {
         // Each mark has a key of its own, which the mark key then repeats.
         usualMark = Number(action.slice(4));
         mark(on, usualMark);
+      } else if (/^unmark\d$/.test(action)) {
+        // And another that takes it off.
+        mark(on, Number(action.slice(6)), false);
       } else if (action === "moveToStart" || action === "moveToEnd") {
         const end = action === "moveToEnd";
         moveItems(on.ids, end ? search.total : 0)
@@ -619,7 +632,16 @@ export default function App() {
       </footer>
       <DropTarget />
       <Show when={viewing() !== null}>
-        <Viewer index={viewing()!} only={viewingOnly() ?? undefined} onMove={(index) => view(index)} />
+        <Viewer
+          index={viewing()!}
+          only={viewingOnly() ?? undefined}
+          what={viewingWhat()}
+          onMove={(index) => view(index)}
+          onGoTo={(index) => {
+            view(null);
+            showResult(index);
+          }}
+        />
       </Show>
       <Show when={tagging()} keyed>
         {(target) => (
