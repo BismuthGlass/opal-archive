@@ -1,5 +1,6 @@
 import {
   createEffect,
+  createResource,
   createSignal,
   For,
   Match,
@@ -9,11 +10,14 @@ import {
   Show,
   Switch,
 } from "solid-js";
+import * as api from "../api";
 import { contentUrl } from "../api";
-import { setName } from "../format";
-import { ensureRange, itemAt, marks, search } from "../search";
+import { fieldLabel, setName } from "../format";
+import { dataVersion, ensureRange, itemAt, marks, search } from "../search";
 import { downloadNames, saveSetting, settings } from "../settings";
+import type { ViewerPart } from "../settings";
 import { enter, shownSet, shownVariants } from "../tabs";
+import { aggregatedTypes, orderedTypes, tagTextStyle, tagType } from "../tagTypes";
 import Icon from "./Icon";
 import { modalOpen } from "./Modal";
 
@@ -23,6 +27,13 @@ const DEFAULT_SECONDS = 5;
 const SKIP_SECONDS = 1;
 /** After a step, how long further scrolling is let pass, in milliseconds. */
 const WHEEL_PAUSE = 100;
+
+/** What of the viewer can be put away, as the menu that does it lists them. */
+const PARTS: { part: ViewerPart; label: string }[] = [
+  { part: "player", label: "Player" },
+  { part: "filename", label: "File name" },
+  { part: "tags", label: "Tags" },
+];
 
 /**
  * Full-window view of one result. Left / right step through the results,
@@ -43,6 +54,54 @@ export default function Viewer(props: {
   const at = (place: number) => (props.only ? props.only[place] : place);
 
   createEffect(() => ensureRange(props.index, props.index));
+
+  /** Whether a part of the viewer is on show: all are, until put away. */
+  const shows = (part: ViewerPart) => settings.viewer?.[part] ?? true;
+  const toggle = (part: ViewerPart) =>
+    saveSetting("viewer", { ...settings.viewer, [part]: !shows(part) }).catch(() => {});
+  const [choosing, setChoosing] = createSignal(false);
+  let chooser: HTMLDivElement | undefined;
+  // A press anywhere else closes the menu of what is shown, and does no
+  // more than that: on the backdrop it does not close the viewer too.
+  let dismissing = false;
+  const pressed = (event: PointerEvent) => {
+    dismissing = choosing() && !chooser?.contains(event.target as Node);
+    if (dismissing) setChoosing(false);
+  };
+  onMount(() => window.addEventListener("pointerdown", pressed, true));
+  onCleanup(() => window.removeEventListener("pointerdown", pressed, true));
+
+  // What is shown of the file is only asked for while it is shown. `latest`
+  // keeps the last file's on screen until the next one's arrives.
+  const [entity] = createResource(
+    () => (shows("filename") && item() ? ([item()!.id, dataVersion()] as const) : null),
+    ([id]) => api.getEntity(id),
+  );
+  /** What the file is called: the name it came under, or else its hash. */
+  const fileName = () => {
+    const file = shows("filename") ? entity.latest?.file : undefined;
+    if (!file) return undefined;
+    return file.original_name ?? (file.extension ? `${file.hash}.${file.extension}` : file.hash);
+  };
+  const [metadata] = createResource(
+    () => (shows("tags") && item() ? ([item()!.id, dataVersion()] as const) : null),
+    ([id]) => api.getMetadata([id]),
+  );
+  /**
+   * The file's tags as the side panel lists them: those of the aggregated
+   * types in one list, then each other type that has any under its name.
+   */
+  const tagLists = () => {
+    const tags = shows("tags") ? metadata.latest?.tags : undefined;
+    if (!tags) return [];
+    const of = (field: string) => (tags[field] ?? []).map((tag) => ({ field, value: tag.value }));
+    return [
+      { label: null as string | null, tags: aggregatedTypes().flatMap(of) },
+      ...orderedTypes()
+        .filter((field) => !tagType(field).aggregate)
+        .map((field) => ({ label: fieldLabel(field) as string | null, tags: of(field) })),
+    ].filter((list) => list.tags.length > 0);
+  };
 
   // The sets the result is in, named before its title: the one on show
   // first.
@@ -78,6 +137,9 @@ export default function Viewer(props: {
     // Pinching to zoom arrives as a wheel with Control held.
     if (event.ctrlKey || event.deltaY === 0 || modalOpen()) return;
     if ((event.target as HTMLElement).matches?.("input")) return;
+    // Over the tags, the wheel scrolls them when there are more than fit.
+    const list = (event.target as HTMLElement).closest?.(".viewer-tags");
+    if (list && list.scrollHeight > list.clientHeight) return;
     const now = performance.now();
     if (now - steppedAt < WHEEL_PAUSE) return;
     steppedAt = now;
@@ -131,7 +193,10 @@ export default function Viewer(props: {
     if ((event.target as HTMLElement).matches?.("input")) {
       if (event.key === "Escape") (event.target as HTMLElement).blur();
       else return;
-    } else if (event.key === "Escape") props.onMove(null);
+    } else if (event.key === "Escape") {
+      if (choosing()) setChoosing(false);
+      else props.onMove(null);
+    }
     else if (event.key === "ArrowLeft") step(-1);
     else if (event.key === "ArrowRight") step(1);
     else return;
@@ -173,6 +238,14 @@ export default function Viewer(props: {
             </Show>
           </Show>
           <span class="viewer-name">{item()?.title ?? ""}</span>
+          <Show when={fileName()}>
+            {(name) => (
+              <span class="viewer-file" title={`The file's name: ${name()}`}>
+                <Icon name="draft-outline" />
+                <span>{name()}</span>
+              </span>
+            )}
+          </Show>
         </span>
         <Show when={variants()}>
           {(group) => (
@@ -200,39 +273,75 @@ export default function Viewer(props: {
           {place() + 1} / {count()}
           {props.only ? " selected" : ""}
         </span>
-        <div class="viewer-player">
+        <Show when={shows("player")}>
+          <div class="viewer-player">
+            <button
+              aria-pressed={playing()}
+              aria-label={playing() ? "Pause" : "Play"}
+              title={playing() ? "Stop playing through the results" : "Play through the results"}
+              onClick={() => setPlaying(!playing())}
+            >
+              <Icon name={playing() ? "pause-outline" : "play-arrow-outline"} />
+            </button>
+            <label title="How long each result stays up. Video and audio play to their end.">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                aria-label="Seconds each result stays up"
+                value={seconds()}
+                onChange={(event) => {
+                  const value = Number(event.currentTarget.value);
+                  if (value >= 1) setPlayer({ seconds: value });
+                  else event.currentTarget.value = String(seconds());
+                }}
+              />
+              s
+            </label>
+            <button
+              class="viewer-random"
+              aria-pressed={random()}
+              aria-label="Random order"
+              title={random() ? "Playing in random order" : "Playing in order"}
+              onClick={() => setPlayer({ random: !random() })}
+            >
+              <Icon name="shuffle" />
+            </button>
+          </div>
+        </Show>
+        <div class="viewer-chooser" ref={chooser}>
           <button
-            aria-pressed={playing()}
-            aria-label={playing() ? "Pause" : "Play"}
-            title={playing() ? "Stop playing through the results" : "Play through the results"}
-            onClick={() => setPlaying(!playing())}
+            aria-haspopup="menu"
+            aria-expanded={choosing()}
+            aria-label="What is shown"
+            title="Choose what the viewer shows"
+            onClick={() => setChoosing(!choosing())}
           >
-            <Icon name={playing() ? "pause-outline" : "play-arrow-outline"} />
+            <Icon name="visibility-outline" />
           </button>
-          <label title="How long each result stays up. Video and audio play to their end.">
-            <input
-              type="number"
-              min="1"
-              step="1"
-              aria-label="Seconds each result stays up"
-              value={seconds()}
-              onChange={(event) => {
-                const value = Number(event.currentTarget.value);
-                if (value >= 1) setPlayer({ seconds: value });
-                else event.currentTarget.value = String(seconds());
-              }}
-            />
-            s
-          </label>
-          <button
-            class="viewer-random"
-            aria-pressed={random()}
-            aria-label="Random order"
-            title={random() ? "Playing in random order" : "Playing in order"}
-            onClick={() => setPlayer({ random: !random() })}
-          >
-            <Icon name="shuffle" />
-          </button>
+          <Show when={choosing()}>
+            <ul class="context-menu viewer-menu" role="menu">
+              <li class="context-menu-title">Show</li>
+              <For each={PARTS}>
+                {(entry) => (
+                  <li>
+                    <button
+                      role="menuitemcheckbox"
+                      aria-checked={shows(entry.part)}
+                      onClick={() => toggle(entry.part)}
+                    >
+                      <span class="viewer-check">
+                        <Show when={shows(entry.part)}>
+                          <Icon name="check" />
+                        </Show>
+                      </span>
+                      {entry.label}
+                    </button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
         </div>
         <Show when={item()}>
           {(current) => <a href={contentUrl(current().id, downloadNames())}>Download</a>}
@@ -242,7 +351,34 @@ export default function Viewer(props: {
         </button>
       </header>
       {/* Clicking the backdrop, but not the media, closes. */}
-      <div class="viewer-body" onClick={(e) => e.target === e.currentTarget && props.onMove(null)}>
+      <div
+        class="viewer-body"
+        onClick={(e) => e.target === e.currentTarget && !dismissing && props.onMove(null)}
+      >
+        <Show when={tagLists().length > 0}>
+          <aside class="viewer-tags" aria-label="Tags">
+            <For each={tagLists()}>
+              {(list) => (
+                <>
+                  <Show when={list.label}>
+                    <span class="label">{list.label}:</span>
+                  </Show>
+                  <ul class="tag-lines">
+                    <For each={list.tags}>
+                      {(tag) => (
+                        <li class="tag-line">
+                          <span class="tag-name" style={tagTextStyle(tag.field)}>
+                            {tag.value}
+                          </span>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </>
+              )}
+            </For>
+          </aside>
+        </Show>
         <Show when={item()} keyed>
           {(current) => (
             <Switch

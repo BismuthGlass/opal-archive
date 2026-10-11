@@ -25,6 +25,8 @@ export type Settings = {
   tagTypeOrder?: string[];
   /** How the viewer plays through results by itself. */
   player?: { seconds?: number; random?: boolean };
+  /** The parts of the viewer put away or kept: one not named is shown. */
+  viewer?: Partial<Record<ViewerPart, boolean>>;
   /** Queries kept to be used again, in the order they are offered. */
   savedQueries?: SavedQuery[];
   /** What files are called when they are downloaded or exported. */
@@ -32,6 +34,9 @@ export type Settings = {
   /** Whether a view lists a set once, as one tile, rather than every file of it. */
   collapseSets?: boolean;
 };
+
+/** What of the viewer can be shown or put away. */
+export type ViewerPart = "player" | "filename" | "tags";
 
 export const downloadNames = (): api.Naming => settings.downloadNames ?? "original";
 export const collapsesSets = (): boolean => settings.collapseSets ?? false;

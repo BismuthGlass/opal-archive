@@ -2156,6 +2156,30 @@ span.chip-label:hover {
   text-decoration: underline;
 }
 
+/* The file's own name, after the title: fainter, and behind an icon of a
+   file, so that it is not read as the title. */
+.viewer-file {
+  display: flex;
+  flex: 0 2 auto;
+  gap: 3px;
+  align-items: center;
+  min-width: 0;
+  color: #aaa;
+}
+
+.viewer-name:not(:empty) + .viewer-file {
+  margin-left: 14px;
+}
+
+.viewer-file .icon {
+  flex: none;
+}
+
+.viewer-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .viewer-inside {
   flex: none;
   margin: 0 6px;
@@ -2241,7 +2265,77 @@ span.chip-label:hover {
   opacity: 0.55;
 }
 
+/* The button that opens the menu of what the viewer shows, and the menu
+   under it: in the theme's colours, not the viewer's. */
+.viewer-chooser {
+  position: relative;
+  line-height: 0;
+}
+
+.viewer-chooser > button[aria-expanded="true"] {
+  color: #b8c5ff;
+}
+
+.viewer-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.viewer header .viewer-menu button {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.viewer-check {
+  display: inline-flex;
+  width: 1.2em;
+  line-height: 0;
+}
+
+/* The file's tags, down the left edge and over what is shown. Their
+   colours are the theme's, so they are on the theme's ground: light or
+   dark, and a little seen through. */
+.viewer-tags {
+  position: absolute;
+  top: 0;
+  left: 48px;
+  z-index: 1;
+  max-width: min(260px, 40%);
+  max-height: calc(100% - 16px);
+  padding: 6px 12px 8px 0;
+  overflow-y: auto;
+  color: var(--text);
+  background: rgb(255 255 255 / 0.85);
+  border-radius: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .viewer-tags {
+    background: rgb(16 16 18 / 0.7);
+  }
+}
+
+.viewer-tags .label {
+  display: block;
+  padding-left: 12px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.viewer-tags .tag-lines {
+  padding-left: 12px;
+}
+
+.viewer-tags .tag-name {
+  overflow-wrap: anywhere;
+}
+
 .viewer-body {
+  position: relative;
   display: grid;
   /* One cell with a definite size, so the media's percentage limits resolve
      against it and tall images shrink to fit instead of overflowing. */

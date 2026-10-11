@@ -125,6 +125,11 @@ The side panel can be made wider or narrower by dragging its right edge, within 
 
 The side panel ends in a drawer that shows the selected file: bigger than its tile, without opening the viewer. Of several selected, it shows the one selected last. Closed, the drawer is only its heading at the bottom of the panel; open, it takes the lower part of the panel, half of it at first and then as far as its top edge is dragged, and the rest of the panel scrolls above it, so that all of it can still be reached. Whether it is open and how tall are remembered by the browser. It shows what the viewer can: pictures, video and audio, which wait to be played, and PDFs.
 
+The viewer shows one file over the whole window. Its top bar names the file: the sets it is in, its title, and after that its file name behind an icon of a file, so that the two are not confused. A file that came without a name is named by its hash.
+
+- The file's tags are listed down the left edge, over what is shown, as the side panel lists them: one to a line in their types' colours, those of the aggregated types together and each other type under its name. They are on a ground of the theme's colour, light or dark, so that they can be read over any picture. More than fit can be scrolled.
+- A button in the top bar opens a menu of what the viewer shows, each to be put away or brought back: the player, the file name, the tags. All are shown at first. What is chosen is a setting.
+
 ## Stacked and saved queries
 
 A search is a stack of queries, shown as rows in the search box. Each row is a query of its own, and narrows down what the rows before it found. A + under the rows adds one; a row can be taken out again. Rows left empty count for nothing.
