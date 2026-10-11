@@ -2102,9 +2102,17 @@ span.chip-label:hover {
   inset: 0;
   z-index: 10;
   display: flex;
-  flex-direction: column;
   color: #eee;
   background: rgb(0 0 0 / 0.92);
+}
+
+/* What is shown, under its top bar: all of the viewer but the info pane. */
+.viewer-stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .viewer header {
@@ -2154,30 +2162,6 @@ span.chip-label:hover {
 
 .viewer header .viewer-set button:hover {
   text-decoration: underline;
-}
-
-/* The file's own name, after the title: fainter, and behind an icon of a
-   file, so that it is not read as the title. */
-.viewer-file {
-  display: flex;
-  flex: 0 2 auto;
-  gap: 3px;
-  align-items: center;
-  min-width: 0;
-  color: #aaa;
-}
-
-.viewer-name:not(:empty) + .viewer-file {
-  margin-left: 14px;
-}
-
-.viewer-file .icon {
-  flex: none;
-}
-
-.viewer-file span {
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .viewer-inside {
@@ -2295,30 +2279,42 @@ span.chip-label:hover {
   line-height: 0;
 }
 
-.viewer-info-button[aria-pressed="true"] {
-  color: #b8c5ff;
+/* The info pane, down the whole left side when it is open. Its right edge
+   is dragged to make it wider or narrower. */
+.viewer-side {
+  position: relative;
+  display: flex;
+  flex: none;
+  width: var(--info-width, 240px);
+  max-width: 50vw;
 }
 
-/* Under the top bar: the info pane, when it is open, beside what is shown. */
-.viewer-main {
-  display: flex;
-  flex: 1;
-  min-height: 0;
+.viewer-grip {
+  position: absolute;
+  inset: 0 -4px 0 auto;
+  z-index: 2;
+  width: 8px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.viewer-grip:hover,
+.viewer-grip:active {
+  background: linear-gradient(to right, transparent 3px, var(--accent) 3px 5px, transparent 5px);
 }
 
 /* All there is to say of the file, to read and not to change, so small
    and close: what the file is, then its tags, in the theme's colours as
    the tags' own are. */
 .viewer-info {
-  flex: none;
-  width: 240px;
-  padding: 8px 10px 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 10px 12px;
   overflow-y: auto;
   font-size: 12px;
   line-height: 1.3;
   color: var(--text);
   background: var(--surface);
-  border-top-right-radius: 8px;
 }
 
 .viewer-info dl {
@@ -2370,11 +2366,6 @@ span.chip-label:hover {
 
 .viewer .viewer-links a {
   color: var(--accent);
-}
-
-/* The button to step back stands clear of the pane. */
-.viewer.with-info .viewer-step.previous {
-  left: 240px;
 }
 
 .viewer-body {

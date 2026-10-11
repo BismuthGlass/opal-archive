@@ -31,8 +31,30 @@ const WHEEL_PAUSE = 100;
 /** What of the top bar can be put away, as the menu that does it lists them. */
 const PARTS: { part: ViewerPart; label: string }[] = [
   { part: "player", label: "Player" },
-  { part: "filename", label: "File name" },
 ];
+/** How narrow and how wide the info pane can be dragged, and where its width is kept. */
+const INFO_LEAST = 180;
+const INFO_MOST = 520;
+const INFO_WIDTH_KEY = "opalarchive.viewer.info.width";
+
+function storedInfoWidth(): number | null {
+  try {
+    const width = Number(localStorage.getItem(INFO_WIDTH_KEY));
+    return width >= INFO_LEAST && width <= INFO_MOST ? width : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeInfoWidth(width: number | null) {
+  try {
+    if (width === null) localStorage.removeItem(INFO_WIDTH_KEY);
+    else localStorage.setItem(INFO_WIDTH_KEY, String(width));
+  } catch {
+    // The width is then only kept until the page is left.
+  }
+}
+
 /** What the info pane says of the file besides its tags, where it is set. */
 const DETAILS = [
   { field: "title", label: "Title" },
@@ -85,17 +107,32 @@ export default function Viewer(props: {
   // What is shown of the file is only asked for while it is shown. `latest`
   // keeps the last file's on screen until the next one's arrives.
   const [entity] = createResource(
-    () =>
-      (shows("filename") || shows("info")) && item()
-        ? ([item()!.id, dataVersion()] as const)
-        : null,
+    () => (shows("info") && item() ? ([item()!.id, dataVersion()] as const) : null),
     ([id]) => api.getEntity(id),
   );
-  /** What the file is called: the name it came under, or else its hash. */
-  const fileName = () => {
-    const file = shows("filename") ? entity.latest?.file : undefined;
-    if (!file) return undefined;
-    return file.original_name ?? (file.extension ? `${file.hash}.${file.extension}` : file.hash);
+  // The pane's width, where its edge was dragged to; null is as it is made.
+  const [infoWidth, setInfoWidth] = createSignal(storedInfoWidth());
+  const resizeInfo = (event: PointerEvent) => {
+    const grip = event.currentTarget as HTMLElement;
+    event.preventDefault();
+    grip.setPointerCapture(event.pointerId);
+    const move = (moved: PointerEvent) => {
+      // Never so wide that what is shown is left less than half the window.
+      const most = Math.max(INFO_LEAST, Math.min(INFO_MOST, window.innerWidth / 2));
+      setInfoWidth(Math.round(Math.max(INFO_LEAST, Math.min(most, moved.clientX))));
+    };
+    const done = () => {
+      grip.removeEventListener("pointermove", move);
+      storeInfoWidth(infoWidth());
+    };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", done, { once: true });
+    grip.addEventListener("pointercancel", done, { once: true });
+  };
+  /** A double click on the edge puts the width back as it was made. */
+  const resetInfoWidth = () => {
+    setInfoWidth(null);
+    storeInfoWidth(null);
   };
   const [metadata] = createResource(
     () => (shows("info") && item() ? ([item()!.id, dataVersion()] as const) : null),
@@ -212,8 +249,7 @@ export default function Viewer(props: {
     } else if (event.key === "Escape") {
       if (choosing()) setChoosing(false);
       else props.onMove(null);
-    }
-    else if (event.key === "ArrowLeft") step(-1);
+    } else if (event.key === "ArrowLeft") step(-1);
     else if (event.key === "ArrowRight") step(1);
     else if (event.key === "i" && !event.ctrlKey && !event.metaKey && !event.altKey) toggle("info");
     else return;
@@ -227,164 +263,16 @@ export default function Viewer(props: {
   return (
     <div
       class="viewer"
-      classList={{ "with-info": shows("info") }}
       role="dialog"
       aria-modal="true"
       aria-label="Viewer"
       onWheel={onWheel}
     >
-      <header>
-        <span class="viewer-title">
-          <Show when={sets().length > 0}>
-            <span class="viewer-set">
-              <For each={sets()}>
-                {(set, index) => (
-                  <>
-                    {index() > 0 ? ", " : ""}
-                    <button
-                      title={
-                        set.set_id === shownSet()?.set_id
-                          ? "The set on show: back to it"
-                          : "Go into this set"
-                      }
-                      onClick={() => goInto(set)}
-                    >
-                      {setName(set)}
-                    </button>
-                  </>
-                )}
-              </For>
-            </span>
-            <Show when={item()?.title}>
-              <span class="viewer-inside" aria-hidden="true">
-                ›
-              </span>
-            </Show>
-          </Show>
-          <span class="viewer-name">{item()?.title ?? ""}</span>
-          <Show when={fileName()}>
-            {(name) => (
-              <span class="viewer-file" title={`The file's name: ${name()}`}>
-                <Icon name="draft-outline" />
-                <span>{name()}</span>
-              </span>
-            )}
-          </Show>
-        </span>
-        <Show when={variants()}>
-          {(group) => (
-            <span class="viewer-set">
-              <button title="Show the variants of this, in the tab" onClick={() => goInto({ variants: group() })}>
-                {item()?.variants} variants
-              </button>
-            </span>
-          )}
-        </Show>
-        <For each={(item() && marks().get(item()!.id)) || []}>
-          {(mark) => <span class={`mark-badge mark-${mark}`}>Mark {mark}</span>}
-        </For>
-        <Show when={item()?.inbox}>
-          <span class="viewer-new" title="In the inbox: not yet archived">
-            <Icon name="inbox-outline" />
-          </span>
-        </Show>
-        <Show when={item()?.trashed}>
-          <span class="viewer-trashed" title="In the trash">
-            <Icon name="delete-outline" />
-          </span>
-        </Show>
-        <span class="viewer-count" title={props.only ? "Only what was selected is shown" : undefined}>
-          {place() + 1} / {count()}
-          {props.only ? " selected" : ""}
-        </span>
-        <Show when={shows("player")}>
-          <div class="viewer-player">
-            <button
-              aria-pressed={playing()}
-              aria-label={playing() ? "Pause" : "Play"}
-              title={playing() ? "Stop playing through the results" : "Play through the results"}
-              onClick={() => setPlaying(!playing())}
-            >
-              <Icon name={playing() ? "pause-outline" : "play-arrow-outline"} />
-            </button>
-            <label title="How long each result stays up. Video and audio play to their end.">
-              <input
-                type="number"
-                min="1"
-                step="1"
-                aria-label="Seconds each result stays up"
-                value={seconds()}
-                onChange={(event) => {
-                  const value = Number(event.currentTarget.value);
-                  if (value >= 1) setPlayer({ seconds: value });
-                  else event.currentTarget.value = String(seconds());
-                }}
-              />
-              s
-            </label>
-            <button
-              class="viewer-random"
-              aria-pressed={random()}
-              aria-label="Random order"
-              title={random() ? "Playing in random order" : "Playing in order"}
-              onClick={() => setPlayer({ random: !random() })}
-            >
-              <Icon name="shuffle" />
-            </button>
-          </div>
-        </Show>
-        <button
-          class="viewer-info-button"
-          aria-pressed={shows("info")}
-          aria-label="Info"
-          title={shows("info") ? "Close the info pane (I)" : "Show the file's details and tags (I)"}
-          onClick={() => toggle("info")}
+      <Show when={shows("info")}>
+        <div
+          class="viewer-side"
+          style={{ "--info-width": infoWidth() === null ? undefined : `${infoWidth()}px` }}
         >
-          <Icon name="info-outline" />
-        </button>
-        <div class="viewer-chooser" ref={chooser}>
-          <button
-            aria-haspopup="menu"
-            aria-expanded={choosing()}
-            aria-label="What is shown"
-            title="Choose what the bar shows"
-            onClick={() => setChoosing(!choosing())}
-          >
-            <Icon name="visibility-outline" />
-          </button>
-          <Show when={choosing()}>
-            <ul class="context-menu viewer-menu" role="menu">
-              <li class="context-menu-title">Show</li>
-              <For each={PARTS}>
-                {(entry) => (
-                  <li>
-                    <button
-                      role="menuitemcheckbox"
-                      aria-checked={shows(entry.part)}
-                      onClick={() => toggle(entry.part)}
-                    >
-                      <span class="viewer-check">
-                        <Show when={shows(entry.part)}>
-                          <Icon name="check" />
-                        </Show>
-                      </span>
-                      {entry.label}
-                    </button>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Show>
-        </div>
-        <Show when={item()}>
-          {(current) => <a href={contentUrl(current().id, downloadNames())}>Download</a>}
-        </Show>
-        <button aria-label="Close" onClick={() => props.onMove(null)}>
-          <Icon name="close" />
-        </button>
-      </header>
-      <div class="viewer-main">
-        <Show when={shows("info")}>
           <aside class="viewer-info" aria-label="Info">
             <Show when={info()}>
               {(about) => (
@@ -462,7 +350,156 @@ export default function Viewer(props: {
               )}
             </Show>
           </aside>
-        </Show>
+          <div
+            class="viewer-grip"
+            title="Drag to resize; double-click to put it back"
+            onPointerDown={resizeInfo}
+            onDblClick={resetInfoWidth}
+          />
+        </div>
+      </Show>
+      <div class="viewer-stage">
+        <header>
+          <button
+            aria-pressed={shows("info")}
+            aria-label="Info pane"
+            title={shows("info") ? "Close the info pane (I)" : "Show the file's details and tags (I)"}
+            onClick={() => toggle("info")}
+          >
+            <Icon name={shows("info") ? "left-panel-close-outline" : "left-panel-open-outline"} />
+          </button>
+          <span class="viewer-title">
+            <Show when={sets().length > 0}>
+              <span class="viewer-set">
+                <For each={sets()}>
+                  {(set, index) => (
+                    <>
+                      {index() > 0 ? ", " : ""}
+                      <button
+                        title={
+                          set.set_id === shownSet()?.set_id
+                            ? "The set on show: back to it"
+                            : "Go into this set"
+                        }
+                        onClick={() => goInto(set)}
+                      >
+                        {setName(set)}
+                      </button>
+                    </>
+                  )}
+                </For>
+              </span>
+              <Show when={item()?.title}>
+                <span class="viewer-inside" aria-hidden="true">
+                  ›
+                </span>
+              </Show>
+            </Show>
+            <span class="viewer-name">{item()?.title ?? ""}</span>
+          </span>
+          <Show when={variants()}>
+            {(group) => (
+              <span class="viewer-set">
+                <button title="Show the variants of this, in the tab" onClick={() => goInto({ variants: group() })}>
+                  {item()?.variants} variants
+                </button>
+              </span>
+            )}
+          </Show>
+          <For each={(item() && marks().get(item()!.id)) || []}>
+            {(mark) => <span class={`mark-badge mark-${mark}`}>Mark {mark}</span>}
+          </For>
+          <Show when={item()?.inbox}>
+            <span class="viewer-new" title="In the inbox: not yet archived">
+              <Icon name="inbox-outline" />
+            </span>
+          </Show>
+          <Show when={item()?.trashed}>
+            <span class="viewer-trashed" title="In the trash">
+              <Icon name="delete-outline" />
+            </span>
+          </Show>
+          <span class="viewer-count" title={props.only ? "Only what was selected is shown" : undefined}>
+            {place() + 1} / {count()}
+            {props.only ? " selected" : ""}
+          </span>
+          <Show when={shows("player")}>
+            <div class="viewer-player">
+              <button
+                aria-pressed={playing()}
+                aria-label={playing() ? "Pause" : "Play"}
+                title={playing() ? "Stop playing through the results" : "Play through the results"}
+                onClick={() => setPlaying(!playing())}
+              >
+                <Icon name={playing() ? "pause-outline" : "play-arrow-outline"} />
+              </button>
+              <label title="How long each result stays up. Video and audio play to their end.">
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  aria-label="Seconds each result stays up"
+                  value={seconds()}
+                  onChange={(event) => {
+                    const value = Number(event.currentTarget.value);
+                    if (value >= 1) setPlayer({ seconds: value });
+                    else event.currentTarget.value = String(seconds());
+                  }}
+                />
+                s
+              </label>
+              <button
+                class="viewer-random"
+                aria-pressed={random()}
+                aria-label="Random order"
+                title={random() ? "Playing in random order" : "Playing in order"}
+                onClick={() => setPlayer({ random: !random() })}
+              >
+                <Icon name="shuffle" />
+              </button>
+            </div>
+          </Show>
+          <div class="viewer-chooser" ref={chooser}>
+            <button
+              aria-haspopup="menu"
+              aria-expanded={choosing()}
+              aria-label="What is shown"
+              title="Choose what the bar shows"
+              onClick={() => setChoosing(!choosing())}
+            >
+              <Icon name="visibility-outline" />
+            </button>
+            <Show when={choosing()}>
+              <ul class="context-menu viewer-menu" role="menu">
+                <li class="context-menu-title">Show</li>
+                <For each={PARTS}>
+                  {(entry) => (
+                    <li>
+                      <button
+                        role="menuitemcheckbox"
+                        aria-checked={shows(entry.part)}
+                        onClick={() => toggle(entry.part)}
+                      >
+                        <span class="viewer-check">
+                          <Show when={shows(entry.part)}>
+                            <Icon name="check" />
+                          </Show>
+                        </span>
+                        {entry.label}
+                      </button>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          </div>
+          <Show when={item()}>
+            {(current) => <a href={contentUrl(current().id, downloadNames())}>Download</a>}
+          </Show>
+          <button aria-label="Close" onClick={() => props.onMove(null)}>
+            <Icon name="close" />
+          </button>
+        </header>
         {/* Clicking the backdrop, but not the media, closes. */}
         <div
           class="viewer-body"
@@ -510,13 +547,13 @@ export default function Viewer(props: {
             )}
           </Show>
         </div>
+        <button class="viewer-step previous" aria-label="Previous" onClick={() => step(-1)}>
+          <Icon name="chevron-left" />
+        </button>
+        <button class="viewer-step next" aria-label="Next" onClick={() => step(1)}>
+          <Icon name="chevron-right" />
+        </button>
       </div>
-      <button class="viewer-step previous" aria-label="Previous" onClick={() => step(-1)}>
-        <Icon name="chevron-left" />
-      </button>
-      <button class="viewer-step next" aria-label="Next" onClick={() => step(1)}>
-        <Icon name="chevron-right" />
-      </button>
     </div>
   );
 }

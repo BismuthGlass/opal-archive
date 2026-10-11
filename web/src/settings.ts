@@ -39,7 +39,7 @@ export type Settings = {
 };
 
 /** What of the viewer can be shown or put away. */
-export type ViewerPart = "player" | "filename" | "info";
+export type ViewerPart = "player" | "info";
 
 export const downloadNames = (): api.Naming => settings.downloadNames ?? "original";
 export const collapsesSets = (): boolean => settings.collapseSets ?? false;

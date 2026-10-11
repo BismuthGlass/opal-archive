@@ -125,10 +125,11 @@ The side panel can be made wider or narrower by dragging its right edge, within 
 
 The side panel ends in a drawer that shows the selected file: bigger than its tile, without opening the viewer. Of several selected, it shows the one selected last. Closed, the drawer is only its heading at the bottom of the panel; open, it takes the lower part of the panel, half of it at first and then as far as its top edge is dragged, and the rest of the panel scrolls above it, so that all of it can still be reached. Whether it is open and how tall are remembered by the browser. It shows what the viewer can: pictures, video and audio, which wait to be played, and PDFs.
 
-The viewer shows one file over the whole window. Its top bar names the file: the sets it is in, its title, and after that its file name behind an icon of a file, so that the two are not confused. A file that came without a name is named by its hash.
+The viewer shows one file over the whole window. Its top bar names the file: the sets it is in, and its title.
 
-- A button in the top bar, or the I key, opens an info pane down the left side, beside what is shown. It says all there is of the file, to read and not to change, so it is small and close: its name, type, dimensions, length or pages, size on disk, when it was added and its ID; then its title, date, rating, score, version and description, where they are set; then its tags as the side panel lists them, one to a line in their types' colours, those of the aggregated types together and each other type under its name; then its links. The pane is in the theme's colours. It is closed at first.
-- Another button opens a menu of what the top bar shows, each to be put away or brought back: the player, the file name. Both are shown at first.
+- A button at the start of the top bar, before the title, or the I key, opens an info pane down the whole left side of the window, beside what is shown and its bar. It says all there is of the file, to read and not to change, so it is small and close: its name, type, dimensions, length or pages, size on disk, when it was added and its ID; then its title, date, rating, score, version and description, where they are set; then its tags as the side panel lists them, one to a line in their types' colours, those of the aggregated types together and each other type under its name; then its links. The pane is in the theme's colours. It is closed at first.
+- The pane can be made wider or narrower by dragging its right edge, within limits that leave what is shown at least half the window; a double click on the edge puts it back. Its width is remembered by the browser.
+- Another button opens a menu of what the top bar shows, each to be put away or brought back: for now, the player.
 - Whether the pane is open and what the bar shows are settings.
 
 ## Stacked and saved queries
