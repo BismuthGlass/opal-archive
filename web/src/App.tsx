@@ -39,6 +39,7 @@ import {
   moveItems,
   removeFromView,
   selectAll,
+  showFirstSelected,
   selected,
   toggleMark,
   unmark,
@@ -405,6 +406,9 @@ export default function App() {
         moveItems(on.ids, end ? search.total : 0)
           .then(() => showToast(`Moved ${on.name} to the ${end ? "end" : "start"}`))
           .catch((err) => showToast(errorMessage(err)));
+      } else if (action === "showSelected") {
+        // Of the gallery only: in the viewer there is one file, and it is on show.
+        if (viewing() === null) showFirstSelected();
       } else if (action === "hide") {
         hide(on);
       } else if (action === "trash" || action === "restore") {

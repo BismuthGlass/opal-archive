@@ -123,7 +123,10 @@ export function noteScroll(top: number) {
   scrolled = top;
 }
 
-export { search, selected, marks, searchCount, dataVersion, scrollTo, setScrollTo };
+/** The result the grid is to bring into view and point out, until it has. */
+const [sought, setSought] = createSignal<number | null>(null);
+
+export { search, selected, marks, searchCount, dataVersion, scrollTo, setScrollTo, sought, setSought };
 
 // Responses from an older generation are dropped.
 let generation = 0;
@@ -579,6 +582,20 @@ export function addedTo(tab: number) {
 
 /** Every result ID, in the order on show. */
 export const resultIds = (): Promise<number[]> => calculated.then(() => ids);
+
+/**
+ * Goes to the first of the results that is selected: turns to its page,
+ * and has the grid scroll to it and point it out. Says whether there was
+ * one.
+ */
+export async function showFirstSelected(): Promise<boolean> {
+  const chosen = selected();
+  const index = (await resultIds()).findIndex((id) => chosen.has(id));
+  if (index < 0) return false;
+  goToPage(Math.floor(index / PAGE));
+  setSought(index);
+  return true;
+}
 
 /**
  * Moves results to sit before the result at `before` (an index into all

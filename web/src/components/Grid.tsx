@@ -24,6 +24,8 @@ import {
   noteScroll,
   PAGE,
   scrollTo,
+  setSought,
+  sought,
   search,
   searchCount,
   selected,
@@ -154,6 +156,27 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
     setScrollTop(scroller.scrollTop);
     noteScroll(scroller.scrollTop);
   });
+
+  // A result that is sought is brought to the middle of the grid, once
+  // its page is the one on show, and pointed out for a moment. This comes
+  // after the effect that starts a page at the top, and so has the last word.
+  const [pointed, setPointed] = createSignal<number | null>(null);
+  let pointing: ReturnType<typeof setTimeout> | undefined;
+  createEffect(() => {
+    const index = sought();
+    if (index === null || !search.ready || height() === 0) return;
+    const place = index - first();
+    if (place < 0 || place >= count()) return;
+    setSought(null);
+    const top = PADDING + Math.floor(place / columns()) * rowHeight();
+    scroller.scrollTop = Math.max(0, top - (height() - tile()) / 2);
+    setScrollTop(scroller.scrollTop);
+    noteScroll(scroller.scrollTop);
+    setPointed(index);
+    clearTimeout(pointing);
+    pointing = setTimeout(() => setPointed(null), 1600);
+  });
+  onCleanup(() => clearTimeout(pointing));
 
   /** The IDs being dragged, and where the pointer is. */
   const [drag, setDrag] = createSignal<{ ids: number[]; x: number; y: number } | null>(null);
@@ -294,6 +317,7 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                 class="tile"
                 classList={{
                   selected: item() !== undefined && selected().has(item()!.id),
+                  pointed: pointed() === index,
                   stack: stoodFor(item()) !== undefined,
                   trashed: item()?.trashed ?? false,
                   out: takenOut(item()),

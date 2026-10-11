@@ -36,6 +36,12 @@ export const ACTIONS = [
     key: "n",
   },
   {
+    id: "showSelected",
+    label: "Go to selection",
+    description: "Goes to the first selected item in the view, on whichever page it is, and points it out.",
+    key: "g",
+  },
+  {
     id: "archive",
     label: "Archive",
     description: "Takes out of the inbox, where what is new to the library waits to be looked over.",

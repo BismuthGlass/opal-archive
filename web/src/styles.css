@@ -791,6 +791,21 @@ button.primary {
   outline-offset: -1px;
 }
 
+/* The tile just gone to: a ring that spreads from it and fades, twice. */
+.tile.pointed .thumb {
+  animation: pointed 0.8s ease-out 2;
+}
+
+@keyframes pointed {
+  from {
+    box-shadow: 0 0 0 0 var(--accent);
+  }
+
+  to {
+    box-shadow: 0 0 0 14px transparent;
+  }
+}
+
 .tile-title {
   position: absolute;
   inset: auto 0 0;

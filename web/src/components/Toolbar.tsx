@@ -15,6 +15,7 @@ import {
   selectAll,
   selectMarked,
   selected,
+  showFirstSelected,
 } from "../search";
 import { openMarkMenu } from "./ContextMenu";
 import { shownSet } from "../tabs";
@@ -57,6 +58,13 @@ export default function Toolbar() {
         </button>
         <Show when={selected().size > 0}>
           <span class="toolbar-note">{plural(selected().size, "item")} selected</span>
+          <button
+            class="link"
+            title="Go to the first selected item, on whichever page it is"
+            onClick={showFirstSelected}
+          >
+            Go to first
+          </button>
           <button class="link" onClick={clearSelection}>
             Clear
           </button>

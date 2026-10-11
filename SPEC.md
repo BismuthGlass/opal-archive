@@ -103,6 +103,8 @@ What a view lists is decided when its search is calculated, and stays put after 
 
 The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab or downloaded into a download tab, files put into the set a tab shows).
 
+While something is selected, "Go to first" above the grid, or the G key, goes to the first selected file in the view: it turns to the page the file is on, scrolls it to the middle and points it out for a moment.
+
 ## Marks
 
 A file can be given one of five marks, numbered and coloured, to sort through what is on show. Marks change nothing in the library, and are remembered by the browser.
