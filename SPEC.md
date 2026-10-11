@@ -99,11 +99,11 @@ Uploading a zip reads the sidecars in it: this is the import. It works for any z
 
 ## Gallery views
 
-What a view lists is decided when its search is calculated, and stays put after that: it is a snapshot, saved with its tab, so it is the same after switching tabs or reloading the page. Where a view was is kept as well: its page, how far it was scrolled, and what was selected in it, across switching tabs and reloading the page. Unlike what the view lists, this is remembered by the browser, not saved with the tab: another browser opens the same view at its top. The order results were dragged into and any that were taken out of the view are part of it. Editing, tagging, rating or trashing a file changes how it is shown, but it does not drop out of the view, and files that start matching do not appear. A Refresh button calculates the search again. A gallery tab opened with an empty query does not list the whole library by itself: it waits, listing nothing, until Search is pressed. The Search button is disabled while the query in the box is the one whose results are on show.
+What a view lists is decided when its search is calculated, and stays put after that: it is a snapshot, saved with its tab, so it is the same after switching tabs or reloading the page. Where a view was is kept as well: its page, how far it was scrolled, and what was selected in it, across switching tabs and reloading the page. Unlike what the view lists, this is remembered by the browser, not saved with the tab: another browser opens the same view at its top. The order results were dragged into and any that were taken out of the view are part of it. Editing, tagging, rating or trashing a file changes how it is shown, but it does not drop out of the view, and files that start matching do not appear. Pressing Search again, with the query as it is, calculates the search again. A gallery tab opened with an empty query does not list the whole library by itself: it waits, listing nothing, until Search is pressed.
 
 The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab or downloaded into a download tab, files put into the set a tab shows).
 
-While something is selected, "Go to first" above the grid, or the G key, goes to the first selected file in the view: it turns to the page the file is on, scrolls it to the middle and points it out for a moment.
+While something is selected, the count of what is selected above the grid, when pressed, or the G key, goes to the first selected file in the view: it turns to the page the file is on, scrolls it to the middle and points it out for a moment.
 
 ## Marks
 

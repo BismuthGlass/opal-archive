@@ -104,7 +104,7 @@ export const ACTIONS = [
   {
     id: "hide",
     label: "Remove from view",
-    description: "Takes out of this view only. Nothing is trashed, and Refresh brings it back.",
+    description: "Takes out of this view only. Nothing is trashed, and searching again brings it back.",
     key: "ctrl+h",
   },
   {

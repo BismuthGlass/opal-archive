@@ -585,7 +585,7 @@ function Menu(props: {
       <li role="none">
         <button
           role="menuitem"
-          title="Take out of this view only. Nothing is trashed, and Refresh brings it back."
+          title="Take out of this view only. Nothing is trashed, and searching again brings it back."
           onClick={() => arrange(() => removeFromView(ids))}
         >
           <Icon name="visibility-off-outline" />

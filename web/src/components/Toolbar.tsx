@@ -8,7 +8,6 @@ import {
   goToPage,
   markCounts,
   pageCount,
-  refresh,
   resetOrder,
   resultIds,
   search,
@@ -39,14 +38,6 @@ export default function Toolbar() {
 
   return (
     <div class="toolbar">
-      <button
-        aria-label="Refresh"
-        title="Calculate this search again. Until then the results listed stay as they are."
-        onClick={refresh}
-      >
-        <Icon name="refresh" />
-        Refresh
-      </button>
       <Show when={search.total > 0}>
         <button
           onClick={selectAll}
@@ -57,13 +48,12 @@ export default function Toolbar() {
           Select all {search.total}
         </button>
         <Show when={selected().size > 0}>
-          <span class="toolbar-note">{plural(selected().size, "item")} selected</span>
           <button
-            class="link"
+            class="link toolbar-note"
             title="Go to the first selected item, on whichever page it is"
             onClick={showFirstSelected}
           >
-            Go to first
+            {plural(selected().size, "item")} selected
           </button>
           <button class="link" onClick={clearSelection}>
             Clear

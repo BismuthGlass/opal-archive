@@ -516,6 +516,16 @@ button.primary {
   font-variant-numeric: tabular-nums;
 }
 
+/* How many are selected is also the way to the first of them. */
+button.toolbar-note {
+  color: var(--muted);
+}
+
+button.toolbar-note:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
 .pager {
   display: flex;
   gap: 4px;

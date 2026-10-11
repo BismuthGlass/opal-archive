@@ -60,7 +60,7 @@ export default function QueryBar() {
       .map((row) => row.trim())
       .filter((row) => row !== "")
       .join("\n");
-  /** Whether searching would do anything: the query on show is this one. */
+  /** Whether the results on show are of this query: searching then calculates them again. */
   const unchanged = () => typed() === stored() && trashed() === showsTrashed() && !search.idle;
 
   const submit = () => {
@@ -69,8 +69,9 @@ export default function QueryBar() {
     // Showing the trash, or not, is searched for as a change of query is.
     const switched = tab !== undefined && trashed() !== showsTrashed();
     if (switched) setShowsTrashed(tab.id, trashed());
-    if (query === stored() && search.idle) {
-      // The search a newly opened tab was waiting to be asked for.
+    if (query === stored()) {
+      // The same query: the search a newly opened tab was waiting to be
+      // asked for, or the one on show, calculated again.
       if (!switched) refresh();
     } else if (inside()) {
       if (query !== inside()!.query) filterInside(query);
@@ -300,10 +301,9 @@ export default function QueryBar() {
         <button
           type="submit"
           class="primary"
-          disabled={unchanged()}
           title={
             unchanged()
-              ? "These are the results of this query. Refresh calculates them again."
+              ? "These are the results of this query. Searching again calculates them afresh."
               : undefined
           }
         >
