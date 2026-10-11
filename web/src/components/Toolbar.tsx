@@ -4,30 +4,25 @@ import * as api from "../api";
 import {
   MARKS,
   PAGE,
-  clearSelection,
   goToPage,
   markCounts,
   pageCount,
   resetOrder,
   resultIds,
   search,
-  selectAll,
   selectMarked,
-  selected,
-  showFirstSelected,
 } from "../search";
-import { openMarkMenu } from "./ContextMenu";
+import { openMarkMenu, openViewMenu } from "./ContextMenu";
 import { shownSet } from "../tabs";
 import Icon from "./Icon";
 
 /**
- * Above the grid: selection of the whole result, the order it has been
- * dragged into, and the pages of it.
+ * Above the grid: the menu of the view's selection and order, the counts
+ * of its marks, and the pages of it.
  */
 export default function Toolbar() {
   const from = () => search.page * PAGE + 1;
   const to = () => Math.min(search.total, (search.page + 1) * PAGE);
-  const allSelected = () => search.total > 0 && selected().size >= search.total;
   const filtered = () => search.query.trim() !== "";
 
   const saveOrder = async (id: string) => {
@@ -40,25 +35,14 @@ export default function Toolbar() {
     <div class="toolbar">
       <Show when={search.total > 0}>
         <button
-          onClick={selectAll}
-          disabled={allSelected()}
-          title="Select every result, on every page (Ctrl+A)"
+          class="icon-only"
+          aria-label="Selection and order"
+          aria-haspopup="menu"
+          title="Selection and order"
+          onClick={(event) => openViewMenu(event.currentTarget)}
         >
-          <Icon name="select-all" />
-          Select all {search.total}
+          <Icon name="menu" />
         </button>
-        <Show when={selected().size > 0}>
-          <button
-            class="link toolbar-note"
-            title="Go to the first selected item, on whichever page it is"
-            onClick={showFirstSelected}
-          >
-            {plural(selected().size, "item")} selected
-          </button>
-          <button class="link" onClick={clearSelection}>
-            Clear
-          </button>
-        </Show>
         {/* One count for each mark in use, of how many results have it:
             joined end to end, as one strip of the marks' colours. */}
         <Show when={markCounts().some((count) => count > 0)}>
@@ -101,9 +85,6 @@ export default function Toolbar() {
         </Show>
         <Show when={search.custom}>
           <span class="toolbar-note">{shownSet() ? "Order not saved" : "Custom order"}</span>
-          <button class="link" title="Go back to the order before dragging" onClick={resetOrder}>
-            Reset
-          </button>
         </Show>
         <nav class="pager" aria-label="Pages">
           <span class="toolbar-note">

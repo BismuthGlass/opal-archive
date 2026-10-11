@@ -516,14 +516,9 @@ button.primary {
   font-variant-numeric: tabular-nums;
 }
 
-/* How many are selected is also the way to the first of them. */
-button.toolbar-note {
-  color: var(--muted);
-}
-
-button.toolbar-note:hover {
-  color: var(--text);
-  text-decoration: underline;
+/* A button of an icon alone. */
+.toolbar button.icon-only:not(.link) {
+  padding: 3px 5px;
 }
 
 .pager {

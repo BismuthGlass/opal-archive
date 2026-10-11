@@ -103,7 +103,9 @@ What a view lists is decided when its search is calculated, and stays put after 
 
 The exceptions are things that cannot or should not wait: a file deleted for good leaves, and what is put into a tab's own container from that tab is added (files uploaded into an upload tab or downloaded into a download tab, files put into the set a tab shows).
 
-While something is selected, the count of what is selected above the grid, when pressed, or the G key, goes to the first selected file in the view: it turns to the page the file is on, scrolls it to the middle and points it out for a moment.
+A menu button at the start of the bar above the grid holds what is done to the view as a whole: selecting every result, going to what is selected, clearing the selection, and under Order, shuffling the results or putting them back in the order the search gives, which is greyed out while they are in it. How many are selected is said at the foot of the window.
+
+"Go to selected" there, or the G key, goes to the first selected file in the view: it turns to the page the file is on, scrolls it to the middle and points it out for a moment.
 
 ## Marks
 

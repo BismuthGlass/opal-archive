@@ -650,6 +650,21 @@ export async function removeFromView(removed: number[]) {
 }
 
 /** Goes back to the order the query gives. */
+/** Puts every result of the view in an order drawn by lot, as one dragged into. */
+export async function shuffleOrder() {
+  const next = [...(await resultIds())];
+  if (next.length < 2) return;
+  for (let last = next.length - 1; last > 0; last -= 1) {
+    const other = Math.floor(Math.random() * (last + 1));
+    [next[last], next[other]] = [next[other], next[last]];
+  }
+  ids = next;
+  anchor = null;
+  setSearch("custom", true);
+  remember();
+  reload();
+}
+
 export function resetOrder() {
   if (!search.custom) return;
   setSearch("custom", false);

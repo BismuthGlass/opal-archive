@@ -11,10 +11,14 @@ import {
   markCounts,
   moveItems,
   removeFromView,
+  resetOrder,
   resultIds,
   search,
+  selectAll,
   selectMarked,
   selected,
+  showFirstSelected,
+  shuffleOrder,
 } from "../search";
 import { open as openTab, openSelection, shownSet } from "../tabs";
 import { manageTag } from "../tagManaging";
@@ -27,13 +31,17 @@ import type { IconName } from "./Icon";
 /** A tag that was right-clicked, or with `under` the namespace of that name. */
 export type MenuTag = { field: string; value: string; under?: boolean };
 
-/** Where the menu is, and the item, tag or mark that was right-clicked. */
+/**
+ * Where the menu is, and the item, tag or mark that was right-clicked; or
+ * with `view`, that it is the menu of the view, opened from its button.
+ */
 type Opened = {
   x: number;
   y: number;
   item?: Item;
   tag?: MenuTag;
   mark?: number;
+  view?: true;
 };
 
 const [opened, setOpened] = createSignal<Opened | null>(null);
@@ -59,7 +67,23 @@ export function openMarkMenu(event: MouseEvent, mark: number) {
   setOpened({ x: event.clientX, y: event.clientY, mark });
 }
 
-const close = () => setOpened(null);
+/** When the menu was last put away: a press on its own button does that first. */
+let closedAt = 0;
+const close = () => {
+  if (opened() !== null) closedAt = Date.now();
+  setOpened(null);
+};
+
+/**
+ * Opens the menu of the view on show, under the button pressed: what is
+ * selected in it and the order it is in. A press on the button while the
+ * menu is open only puts it away.
+ */
+export function openViewMenu(button: HTMLElement) {
+  if (Date.now() - closedAt < 250) return;
+  const box = button.getBoundingClientRect();
+  setOpened({ x: box.left, y: box.bottom + 4, view: true });
+}
 
 /**
  * Deletes trashed files for good, once it has been agreed to. What is not
@@ -88,7 +112,9 @@ export default function ContextMenu(props: {
   return (
     <Show when={opened()} keyed>
       {(at) =>
-        at.mark ? (
+        at.view ? (
+          <ViewMenu at={at} />
+        ) : at.mark ? (
           <MarkMenu at={at} mark={at.mark} />
         ) : at.tag ? (
           <TagMenu at={at} tag={at.tag} />
@@ -97,6 +123,77 @@ export default function ContextMenu(props: {
         )
       }
     </Show>
+  );
+}
+
+/** What the button above the grid brings up: the view's selection, and its order. */
+function ViewMenu(props: { at: Opened }) {
+  const none = () => selected().size === 0;
+  /** Does one thing and puts the menu away. */
+  const then = (action: () => unknown) => () => {
+    close();
+    action();
+  };
+  return (
+    <Shell at={props.at} label="Selection and order of this view">
+      <li role="none">
+        <button
+          role="menuitem"
+          disabled={search.total === 0 || selected().size >= search.total}
+          title="Select every result, on every page (Ctrl+A)"
+          onClick={then(selectAll)}
+        >
+          <Icon name="select-all" />
+          Select all {search.total}
+        </button>
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          disabled={none()}
+          title="Go to the first selected item, on whichever page it is"
+          onClick={then(showFirstSelected)}
+        >
+          <Icon name="visibility-outline" />
+          Go to selected
+        </button>
+      </li>
+      <li role="none">
+        <button role="menuitem" disabled={none()} onClick={then(clearSelection)}>
+          <Icon name="close" />
+          Clear selection
+        </button>
+      </li>
+      <li class="menu-divider" role="separator" />
+      <Submenu icon="sort" label="Order">
+        <li role="none">
+          <button
+            role="menuitem"
+            disabled={search.total < 2}
+            title="Put every result of this view in an order drawn by lot"
+            onClick={then(shuffleOrder)}
+          >
+            <Icon name="shuffle" />
+            Shuffle
+          </button>
+        </li>
+        <li role="none">
+          <button
+            role="menuitem"
+            disabled={!search.custom}
+            title={
+              search.custom
+                ? "Go back to the order the search gives"
+                : "The order is the one the search gives"
+            }
+            onClick={then(resetOrder)}
+          >
+            <Icon name="undo" />
+            Reset
+          </button>
+        </li>
+      </Submenu>
+    </Shell>
   );
 }
 
