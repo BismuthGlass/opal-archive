@@ -639,10 +639,17 @@ button.primary {
   opacity: 1;
 }
 
-.mark-flag {
+/* A tile's marks, side by side at the middle of its top edge. */
+.mark-flags {
   position: absolute;
   top: 0;
   left: 50%;
+  display: flex;
+  gap: 2px;
+  transform: translateX(-50%);
+}
+
+.mark-flag {
   min-width: 20px;
   padding: 1px 5px 6px;
   font-size: 11px;
@@ -651,7 +658,6 @@ button.primary {
   color: #fff;
   text-align: center;
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 5px), 0 100%);
-  transform: translateX(-50%);
 }
 
 .mark-1 {

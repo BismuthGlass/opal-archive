@@ -107,7 +107,7 @@ While something is selected, "Go to first" above the grid, or the G key, goes to
 
 ## Marks
 
-A file can be given one of five marks, numbered and coloured, to sort through what is on show. Marks change nothing in the library, and are remembered by the browser.
+A file can be given any of five marks, numbered and coloured, and several at once: giving one leaves the others on. They are there to sort through what is on show. Marks change nothing in the library, and are remembered by the browser.
 
 Marks belong to the tab, not to one view of it. A file marked in a search is marked in its set too, once the tab goes into it, and in its variants and its collection; a file marked there is still marked after going back out. Another tab has marks of its own.
 

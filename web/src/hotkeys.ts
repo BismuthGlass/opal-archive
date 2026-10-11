@@ -26,13 +26,13 @@ export const ACTIONS = [
   {
     id: "mark",
     label: "Mark",
-    description: "Gives the mark last picked with “Mark as”, mark 1 at first, or takes it off what already has it.",
+    description: "Gives the mark last picked with “Mark as”, mark 1 at first, beside any other marks, or takes it off what already has it.",
     key: "m",
   },
   {
     id: "markAs",
     label: "Mark as",
-    description: "Then press 1 to 5 to give that mark, which “Mark” gives from then on, or 0 to take the mark off.",
+    description: "Then press 1 to 5 to give that mark as well, which “Mark” gives from then on, or 0 to take every mark off.",
     key: "n",
   },
   {

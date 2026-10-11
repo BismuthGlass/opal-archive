@@ -52,25 +52,39 @@ export function previewed(): number | null {
 }
 /** How many marks there are, numbered from 1. */
 export const MARKS = 5;
+/** The marks a file has, lowest first: it can have several. */
+type Marks = readonly number[];
+/** The marks of a tab: file to its marks, for the files that have any. */
+type TabMarks = ReadonlyMap<number, Marks>;
 /**
- * What is marked in the tab on show, and with which mark. Marks are the
+ * What is marked in the tab on show, and with which marks. Marks are the
  * tab's own, and the same in every view of it: what is marked in a search
  * is marked in the set it is in, gone into from there, and the other way
  * round. Nothing in the library is changed by them.
  */
-const [marks, setMarks] = createSignal<ReadonlyMap<number, number>>(new Map());
+const [marks, setMarks] = createSignal<TabMarks>(new Map());
 /** Bumped when what the view lists changes: what of the marked is in it does too. */
 const [listing, setListing] = createSignal(0);
 
 // Marks are remembered per browser, like where each view was left.
 const MARKS_KEY = "opalarchive.marks";
 /** The marks of each tab that has any. */
-const tabMarks = new Map<number, ReadonlyMap<number, number>>(readMarks());
+const tabMarks = new Map<number, TabMarks>(readMarks());
 
-function readMarks(): [number, Map<number, number>][] {
+/** Marks as they are kept: a file had one mark once, stored as its number. */
+type StoredMarks = [number, number | number[]][];
+// A function declaration: it is called while the lines above are still run.
+function storedMarks(given: StoredMarks): [number, Marks][] {
+  return given.map(([id, had]) => [id, typeof had === "number" ? [had] : had]);
+}
+
+function readMarks(): [number, TabMarks][] {
   try {
     const stored = JSON.parse(localStorage.getItem(MARKS_KEY) ?? "[]");
-    return (stored as [number, [number, number][]][]).map(([tab, given]) => [tab, new Map(given)]);
+    return (stored as [number, StoredMarks][]).map(([tab, given]) => [
+      tab,
+      new Map(storedMarks(given)),
+    ]);
   } catch {
     return [];
   }
@@ -91,7 +105,7 @@ function writeMarks() {
 const tabOf = (key: string) => (key === "" ? null : Number.parseInt(key, 10));
 
 /** Sets the marks of the tab on show. */
-function putMarks(next: ReadonlyMap<number, number>) {
+function putMarks(next: TabMarks) {
   setMarks(next);
   const tab = tabOf(viewKey);
   if (tab === null) return;
@@ -168,7 +182,7 @@ type StoredLeft = {
   scroll: number;
   selected: number[];
   /** Marks were once kept with each view; they are taken up as their tab's. */
-  marks?: [number, number][];
+  marks?: StoredMarks;
   anchor: number | null;
 };
 
@@ -189,7 +203,7 @@ function readLefts(): [string, Left][] {
     const read = stored.map(([key, { marks: given, ...left }]): [string, Left] => {
       const tab = tabOf(key);
       if (given?.length && tab !== null) {
-        tabMarks.set(tab, new Map([...(tabMarks.get(tab) ?? []), ...given]));
+        tabMarks.set(tab, new Map([...(tabMarks.get(tab) ?? []), ...storedMarks(given)]));
         moved = true;
       }
       return [key, { ...left, selected: new Set(left.selected) }];
@@ -417,7 +431,7 @@ export function runSearch(
   });
   setSelected(left?.selected ?? new Set<number>());
   setLastSelected(null);
-  setMarks(tabMarks.get(tabOf(key) ?? -1) ?? new Map<number, number>());
+  setMarks(tabMarks.get(tabOf(key) ?? -1) ?? new Map<number, Marks>());
   setListing((n) => n + 1);
   setSearchCount((n) => n + 1);
   // After the count: the grid goes to the top first, then to where it was.
@@ -688,7 +702,7 @@ export function clearSelection() {
  * The marks of what the view on show lists. What is marked elsewhere in
  * the tab, and not listed here, is neither counted nor selected from here.
  */
-function listedMarks(): [number, number][] {
+function listedMarks(): [number, Marks][] {
   listing();
   const given = marks();
   if (given.size === 0) return [];
@@ -699,40 +713,46 @@ function listedMarks(): [number, number][] {
 /** How many results carry each mark; index 0 is not used. */
 export function markCounts(): number[] {
   const counts = Array<number>(MARKS + 1).fill(0);
-  for (const [, mark] of listedMarks()) counts[mark] += 1;
+  for (const [, given] of listedMarks()) for (const mark of given) counts[mark] += 1;
   return counts;
 }
 
 /**
- * Gives results a mark, in place of any they had. Given to results that
- * all have it already, it is taken off them instead. Returns whether it
- * was put on.
+ * Gives a mark to these, beside any others they have, or takes it off if
+ * they all have it already. Says whether it was given.
  */
 export function toggleMark(marked: number[], mark: number): boolean {
-  if (marked.every((id) => marks().get(id) === mark)) {
-    unmark(marked);
-    return false;
-  }
+  const given = marked.some((id) => !marks().get(id)?.includes(mark));
   const next = new Map(marks());
-  for (const id of marked) next.set(id, mark);
+  for (const id of marked) {
+    const rest = (next.get(id) ?? []).filter((had) => had !== mark);
+    const now = given ? [...rest, mark].sort((a, b) => a - b) : rest;
+    if (now.length > 0) next.set(id, now);
+    else next.delete(id);
+  }
   putMarks(next);
-  return true;
+  return given;
 }
 
-/** Takes whatever mark these results have off them. */
+/** Takes every mark off these. */
 export function unmark(marked: number[]) {
   const next = new Map(marks());
   for (const id of marked) next.delete(id);
   putMarks(next);
 }
 
-/** Takes a mark off everything in the tab that has it, listed here or not. */
+/** Takes one mark off everything in the tab that has it. */
 export function clearMark(mark: number) {
-  putMarks(new Map([...marks()].filter(([, given]) => given !== mark)));
+  const next = new Map<number, Marks>();
+  for (const [id, given] of marks()) {
+    const rest = given.filter((had) => had !== mark);
+    if (rest.length > 0) next.set(id, rest);
+  }
+  putMarks(next);
 }
 
 /** Selects every result with a mark, on every page. */
 export function selectMarked(mark: number) {
   anchor = null;
-  setSelected(new Set(listedMarks().filter(([, given]) => given === mark).map(([id]) => id)));
+  setSelected(new Set(listedMarks().filter(([, given]) => given.includes(mark)).map(([id]) => id)));
 }

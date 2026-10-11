@@ -183,9 +183,9 @@ export default function Viewer(props: {
             </span>
           )}
         </Show>
-        <Show when={item() && marks().get(item()!.id)}>
-          {(mark) => <span class={`mark-badge mark-${mark()}`}>Mark {mark()}</span>}
-        </Show>
+        <For each={(item() && marks().get(item()!.id)) || []}>
+          {(mark) => <span class={`mark-badge mark-${mark}`}>Mark {mark}</span>}
+        </For>
         <Show when={item()?.inbox}>
           <span class="viewer-new" title="In the inbox: not yet archived">
             <Icon name="inbox-outline" />

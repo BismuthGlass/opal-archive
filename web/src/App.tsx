@@ -223,7 +223,7 @@ export default function App() {
   const mark = (target: { ids: number[]; name: string }, number: number | null) => {
     if (number === null) {
       unmark(target.ids);
-      showToast(`Took the mark off ${target.name}`);
+      showToast(`Took every mark off ${target.name}`);
     } else if (toggleMark(target.ids, number)) {
       showToast(`Gave ${target.name} mark ${number}`);
     } else {
@@ -398,7 +398,7 @@ export default function App() {
       } else if (action === "markAs") {
         setMarking(on);
         showToast(
-          `Mark ${on.name}: press 1 to ${MARKS}, which the mark key then gives too, or 0 to take the mark off`,
+          `Mark ${on.name}: press 1 to ${MARKS}, which the mark key then gives too, or 0 to take every mark off`,
           true,
         );
       } else if (action === "moveToStart" || action === "moveToEnd") {
