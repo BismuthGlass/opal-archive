@@ -94,16 +94,10 @@ export default function App() {
   const [viewing, setViewing] = createSignal<number | null>(null);
   /** The result indexes the viewer keeps to, when it shows only some. */
   const [viewingOnly, setViewingOnly] = createSignal<number[] | null>(null);
-  /** What those are, as the viewer's count says it: "selected", "with mark 2". */
-  const [viewingWhat, setViewingWhat] = createSignal("selected");
-  /**
-   * Opens the viewer on a result, or moves it, or with `null` closes it.
-   * `what` says what the results it keeps to are, if not the selected.
-   */
-  const view = (index: number | null, only: number[] | null = viewingOnly(), what?: string) => {
+  /** Opens the viewer on a result, or moves it, or with `null` closes it. */
+  const view = (index: number | null, only: number[] | null = viewingOnly()) => {
     // The grid follows the viewer across pages.
     if (index !== null) goToPage(Math.floor(index / pageSize()));
-    if (index !== null && only !== viewingOnly()) setViewingWhat(what ?? "selected");
     setViewingOnly(index === null ? null : only);
     setViewing(index);
   };
@@ -635,7 +629,6 @@ export default function App() {
         <Viewer
           index={viewing()!}
           only={viewingOnly() ?? undefined}
-          what={viewingWhat()}
           onMove={(index) => view(index)}
           onGoTo={(index) => {
             view(null);

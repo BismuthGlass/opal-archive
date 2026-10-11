@@ -13,6 +13,12 @@ export const MOST_PAGE = 1000;
 export const pageSize = () =>
   Math.max(LEAST_PAGE, Math.min(MOST_PAGE, Math.round(settings.pageSize ?? DEFAULT_PAGE)));
 
+/**
+ * What a view is kept to: a set, a group of variants or a collection, which
+ * the server knows; or a mark, which only the page does.
+ */
+export type Within = api.Within | { mark: number };
+
 type SearchError = { message: string; position?: number; line?: number };
 
 const [search, setSearch] = createStore({
@@ -20,7 +26,7 @@ const [search, setSearch] = createStore({
   /** Upload tab the results are limited to, if any. */
   scope: null as number | null,
   /** The set or group of variants the results are limited to instead, if any. */
-  within: null as api.Within | null,
+  within: null as Within | null,
   /**
    * Whether what is in the trash is listed along with the rest, without
    * the query having to say `@trashed`.
@@ -408,14 +414,17 @@ function calculate() {
   const current = (calculation += 1);
   // What the tab was left with is asked for only when the view is opened;
   // a refresh always runs the search.
-  const found = api.searchIds(
-    search.query,
-    seed,
-    search.scope,
-    search.within,
-    search.trashed,
-    search.collapsed,
-  );
+  const within = search.within;
+  // What has a mark is found here: of all the query finds, those marked.
+  const found =
+    within && "mark" in within
+      ? api
+          .searchIds(search.query, seed, null, null, search.trashed, false)
+          .then((all) => {
+            const marked = new Set(markedIds(within.mark));
+            return all.filter((id) => marked.has(id));
+          })
+      : api.searchIds(search.query, seed, search.scope, within, search.trashed, search.collapsed);
   calculated = found.then((found) => {
     if (current !== calculation) return;
     if (search.custom) {
@@ -442,7 +451,7 @@ export function runSearch(
   key = "",
   tab: number | null = null,
   /** A set or group of variants to show, in place of what `scope` holds. */
-  within: api.Within | null = null,
+  within: Within | null = null,
   /** Whether to wait to be asked, if the tab has no view of this query yet. */
   wait = false,
   /**
@@ -797,11 +806,9 @@ export function markCounts(): number[] {
   return counts;
 }
 
-/** Where in the results those with a mark are, in the order they are listed. */
-export async function markedIndexes(mark: number): Promise<number[]> {
-  const given = marks();
-  return (await resultIds()).flatMap((id, index) => (given.get(id)?.includes(mark) ? [index] : []));
-}
+/** Everything in the tab on show that has a mark, listed in the view or not. */
+export const markedIds = (mark: number): number[] =>
+  [...marks()].filter(([, given]) => given.includes(mark)).map(([id]) => id);
 
 /**
  * Gives a mark to these, beside any others they have, or with `given`

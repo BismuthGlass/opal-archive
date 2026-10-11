@@ -9,7 +9,6 @@ import {
   clearMark,
   clearSelection,
   markCounts,
-  markedIndexes,
   markNames,
   moveItems,
   nameMark,
@@ -24,7 +23,7 @@ import {
   showFirstSelected,
   shuffleOrder,
 } from "../search";
-import { open as openTab, openSelection, shownSet } from "../tabs";
+import { enter, open as openTab, openSelection, shownMark, shownSet } from "../tabs";
 import { manageTag } from "../tagManaging";
 import { fieldLabel, tagQuery } from "../format";
 import { showToast } from "../toast";
@@ -35,8 +34,8 @@ import type { IconName } from "./Icon";
 /** A tag that was right-clicked, or with `under` the namespace of that name. */
 export type MenuTag = { field: string; value: string; under?: boolean };
 
-/** Opens the viewer on a result; with `only`, on those results alone, which `what` names. */
-type Preview = (index: number, only: number[] | null, what?: string) => void;
+/** Opens the viewer on a result; with `only`, on those results alone. */
+type Preview = (index: number, only: number[] | null) => void;
 
 /**
  * Where the menu is, and the item, tag or mark that was right-clicked; or
@@ -131,7 +130,7 @@ export default function ContextMenu(props: {
         ) : at.shown ? (
           <ViewerMenu at={at} shown={at.shown} />
         ) : at.mark ? (
-          <MarkMenu at={at} mark={at.mark} onPreview={props.onPreview} />
+          <MarkMenu at={at} mark={at.mark} />
         ) : at.tag ? (
           <TagMenu at={at} tag={at.tag} />
         ) : (
@@ -243,16 +242,10 @@ function ViewMenu(props: { at: Opened; onPreview: Preview }) {
 }
 
 /** What a right click on a mark's count brings up. */
-function MarkMenu(props: { at: Opened; mark: number; onPreview: Preview }) {
+function MarkMenu(props: { at: Opened; mark: number }) {
   const mark = props.mark;
   // Read once, here: the menu is gone by the time it is used.
   const named = markNames()[mark];
-  /** Opens the viewer on what has the mark alone, as on a group of its own. */
-  const preview = async () => {
-    close();
-    const only = await markedIndexes(mark);
-    if (only.length > 0) props.onPreview(only[0], only, `with mark ${mark}`);
-  };
   /** Asks what the mark is for here. Nothing given leaves it as it was. */
   const name = () => {
     close();
@@ -268,11 +261,19 @@ function MarkMenu(props: { at: Opened; mark: number; onPreview: Preview }) {
       <li role="none">
         <button
           role="menuitem"
-          title="Open the viewer on what has this mark alone"
-          onClick={preview}
+          disabled={shownMark() === mark}
+          title={
+            shownMark() === mark
+              ? "This is what is on show"
+              : "Go into what has this mark, as into a set: the view becomes those files, with a way back"
+          }
+          onClick={() => {
+            close();
+            enter({ mark });
+          }}
         >
-          <Icon name="visibility-outline" />
-          Preview
+          <Icon name="subdirectory-arrow-right" />
+          Open
         </button>
       </li>
       <li role="none">

@@ -4,7 +4,8 @@ import * as api from "./api";
 import { errorMessage } from "./format";
 import type { Tab, TabKind } from "./api";
 import { forgetDownload } from "./downloads";
-import { forgetViews } from "./search";
+import { forgetViews, markNames } from "./search";
+import type { Within } from "./search";
 
 /** Drops what the page keeps for a closed tab: its number is given out again. */
 function forget(id: number) {
@@ -57,20 +58,27 @@ export function setShowsTrashed(tab: number, show: boolean) {
 }
 
 /**
- * A set a tab has gone into, or a group of variants, or a collection, and
- * the filter typed while in it.
+ * A set a tab has gone into, or a group of variants, or a collection, or
+ * what has one of the tab's marks, and the filter typed while in it.
  */
-export type Step = (api.SetName | { variants: string } | { collection: string }) & {
+export type Step = (
+  | api.SetName
+  | { variants: string }
+  | { collection: string }
+  | { mark: number }
+) & {
   query: string;
 };
 
-/** What a step is called. */
+/** What a step is called: a mark by its number, and by its name if it has one. */
 export const stepName = (step: Step) =>
   "variants" in step
     ? "Variants"
     : "collection" in step
       ? step.collection
-      : step.title || step.set_id;
+      : "mark" in step
+        ? `Mark ${step.mark}${markNames()[step.mark] ? ` (${markNames()[step.mark]})` : ""}`
+        : step.title || step.set_id;
 
 /** What tells a step from any other. */
 export const stepKey = (step: Step) =>
@@ -78,15 +86,19 @@ export const stepKey = (step: Step) =>
     ? `v${step.variants}`
     : "collection" in step
       ? `c${step.collection}`
-      : `s${step.set_id}`;
+      : "mark" in step
+        ? `m${step.mark}`
+        : `s${step.set_id}`;
 
 /** What a step keeps a search to. */
-export const stepWithin = (step: Step): api.Within =>
+export const stepWithin = (step: Step): Within =>
   "variants" in step
     ? { variants: step.variants }
     : "collection" in step
       ? { collection: step.collection }
-      : { set: step.set_id };
+      : "mark" in step
+        ? { mark: step.mark }
+        : { set: step.set_id };
 
 // A tab can go into the set of one of its results, or its variants, or a
 // collection it is part of, and on from there, and back out: the way in
@@ -106,11 +118,12 @@ function saveTrails() {
 
 /** A step as it is now, if what it goes into is still there. */
 async function current(
-  step: { set_id: string } | { variants: string } | { collection: string },
+  step: { set_id: string } | { variants: string } | { collection: string } | { mark: number },
   query: string,
 ): Promise<Step | null> {
-  // A group is its ID and nothing more, and a collection its name: there
-  // is nothing of either to read.
+  // A group is its ID and nothing more, a collection its name and a mark
+  // its number: there is nothing of them to read.
+  if ("mark" in step) return { mark: Number(step.mark), query };
   if ("variants" in step) return { variants: String(step.variants), query };
   if ("collection" in step) return { collection: String(step.collection), query };
   // A set no file gives any more is gone.
@@ -154,7 +167,13 @@ export const inside = (): Step | undefined => trail().at(-1);
 export const shownSet = (): api.SetName | undefined => {
   const step = inside();
   if (!step) return activeTab()?.set ?? undefined;
-  return "variants" in step || "collection" in step ? undefined : step;
+  return "variants" in step || "collection" in step || "mark" in step ? undefined : step;
+};
+
+/** The mark the active tab shows what has, if it has gone into one. */
+export const shownMark = (): number | undefined => {
+  const step = inside();
+  return step && "mark" in step ? step.mark : undefined;
 };
 
 /** The collection the active tab shows, if it has gone into one. */
@@ -169,9 +188,12 @@ export const shownVariants = (): string | undefined => {
   return step && "variants" in step ? step.variants : undefined;
 };
 
-/** Goes into a set, a group of variants or a collection, in the active tab. */
+/**
+ * Goes into a set, a group of variants, a collection or what has a mark,
+ * in the active tab.
+ */
 export async function enter(
-  into: { set_id: string } | { variants: string } | { collection: string },
+  into: { set_id: string } | { variants: string } | { collection: string } | { mark: number },
 ) {
   const tab = activeId();
   // What is on show is already gone into.
@@ -180,7 +202,9 @@ export async function enter(
       ? shownVariants() === into.variants
       : "collection" in into
         ? shownCollection() === into.collection
-        : shownSet()?.set_id === into.set_id;
+        : "mark" in into
+          ? shownMark() === into.mark
+          : shownSet()?.set_id === into.set_id;
   if (tab === null || here) return;
   await guard(async () => {
     const step = await current(into, "");

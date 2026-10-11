@@ -113,8 +113,6 @@ function rowValue(key: string, entity: api.Entity, data: api.Metadata) {
 export default function Viewer(props: {
   index: number;
   only?: number[];
-  /** What those are, as the count says it: "selected", "with mark 2". */
-  what?: string;
   onMove: (index: number | null) => void;
   /** Closes the viewer and goes to a result in the view. */
   onGoTo: (index: number) => void;
@@ -498,9 +496,9 @@ export default function Viewer(props: {
               <Icon name="delete-outline" />
             </span>
           </Show>
-          <span class="viewer-count" title={props.only ? `Only what is ${props.what ?? "selected"} is shown` : undefined}>
+          <span class="viewer-count" title={props.only ? "Only what was selected is shown" : undefined}>
             {place() + 1} / {count()}
-            {props.only ? ` ${props.what ?? "selected"}` : ""}
+            {props.only ? " selected" : ""}
           </span>
           <Show when={shows("player")}>
             <div class="viewer-player">

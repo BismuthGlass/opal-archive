@@ -32,7 +32,15 @@ import {
   pageSize,
 } from "../search";
 import { stats } from "../stats";
-import { activeTab, enter, inside, shownCollection, shownSet, shownVariants } from "../tabs";
+import {
+  activeTab,
+  enter,
+  inside,
+  shownCollection,
+  shownMark,
+  shownSet,
+  shownVariants,
+} from "../tabs";
 import { openContextMenu } from "./ContextMenu";
 import Icon from "./Icon";
 
@@ -299,7 +307,9 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                   ? EMPTY.variants
                   : shownCollection() !== undefined
                     ? EMPTY.collection
-                    : EMPTY.set
+                    : shownMark() !== undefined
+                      ? "Nothing in this tab has this mark."
+                      : EMPTY.set
                 : search.scope !== null && search.query === ""
                   ? EMPTY[activeTab()?.kind ?? "upload"]
                   : "No results."}
