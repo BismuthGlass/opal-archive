@@ -36,6 +36,8 @@ Uploaded files should be brought into internal storage, with their hash for a fi
 
 Thumbnails should also be stored for each file (in a separate dir).
 
+The panel at the top of an upload tab can be folded down to one row, to leave the files more room; folded, it still says how an upload or a download is going. Whether it is folded is remembered by the browser, for every upload tab.
+
 An upload tab also takes web addresses, in a field beside its button. An address of a site there is a downloader for (a post, a board, a thread) is given to that downloader, which downloads what is there into the tab: see Downloaders. Any other address has to be of a file itself: the server fetches the file and takes it in as an upload, with the address as its source URL; a page is refused, and nothing is looked for inside it. Several addresses can be pasted at once, of either sort, and are taken one after the other.
 
 Uploading a file that is already in the library changes nothing about the existing file, with one exception: if it is in the trash, it is taken out. Its metadata, name and tags stay as they are. It is still listed in the upload tab it was uploaded through, like any other upload.

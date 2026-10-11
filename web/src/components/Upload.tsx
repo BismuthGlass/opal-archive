@@ -8,10 +8,12 @@ import { BaseTags, Progress, SeenList } from "./DownloadPanel";
 import DownloaderSettings from "./DownloaderSettings";
 import Icon from "./Icon";
 import Modal from "./Modal";
+import { createStoredFlag } from "./Panel";
 
 /**
  * The panel at the top of an upload tab: a row to pick files or give web
- * addresses, and under it the tags given to everything that arrives. An
+ * addresses, and under it the tags given to everything that arrives. It
+ * folds down to one row, which still says how an upload is going. An
  * address goes to the downloader for its site, if there is one (a post, a
  * board, a thread), and is otherwise fetched as the file it is of.
  */
@@ -28,6 +30,8 @@ export function UploadBox() {
   const sites = () => (downloaders.latest ?? []).map((downloader) => downloader.title);
   const [showSettings, setShowSettings] = createSignal(false);
   const [showSeen, setShowSeen] = createSignal(false);
+  /** Whether the panel is open, or folded down to one row; for every upload tab. */
+  const [open, setOpen] = createStoredFlag("opalarchive.upload.panel", true);
   // The tags this tab gives to everything uploaded into it. The box is the
   // same one for every upload tab, so they are read again for each.
   const tab = () => activeTab()?.id;
@@ -54,60 +58,77 @@ export function UploadBox() {
     refetch();
   };
   return (
-    <section class="download-panel upload-top" aria-label="Upload">
+    <section class="download-panel upload-top" classList={{ folded: !open() }} aria-label="Upload">
       <div class="download-row">
+        {/* Folds the panel down to this row, to leave the files more room. */}
         <button
-          class="upload-choose"
-          title="Pick files from this computer. They can also be dropped anywhere on the window."
-          onClick={() => input.click()}
+          class="panel-fold"
+          aria-expanded={open()}
+          aria-label={open() ? "Fold this panel away" : "Open this panel"}
+          title={open() ? "Fold this panel away, to leave the files more room" : "Open this panel"}
+          onClick={() => setOpen(!open())}
         >
-          <Icon name="upload" />
-          Choose files
+          <span class="chevron" classList={{ open: open() }}>
+            <Icon name="chevron-right" />
+          </span>
+          <Show when={!open()}>Upload, download and tags to add</Show>
         </button>
-        <input
-          ref={input}
-          type="file"
-          multiple
-          hidden
-          onChange={() => {
-            upload([...(input.files ?? [])]);
-            // Lets the same file be picked again later.
-            input.value = "";
-          }}
-        />
-        <input
-          type="text"
-          class="download-url"
-          aria-label="Addresses to download"
-          placeholder={
-            sites().length > 0
-              ? `Or paste an address: a file's, or one from ${sites().join(", ")}`
-              : "Or paste the address of a file: https://example.com/picture.jpg"
-          }
-          title="The address of a file, or of something a downloader takes: a post, a board, a thread. Several can be pasted at once."
-          spellcheck={false}
-          autocomplete="off"
-          autocapitalize="off"
-          value={addresses()}
-          onInput={(event) => setAddresses(event.currentTarget.value)}
-          onKeyDown={(event) => event.key === "Enter" && addresses().trim() && fetchAll()}
-        />
-        <button class="primary" disabled={addresses().trim() === ""} onClick={fetchAll}>
-          Fetch
-        </button>
-        <button
-          title="The options and login of each downloader, for every tab and Opal Drop"
-          onClick={() => setShowSettings(true)}
-        >
-          <Icon name="settings-outline" />
-          Downloader settings
-        </button>
+        <Show when={open()}>
+          <button
+            class="upload-choose"
+            title="Pick files from this computer. They can also be dropped anywhere on the window."
+            onClick={() => input.click()}
+          >
+            <Icon name="upload" />
+            Choose files
+          </button>
+          <input
+            ref={input}
+            type="file"
+            multiple
+            hidden
+            onChange={() => {
+              upload([...(input.files ?? [])]);
+              // Lets the same file be picked again later.
+              input.value = "";
+            }}
+          />
+          <input
+            type="text"
+            class="download-url"
+            aria-label="Addresses to download"
+            placeholder={
+              sites().length > 0
+                ? `Or paste an address: a file's, or one from ${sites().join(", ")}`
+                : "Or paste the address of a file: https://example.com/picture.jpg"
+            }
+            title="The address of a file, or of something a downloader takes: a post, a board, a thread. Several can be pasted at once."
+            spellcheck={false}
+            autocomplete="off"
+            autocapitalize="off"
+            value={addresses()}
+            onInput={(event) => setAddresses(event.currentTarget.value)}
+            onKeyDown={(event) => event.key === "Enter" && addresses().trim() && fetchAll()}
+          />
+          <button class="primary" disabled={addresses().trim() === ""} onClick={fetchAll}>
+            Fetch
+          </button>
+          <button
+            title="The options and login of each downloader, for every tab and Opal Drop"
+            onClick={() => setShowSettings(true)}
+          >
+            <Icon name="settings-outline" />
+            Downloader settings
+          </button>
+        </Show>
       </div>
-      <p class="hint">
-        Files can also be dropped anywhere on the window. A zip is unpacked: its files are added,
-        its folders become sets, and a sidecar beside a file (<code>name.json</code>, as an
-        export writes) gives it its metadata.
-      </p>
+      <Show when={open()}>
+        <p class="hint">
+          Files can also be dropped anywhere on the window. A zip is unpacked: its files are added,
+          its folders become sets, and a sidecar beside a file (<code>name.json</code>, as an
+          export writes) gives it its metadata.
+        </p>
+      </Show>
       {/* A downloader at work for this tab: how far it has got, and a way
           to stop it. Shown whoever started it, this page or one before. */}
       <Show when={download()?.job?.running && download()!.job}>
@@ -121,22 +142,24 @@ export function UploadBox() {
       <Show when={uploads.total > 0 && uploads.tabs.includes(tab() ?? -1)}>
         <UploadStatus />
       </Show>
-      {/* A label beside each setting. */}
-      <div class="download-settings">
-        <BaseTags data={{ tags: tags.latest ?? {} }} error={tagError()} onChange={setTags} />
-        <Show when={(download()?.seen ?? 0) > 0}>
-          <span class="label">Seen before</span>
-          <div>
-            <button
-              class="link"
-              title="What a downloader has fetched into this tab before, which it skips when it meets it again"
-              onClick={() => setShowSeen(true)}
-            >
-              {plural(download()!.seen, "item")}, skipped when met again
-            </button>
-          </div>
-        </Show>
-      </div>
+      <Show when={open()}>
+        {/* A label beside each setting. */}
+        <div class="download-settings">
+          <BaseTags data={{ tags: tags.latest ?? {} }} error={tagError()} onChange={setTags} />
+          <Show when={(download()?.seen ?? 0) > 0}>
+            <span class="label">Seen before</span>
+            <div>
+              <button
+                class="link"
+                title="What a downloader has fetched into this tab before, which it skips when it meets it again"
+                onClick={() => setShowSeen(true)}
+              >
+                {plural(download()!.seen, "item")}, skipped when met again
+              </button>
+            </div>
+          </Show>
+        </div>
+      </Show>
       <Show when={showSettings()}>
         <DownloaderSettings onClose={() => setShowSettings(false)} />
       </Show>

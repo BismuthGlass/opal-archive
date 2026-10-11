@@ -2954,6 +2954,31 @@ kbd {
   border-radius: 8px;
 }
 
+/* The button that folds a tab's panel down to its first row, and opens
+   it again: an arrow, and folded, what the panel is. */
+.download-row > button.panel-fold:not(.primary) {
+  flex: none;
+  gap: 0;
+  padding: 2px 6px 2px 8px;
+  color: var(--muted);
+  background: none;
+  border: none;
+}
+
+.download-row > button.panel-fold:hover {
+  color: var(--text);
+}
+
+.panel-fold .chevron.open {
+  transform: rotate(90deg);
+}
+
+/* Folded, the panel is as thin as its one row. */
+.download-panel.folded {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
 .download-panel > p,
 .download-progress p {
   margin: 0;
