@@ -2296,39 +2296,47 @@ span.chip-label:hover {
 }
 
 /* The file's tags, in the bottom left corner, right against the edges and
-   over what is shown. Their colours are the theme's, so they are on the
-   theme's ground: light or dark, and a little seen through. They stop
-   short of the button to step back, and scroll when they are more. */
+   over what is shown. Their colours are the theme's, so each is on a
+   strip of the theme's ground, light or dark and a little seen through,
+   no wider than its name. They stop short of the button to step back, and
+   scroll when they are more. */
 .viewer-tags {
+  --tag-ground: rgb(255 255 255 / 0.85);
   position: absolute;
   bottom: 0;
   left: 0;
   z-index: 1;
   max-width: min(240px, 40%);
   max-height: calc(50vh - 52px);
-  padding: 4px 8px 6px 0;
   overflow-y: auto;
   color: var(--text);
-  background: rgb(255 255 255 / 0.85);
-  border-top-right-radius: 8px;
 }
 
 @media (prefers-color-scheme: dark) {
   .viewer-tags {
-    background: rgb(16 16 18 / 0.7);
+    --tag-ground: rgb(16 16 18 / 0.7);
   }
+}
+
+.viewer-tags .tag-lines {
+  gap: 1px;
+  padding: 0;
+  margin-top: 1px;
+}
+
+.viewer-tags .tag-line,
+.viewer-tags .label {
+  padding: 0 6px;
+  background: var(--tag-ground);
+  border-radius: 0 4px 4px 0;
 }
 
 .viewer-tags .label {
   display: block;
-  padding-left: 8px;
-  margin-top: 4px;
+  width: fit-content;
+  margin: 4px 0 0;
   font-size: 12px;
   color: var(--muted);
-}
-
-.viewer-tags .tag-lines {
-  padding-left: 8px;
 }
 
 .viewer-tags .tag-name {
