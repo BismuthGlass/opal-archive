@@ -76,8 +76,9 @@ export default function Toolbar() {
               <button
                 class={`mark-badge mark-${mark}`}
                 aria-label={`Mark ${mark}: ${plural(markCounts()[mark], "item")}`}
-                title={`${plural(markCounts()[mark], "item")} with mark ${mark}. Click to select, right click for more.`}
-                onClick={() => selectMarked(mark)}
+                title={`${plural(markCounts()[mark], "item")} with mark ${mark}. Click to select, Ctrl or Cmd and click to add to the selection, right click for more.`}
+                // Cmd stands in for Ctrl, as it does on a tile.
+                onClick={(event) => selectMarked(mark, event.ctrlKey || event.metaKey)}
                 onContextMenu={(event) => openMarkMenu(event, mark)}
               >
                 {markCounts()[mark]}

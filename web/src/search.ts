@@ -751,8 +751,22 @@ export function clearMark(mark: number) {
   putMarks(next);
 }
 
-/** Selects every result with a mark, on every page. */
-export function selectMarked(mark: number) {
+/**
+ * Selects every result with a mark, on every page. With `toggle`, as with
+ * Ctrl on a tile, they are added to what is selected, or taken out of it
+ * if every one of them is selected already.
+ */
+export function selectMarked(mark: number, toggle = false) {
   anchor = null;
-  setSelected(new Set(listedMarks().filter(([, given]) => given.includes(mark)).map(([id]) => id)));
+  const marked = listedMarks()
+    .filter(([, given]) => given.includes(mark))
+    .map(([id]) => id);
+  if (!toggle) return setSelected(new Set(marked));
+  const next = new Set(selected());
+  const all = marked.every((id) => next.has(id));
+  for (const id of marked) {
+    if (all) next.delete(id);
+    else next.add(id);
+  }
+  setSelected(next);
 }

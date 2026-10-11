@@ -113,7 +113,7 @@ Each mark has a key of its own, 1 to 5 unless changed in the settings, which giv
 
 Marks belong to the tab, not to one view of it. A file marked in a search is marked in its set too, once the tab goes into it, and in its variants and its collection; a file marked there is still marked after going back out. Another tab has marks of its own.
 
-The count of each mark above the grid, and selecting by mark, take in only what the view on show lists. Clearing a mark takes it off everything in the tab that has it.
+The count of each mark above the grid, and selecting by mark, take in only what the view on show lists. A click on a mark's count selects what has that mark; with Ctrl, it adds them to what is selected, or takes them out if they are all selected already. Clearing a mark takes it off everything in the tab that has it.
 
 ## Preview
 
