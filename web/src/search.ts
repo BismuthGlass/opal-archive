@@ -15,9 +15,10 @@ export const pageSize = () =>
 
 /**
  * What a view is kept to: a set, a group of variants or a collection, which
- * the server knows; or a mark, which only the page does.
+ * the server knows; or a mark, which only the page does, with the files
+ * that had it in the view it was gone into from, in that view's order.
  */
-export type Within = api.Within | { mark: number };
+export type Within = api.Within | { mark: number; ids: number[] };
 
 type SearchError = { message: string; position?: number; line?: number };
 
@@ -415,15 +416,9 @@ function calculate() {
   // What the tab was left with is asked for only when the view is opened;
   // a refresh always runs the search.
   const within = search.within;
-  // What has a mark is found here: of all the query finds, those marked.
   const found =
     within && "mark" in within
-      ? api
-          .searchIds(search.query, seed, null, null, search.trashed, false)
-          .then((all) => {
-            const marked = new Set(markedIds(within.mark));
-            return all.filter((id) => marked.has(id));
-          })
+      ? foundMarked(within)
       : api.searchIds(search.query, seed, search.scope, within, search.trashed, search.collapsed);
   calculated = found.then((found) => {
     if (current !== calculation) return;
@@ -806,9 +801,28 @@ export function markCounts(): number[] {
   return counts;
 }
 
-/** Everything in the tab on show that has a mark, listed in the view or not. */
-export const markedIds = (mark: number): number[] =>
-  [...marks()].filter(([, given]) => given.includes(mark)).map(([id]) => id);
+/**
+ * What the view on show lists that has a mark, in the order it lists it.
+ * What has the mark elsewhere in the tab is no part of it.
+ */
+export async function listedMarked(mark: number): Promise<number[]> {
+  const given = marks();
+  return (await resultIds()).filter((id) => given.get(id)?.includes(mark));
+}
+
+/**
+ * What a view gone into a mark lists: the files that had the mark in the
+ * view it was gone into from, and have it still, in that view's order; or
+ * with a query, those of them it finds, in its order.
+ */
+async function foundMarked(within: { mark: number; ids: number[] }): Promise<number[]> {
+  const given = marks();
+  const held = within.ids.filter((id) => given.get(id)?.includes(within.mark));
+  if (search.query.trim() === "") return held;
+  const kept = new Set(held);
+  const all = await api.searchIds(search.query, seed, null, null, search.trashed, false);
+  return all.filter((id) => kept.has(id));
+}
 
 /**
  * Gives a mark to these, beside any others they have, or with `given`

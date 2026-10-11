@@ -65,7 +65,7 @@ export type Step = (
   | api.SetName
   | { variants: string }
   | { collection: string }
-  | { mark: number }
+  | { mark: number; ids: number[] }
 ) & {
   query: string;
 };
@@ -97,7 +97,7 @@ export const stepWithin = (step: Step): Within =>
     : "collection" in step
       ? { collection: step.collection }
       : "mark" in step
-        ? { mark: step.mark }
+        ? { mark: step.mark, ids: step.ids }
         : { set: step.set_id };
 
 // A tab can go into the set of one of its results, or its variants, or a
@@ -118,12 +118,20 @@ function saveTrails() {
 
 /** A step as it is now, if what it goes into is still there. */
 async function current(
-  step: { set_id: string } | { variants: string } | { collection: string } | { mark: number },
+  step:
+    | { set_id: string }
+    | { variants: string }
+    | { collection: string }
+    | { mark: number; ids: number[] },
   query: string,
 ): Promise<Step | null> {
-  // A group is its ID and nothing more, a collection its name and a mark
-  // its number: there is nothing of them to read.
-  if ("mark" in step) return { mark: Number(step.mark), query };
+  // A group is its ID and nothing more, a collection its name, and a mark
+  // its number and the files it was gone into with: there is nothing of
+  // them to read.
+  if ("mark" in step) {
+    const ids = Array.isArray(step.ids) ? step.ids.map(Number) : [];
+    return { mark: Number(step.mark), ids, query };
+  }
   if ("variants" in step) return { variants: String(step.variants), query };
   if ("collection" in step) return { collection: String(step.collection), query };
   // A set no file gives any more is gone.
@@ -189,11 +197,15 @@ export const shownVariants = (): string | undefined => {
 };
 
 /**
- * Goes into a set, a group of variants, a collection or what has a mark,
- * in the active tab.
+ * Goes into a set, a group of variants or a collection, in the active
+ * tab; or into a mark, with the files of the view on show that have it.
  */
 export async function enter(
-  into: { set_id: string } | { variants: string } | { collection: string } | { mark: number },
+  into:
+    | { set_id: string }
+    | { variants: string }
+    | { collection: string }
+    | { mark: number; ids: number[] },
 ) {
   const tab = activeId();
   // What is on show is already gone into.

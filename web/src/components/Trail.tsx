@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import { markedIds } from "../search";
+import { resultIds } from "../search";
 import { activeTab, inside, leave, open, openSelection, openSet, stepName, trail } from "../tabs";
 import type { Step } from "../tabs";
 import { quoteValue, setName } from "../format";
@@ -26,8 +26,8 @@ function outermost(): string {
 
 /**
  * Gives what the tab is inside a tab of its own: a set's, or a search for
- * the variants or for the collection, or a tab that holds what has the
- * mark now.
+ * the variants or for the collection, or a tab that holds what the mark's
+ * view lists.
  */
 const openInTab = (step: Step) =>
   "variants" in step
@@ -35,7 +35,7 @@ const openInTab = (step: Step) =>
     : "collection" in step
       ? open("gallery", `collection=${quoteValue(step.collection)}`)
       : "mark" in step
-        ? openSelection(markedIds(step.mark))
+        ? resultIds().then(openSelection)
         : openSet(step.set_id);
 
 /**

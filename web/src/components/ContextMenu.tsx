@@ -8,6 +8,7 @@ import {
   changed,
   clearMark,
   clearSelection,
+  listedMarked,
   markCounts,
   markNames,
   moveItems,
@@ -265,11 +266,11 @@ function MarkMenu(props: { at: Opened; mark: number }) {
           title={
             shownMark() === mark
               ? "This is what is on show"
-              : "Go into what has this mark, as into a set: the view becomes those files, with a way back"
+              : "Go into what has this mark in this view, as into a set: the view becomes those files, with a way back"
           }
-          onClick={() => {
+          onClick={async () => {
             close();
-            enter({ mark });
+            enter({ mark, ids: await listedMarked(mark) });
           }}
         >
           <Icon name="subdirectory-arrow-right" />
