@@ -769,6 +769,26 @@ export async function selectAll() {
   setSelected(new Set(await resultIds()));
 }
 
+/**
+ * Selects what the view lists that a query finds, or with `add` has it
+ * join what is selected. The view is not searched again: the query is run
+ * on the whole library, trash and all, and what it finds that is listed
+ * here is what is selected. Says how many that is; with none, the
+ * selection is left as it was.
+ */
+export async function selectByQuery(query: string, add = false): Promise<number> {
+  const [found, listed] = await Promise.all([
+    api.searchIds(query, 0, null, null, true),
+    resultIds(),
+  ]);
+  const matching = new Set(found);
+  const chosen = listed.filter((id) => matching.has(id));
+  if (chosen.length === 0) return 0;
+  anchor = null;
+  setSelected(new Set(add ? [...selected(), ...chosen] : chosen));
+  return chosen.length;
+}
+
 /** Selects every result that is not selected, in place of those that are. */
 export async function invertSelection() {
   const all = await resultIds();

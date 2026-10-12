@@ -107,9 +107,11 @@ The exceptions are things that cannot or should not wait: a file deleted for goo
 
 A view is shown in pages of 200 files, or of as many as the settings say, from 10 to 1000.
 
-A menu button at the start of the bar above the grid holds what is done to the view as a whole: opening the viewer on it, or on what is selected alone; selecting every result, going to what is selected, clearing the selection, and under Order, shuffling the results or putting them back in the order the search gives, which is greyed out while they are in it. How many are selected is said at the foot of the window.
+A menu button at the start of the bar above the grid holds what is done to the view as a whole: opening the viewer on it, or on what is selected alone; selecting every result, selecting by a query, going to what is selected, clearing the selection, and under Order, shuffling the results or putting them back in the order the search gives, which is greyed out while they are in it. How many are selected is said at the foot of the window.
 
 "Go to selected" there, or the G key, goes to the first selected file in the view: it turns to the page the file is on, scrolls it to the middle and points it out for a moment.
+
+"Select by query" there, or Shift+Q, asks for a query and selects what the view lists that the query finds; the view itself stays as it is. The query is asked of the whole library, so it need not repeat what the view was searched for, and it finds what is in the trash if the view lists it. It can add to what is selected in place of replacing it. With nothing found, the selection is left as it was.
 
 ## Marks
 

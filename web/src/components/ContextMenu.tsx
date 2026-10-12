@@ -29,7 +29,9 @@ import { manageTag } from "../tagManaging";
 import { fieldLabel, tagQuery } from "../format";
 import { showToast } from "../toast";
 import type { GroupKind } from "./GroupDialog";
+import { keyFor, keyLabel } from "../hotkeys";
 import Icon from "./Icon";
+import { openQuerySelect } from "./QuerySelect";
 import type { IconName } from "./Icon";
 
 /** A tag that was right-clicked, or with `under` the namespace of that name. */
@@ -190,6 +192,17 @@ function ViewMenu(props: { at: Opened; onPreview: Preview }) {
         >
           <Icon name="select-all" />
           Select all {search.total}
+        </button>
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          disabled={search.total === 0}
+          title={`Select what this view lists that a query finds (${keyLabel(keyFor("selectByQuery"))})`}
+          onClick={then(openQuerySelect)}
+        >
+          <Icon name="search" />
+          Select by query…
         </button>
       </li>
       <li role="none">

@@ -48,6 +48,7 @@ import {
 import { collapsesSets, loadSettings } from "./settings";
 import { watchInbox } from "./inbox";
 import { closeTagManager, openTagManager, tagManager } from "./tagManaging";
+import QuerySelect, { openQuerySelect } from "./components/QuerySelect";
 import { refreshStats, stats } from "./stats";
 import { hideToast, showToast, toast } from "./toast";
 import {
@@ -406,6 +407,11 @@ export default function App() {
     if (action && !(moves && viewing() !== null)) {
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (action === "selectByQuery") {
+        // Of the gallery only, and of the view: nothing need be selected yet.
+        if (viewing() === null) openQuerySelect();
+        return;
+      }
       const on = hotkeyTarget();
       if (!on) return showToast("Select something first");
       if (action === "quickTag") {
@@ -651,6 +657,7 @@ export default function App() {
       <Show when={tagManager()} keyed>
         {(opened) => <TagManager initial={opened.tag} onClose={closeTagManager} />}
       </Show>
+      <QuerySelect />
       <Show when={helpOpen()}>
         <SearchHelp onClose={() => setHelpOpen(false)} />
       </Show>

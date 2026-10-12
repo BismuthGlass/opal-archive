@@ -144,6 +144,12 @@ export const ACTIONS = [
     key: "m",
   },
   {
+    id: "selectByQuery",
+    label: "Select by query",
+    description: "Asks for a query, and selects what the view lists that it finds. In the gallery only.",
+    key: "shift+q",
+  },
+  {
     id: "showSelected",
     label: "Go to selection",
     description: "Goes to the first selected item in the view, on whichever page it is, and points it out.",
