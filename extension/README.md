@@ -44,6 +44,10 @@ extension send to that one from then on. This is noticed by itself for an
 OpalArchive on this computer, which is where a tunnel to one elsewhere
 ends too; for one at another address the press finds it out.
 
+A right-click on the extension's button has "Open OpalArchive", which goes
+to the tab OpalArchive is open in, or opens it in a new one if there is
+none, beside the browser's own "Options".
+
 What was sent is listed in OpalArchive's Opal Drop tab, until it is cleared
 there.
 

@@ -126,7 +126,26 @@ chrome.runtime.onInstalled.addListener(() => {
     title: "Send to OpalArchive",
     contexts: ["page", "link", "image", "video"],
   });
+  // In the menu of the extension's own button, which a right-click on it opens.
+  chrome.contextMenus.create({
+    id: "open",
+    title: "Open OpalArchive",
+    contexts: ["action"],
+  });
 });
+
+/** Shows OpalArchive: the tab it is open in if there is one, a new one if not. */
+async function openApp() {
+  const at = await server();
+  const origin = originOf(at);
+  const { id: here } = await chrome.windows.getLastFocused();
+  const open = (await chrome.tabs.query({})).filter((tab) => originOf(tab.url) === origin);
+  // One in the window being looked at is nearer than one in another.
+  const tab = open.find((tab) => tab.windowId === here) ?? open[0];
+  if (!tab) return chrome.tabs.create({ url: at });
+  await chrome.tabs.update(tab.id, { active: true });
+  await chrome.windows.update(tab.windowId, { focused: true });
+}
 
 /** Says on the extension's button how the last thing sent this way went. */
 async function report(tab, result) {
@@ -140,6 +159,7 @@ async function report(tab, result) {
 }
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === "open") return openApp();
   // A link is what was pointed at; failing that the page it is on, which
   // says more than the address of a picture in it.
   const url = info.linkUrl || info.pageUrl || info.srcUrl;
