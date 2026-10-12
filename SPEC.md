@@ -113,9 +113,9 @@ A menu button at the start of the bar above the grid holds what is done to the v
 
 ## Marks
 
-A file can be given any of five marks, numbered and coloured, and several at once: giving one leaves the others on. They are there to sort through what is on show. Marks change nothing in the library, and are remembered by the browser.
+A file can be given any of nine marks, numbered and coloured, and several at once: giving one leaves the others on. They are there to sort through what is on show. Marks change nothing in the library, and are remembered by the browser.
 
-Each mark has a key that gives it to what is selected, 1 to 5 unless changed in the settings, and another that takes it off, Shift with the same digit; 0 takes every mark off. M gives the mark last given again.
+Each mark has a key that gives it to what is selected, 1 to 9 unless changed in the settings, and another that takes it off, Shift with the same digit; 0 takes every mark off. M gives the mark last given again.
 
 Marks belong to the tab, not to one view of it. A file marked in a search is marked in its set too, once the tab goes into it, and in its variants and its collection; a file marked there is still marked after going back out. Another tab has marks of its own.
 

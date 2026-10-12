@@ -54,6 +54,30 @@ export const ACTIONS = [
     key: "5",
   },
   {
+    id: "mark6",
+    label: "Mark 6",
+    description: "Gives mark 6, beside any other marks.",
+    key: "6",
+  },
+  {
+    id: "mark7",
+    label: "Mark 7",
+    description: "Gives mark 7, beside any other marks.",
+    key: "7",
+  },
+  {
+    id: "mark8",
+    label: "Mark 8",
+    description: "Gives mark 8, beside any other marks.",
+    key: "8",
+  },
+  {
+    id: "mark9",
+    label: "Mark 9",
+    description: "Gives mark 9, beside any other marks.",
+    key: "9",
+  },
+  {
     id: "unmark1",
     label: "Take off mark 1",
     description: "Takes mark 1 off, and leaves any other marks.",
@@ -82,6 +106,30 @@ export const ACTIONS = [
     label: "Take off mark 5",
     description: "Takes mark 5 off, and leaves any other marks.",
     key: "shift+5",
+  },
+  {
+    id: "unmark6",
+    label: "Take off mark 6",
+    description: "Takes mark 6 off, and leaves any other marks.",
+    key: "shift+6",
+  },
+  {
+    id: "unmark7",
+    label: "Take off mark 7",
+    description: "Takes mark 7 off, and leaves any other marks.",
+    key: "shift+7",
+  },
+  {
+    id: "unmark8",
+    label: "Take off mark 8",
+    description: "Takes mark 8 off, and leaves any other marks.",
+    key: "shift+8",
+  },
+  {
+    id: "unmark9",
+    label: "Take off mark 9",
+    description: "Takes mark 9 off, and leaves any other marks.",
+    key: "shift+9",
   },
   {
     id: "unmark",

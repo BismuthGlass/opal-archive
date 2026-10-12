@@ -17,6 +17,10 @@
   --mark-3: #2f9e44;
   --mark-4: #0c8599;
   --mark-5: #9c36b5;
+  --mark-6: #1c7ed6;
+  --mark-7: #d6336c;
+  --mark-8: #a17400;
+  --mark-9: #5c677d;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -685,6 +689,22 @@ button.primary {
   background: var(--mark-5);
 }
 
+.mark-6 {
+  background: var(--mark-6);
+}
+
+.mark-7 {
+  background: var(--mark-7);
+}
+
+.mark-8 {
+  background: var(--mark-8);
+}
+
+.mark-9 {
+  background: var(--mark-9);
+}
+
 /* How many results have a mark, above the grid; and the mark of the file
    open in the viewer. */
 /* The counts of the marks above the grid, joined into one strip with
@@ -756,6 +776,22 @@ button.primary {
 
 .toolbar button.mark-5 {
   background: var(--mark-5);
+}
+
+.toolbar button.mark-6 {
+  background: var(--mark-6);
+}
+
+.toolbar button.mark-7 {
+  background: var(--mark-7);
+}
+
+.toolbar button.mark-8 {
+  background: var(--mark-8);
+}
+
+.toolbar button.mark-9 {
+  background: var(--mark-9);
 }
 
 /* What a tile says of its file in the corner, one under the other. */

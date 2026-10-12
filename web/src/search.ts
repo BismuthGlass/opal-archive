@@ -64,7 +64,7 @@ export function previewed(): number | null {
   return chosen.size > 0 ? [...chosen].at(-1)! : null;
 }
 /** How many marks there are, numbered from 1. */
-export const MARKS = 5;
+export const MARKS = 9;
 /** The marks a file has, lowest first: it can have several. */
 type Marks = readonly number[];
 /** The marks of a tab: file to its marks, for the files that have any. */
