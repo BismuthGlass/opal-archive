@@ -69,7 +69,6 @@ const OPAL_TYPES = [
   ["source_work", "sw", "#3040b0", "#d5dbff"],
   ["person", "pe", "#b0204f", "#ffd2df"],
   ["genre", "ge", "#6a2bc0", "#e5d3ff"],
-  ["style", "st", "#0a777d", "#c6f0f1"],
   ["medium", "me", "#7d5a0a", "#f2e2c2"],
   ["flaws", "fl", "#b3261e", "#ffd0cb"],
   ["language", "la", "#1565a8", "#d1ebff"],

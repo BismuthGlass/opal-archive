@@ -225,7 +225,6 @@ export const TAG_FIELDS = [
   "source_work",
   "person",
   "genre",
-  "style",
   "medium",
   "flaws",
   "language",

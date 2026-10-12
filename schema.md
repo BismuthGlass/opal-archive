@@ -94,14 +94,12 @@ interface FileMetadata {
   // Work's date, e.g. YYYY or YYYY-MM-DD.
   date?: string;
 
-  // E.g. digital_art, photography, oil_painting.
+  // What it is made with and how it is drawn, e.g. digital_art, photography,
+  // oil_painting, anime, sketch, monochrome.
   medium?: string[];
 
   // E.g. cyberpunk, historic, horror, cosplay.
   genre?: string[];
-
-  // E.g. anime, hyperrealistic, sketch, monochrome.
-  style?: string[];
 
   // E.g. cropped, censored, jpeg_artifacting.
   flaws?: string[];

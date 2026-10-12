@@ -88,13 +88,13 @@ another type has `@`, the type and a colon in front:
 
 | Written  | Type          | Written  | Type          |
 | -------- | ------------- | -------- | ------------- |
-| `@cr:`   | creator       | `@me:`   | medium        |
-| `@ch:`   | character     | `@fl:`   | flaws         |
-| `@sw:`   | source work   | `@la:`   | language      |
-| `@pe:`   | person        | `@so:`   | source        |
-| `@ge:`   | genre         | `@us:`   | usage tags    |
-| `@st:`   | style         | `@ai:`   | AI usage tags |
-| `@ta:`   | plain tags    | `@bu:`   | bucket        |
+| `@cr:`   | creator       | `@fl:`   | flaws         |
+| `@ch:`   | character     | `@la:`   | language      |
+| `@sw:`   | source work   | `@so:`   | source        |
+| `@pe:`   | person        | `@us:`   | usage tags    |
+| `@ge:`   | genre         | `@ai:`   | AI usage tags |
+| `@me:`   | medium        | `@bu:`   | bucket        |
+| `@ta:`   | plain tags    |          |               |
 
 The type's full name works too (`@creator:`, `@source_work:`). Only the first
 colon ends the type; the rest is the tag, namespaces and all.

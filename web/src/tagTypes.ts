@@ -29,7 +29,6 @@ const DEFAULTS: Record<(typeof TAG_FIELDS)[number], TagType> = {
   source_work: { light: "#3040b0", dark: "#d5dbff", bold: false, aggregate: true }, // indigo: a book spine
   person: { light: "#b0204f", dark: "#ffd2df", bold: false, aggregate: true }, // rose: real people
   genre: { light: "#6a2bc0", dark: "#e5d3ff", bold: false, aggregate: true }, // violet: mood
-  style: { light: "#0a777d", dark: "#c6f0f1", bold: false, aggregate: true }, // teal: the brush
   medium: { light: "#7d5a0a", dark: "#f2e2c2", bold: false, aggregate: true }, // canvas
   flaws: { light: "#b3261e", dark: "#ffd0cb", bold: false, aggregate: false }, // red: a warning
   language: { light: "#1565a8", dark: "#d1ebff", bold: false, aggregate: false }, // sky
@@ -50,7 +49,6 @@ export const TAG_PREFIXES: Record<(typeof TAG_FIELDS)[number], string> = {
   source_work: "sw",
   person: "pe",
   genre: "ge",
-  style: "st",
   medium: "me",
   flaws: "fl",
   language: "la",
@@ -168,7 +166,6 @@ const DEFAULT_ORDER: string[] = [
   "source_work",
   "person",
   "genre",
-  "style",
   "medium",
   "tags",
   "bucket",
