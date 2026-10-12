@@ -243,7 +243,7 @@ function ViewMenu(props: { at: Opened; onPreview: Preview }) {
         <button
           role="menuitem"
           disabled={removed().length === 0}
-          title="What was taken out of this view since it was last searched for, to put back"
+          title={`What was taken out of this view since it was last searched for, to put back (${keyLabel(keyFor("showRemoved"))})`}
           onClick={then(openRemoved)}
         >
           <Icon name="undo" />
@@ -371,6 +371,35 @@ function MarkMenu(props: { at: Opened; mark: number }) {
   );
 }
 
+/**
+ * Puts an image on the clipboard, as a PNG: the one kind of picture every
+ * browser takes there, so any other is drawn into one first.
+ */
+async function copyImage(id: number) {
+  const png = (async () => {
+    const blob = await (await fetch(api.contentUrl(id))).blob();
+    if (blob.type === "image/png") return blob;
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+    return new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (drawn) => (drawn ? resolve(drawn) : reject(new Error("The image could not be drawn."))),
+        "image/png",
+      ),
+    );
+  })();
+  try {
+    // Handed over while still being made, so the press that asked still counts.
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+    showToast("Copied the image");
+  } catch (err) {
+    showToast(`Could not copy the image: ${errorMessage(err)}. Shift and right click brings up the browser's own menu.`);
+  }
+}
+
 /** What a right click in the viewer brings up, for the file on show. */
 function ViewerMenu(props: { at: Opened; shown: { item: Item; goTo: () => void } }) {
   const { item, goTo } = props.shown;
@@ -389,6 +418,21 @@ function ViewerMenu(props: { at: Opened; shown: { item: Item; goTo: () => void }
           Go to file
         </button>
       </li>
+      <Show when={item.media_type === "image"}>
+        <li role="none">
+          <button
+            role="menuitem"
+            title="Put the image on the clipboard, to paste elsewhere. Shift and right click brings up the browser's own menu."
+            onClick={() => {
+              close();
+              copyImage(item.id);
+            }}
+          >
+            <Icon name="content-copy-outline" />
+            Copy image
+          </button>
+        </li>
+      </Show>
       <li role="none">
         <button
           role="menuitem"

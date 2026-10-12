@@ -429,9 +429,11 @@ export default function Viewer(props: {
       </Show>
       <div
         class="viewer-stage"
-        // A right click on what is shown, or around it, is the file's menu.
+        // A right click on what is shown, or around it, is the file's menu;
+        // with Shift it is left to the browser, whose own menu comes up.
         onContextMenu={(event) => {
           const current = item();
+          if (event.shiftKey) return;
           if ((event.target as HTMLElement).matches?.("input") || !current) return;
           openViewerMenu(event, current, () => props.onGoTo(props.index));
         }}

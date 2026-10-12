@@ -38,6 +38,7 @@ import {
   invertSelection,
   moveItems,
   removeFromView,
+  removed,
   selectAll,
   moveSelection,
   showFirstSelected,
@@ -49,7 +50,7 @@ import {
 import { collapsesSets, loadSettings } from "./settings";
 import { watchInbox } from "./inbox";
 import { closeTagManager, openTagManager, tagManager } from "./tagManaging";
-import RemovedDialog from "./components/RemovedDialog";
+import RemovedDialog, { openRemoved } from "./components/RemovedDialog";
 import QuerySelect, { openQuerySelect } from "./components/QuerySelect";
 import { refreshStats, stats } from "./stats";
 import { hideToast, showToast, toast } from "./toast";
@@ -412,6 +413,13 @@ export default function App() {
       if (action === "selectByQuery") {
         // Of the gallery only, and of the view: nothing need be selected yet.
         if (viewing() === null) openQuerySelect();
+        return;
+      }
+      if (action === "showRemoved") {
+        // Of the gallery only, and of the view, as selecting by query is.
+        if (viewing() !== null) return;
+        if (removed().length === 0) return showToast("Nothing has been removed from this view");
+        openRemoved();
         return;
       }
       const on = hotkeyTarget();

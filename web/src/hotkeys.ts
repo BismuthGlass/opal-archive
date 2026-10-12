@@ -189,7 +189,13 @@ export const ACTIONS = [
     id: "hide",
     label: "Remove from view",
     description: "Takes out of this view only. Nothing is trashed, and searching again brings it back.",
-    key: "ctrl+h",
+    key: "h",
+  },
+  {
+    id: "showRemoved",
+    label: "Removed from view",
+    description: "Lists what was taken out of this view, to put it back. In the gallery only.",
+    key: "shift+h",
   },
   {
     id: "restore",

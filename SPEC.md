@@ -111,7 +111,7 @@ A menu button at the start of the bar above the grid holds what is done to the v
 
 "Go to selected" there, or the G key, goes to the first selected file in the view: it turns to the page the file is on, scrolls it to the middle and points it out for a moment.
 
-What is taken out of a view is kept track of, in the order it went, until the view is searched for again, which brings it all back anyway. "Removed from view" in the menu above the grid lists it, what was taken out last first; what is picked there, or all of it, is put back in the view where it was, or as near to there as the view now allows. A double click on one puts that one back. It is remembered by the browser, as the marks are.
+H takes what is selected out of the view. What is taken out of a view is kept track of, in the order it went, until the view is searched for again, which brings it all back anyway. "Removed from view" in the menu above the grid, or Shift+H, lists it, what was taken out last first; what is picked there, or all of it, is put back in the view where it was, or as near to there as the view now allows. A double click on one puts that one back. It is remembered by the browser, as the marks are.
 
 The arrow keys move the selection from tile to tile: left and right to the result before or after, up and down to the one above or below, starting from the result selected last, or from the first on the page when nothing is selected. Past the edge of a page they go on to the next page, or back to the one before, and the grid scrolls as far as shows the tile. With Shift they select everything from where the run began to where they arrive, as a Shift click does.
 
@@ -137,7 +137,7 @@ The side panel ends in a drawer that shows the selected file: bigger than its ti
 
 The viewer shows one file over the whole window. Its top bar names the file: the sets it is in, and its title.
 
-- A right click on what is shown offers to go to the file, which closes the viewer, turns the view to the file's page and points it out there; and to download it.
+- A right click on what is shown offers to go to the file, which closes the viewer, turns the view to the file's page and points it out there; to copy it, if it is an image, which puts it on the clipboard as a PNG; and to download it. With Shift, the right click brings up the browser's own menu instead.
 - A button at the start of the top bar, before the title, or the I key, opens an info pane down the whole left side of the window, beside what is shown and its bar. It says all there is of the file, to read and not to change, so it is small and close: its name, type, dimensions, length or pages, size on disk, when it was added and its ID; then its title, date, rating, score, version and description, where they are set; then its tags as the side panel lists them, one to a line in their types' colours, those of the aggregated types together and each other type under its name; then its links. The pane is in the theme's colours. It is closed at first.
 - The pane can be made wider or narrower by dragging its right edge, within limits that leave what is shown at least half the window; a double click on the edge puts it back. Its width is remembered by the browser.
 - A button at the top of the pane opens a menu of what it shows, each to be put away or brought back: every row, every list of tags, the links. What is put away is a setting.
