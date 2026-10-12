@@ -49,6 +49,7 @@ import {
 import { collapsesSets, loadSettings } from "./settings";
 import { watchInbox } from "./inbox";
 import { closeTagManager, openTagManager, tagManager } from "./tagManaging";
+import RemovedDialog from "./components/RemovedDialog";
 import QuerySelect, { openQuerySelect } from "./components/QuerySelect";
 import { refreshStats, stats } from "./stats";
 import { hideToast, showToast, toast } from "./toast";
@@ -672,6 +673,7 @@ export default function App() {
         {(opened) => <TagManager initial={opened.tag} onClose={closeTagManager} />}
       </Show>
       <QuerySelect />
+      <RemovedDialog />
       <Show when={helpOpen()}>
         <SearchHelp onClose={() => setHelpOpen(false)} />
       </Show>

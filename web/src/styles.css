@@ -3055,6 +3055,36 @@ kbd {
   margin-top: 10px;
 }
 
+/* What was taken out of a view, as tiles to pick from and put back. */
+.removed-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  min-height: 0;
+  margin: 8px 0 12px;
+  padding: 2px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.dialog button.removed-tile {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 6px;
+}
+
+.removed-tile .thumb {
+  aspect-ratio: 1;
+}
+
+.removed-tile[aria-pressed="true"] .thumb {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+}
+
 /* A list to pick one thing from, as in the set dialog. */
 .pick-list {
   max-height: 120px;

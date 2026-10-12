@@ -227,6 +227,53 @@ let viewTab: number | null = null;
  */
 const views = new Map<string, { ids: number[]; custom: boolean }>();
 
+/**
+ * A result taken out of a view: where in the view it was, and when it was
+ * taken out, which is the same for all that went together.
+ */
+type Removed = { id: number; index: number; at: number };
+/**
+ * What has been taken out of the view on show since it was last
+ * calculated, in the order it went: it can be put back from there.
+ */
+const [removed, setRemoved] = createSignal<readonly Removed[]>([]);
+export { removed };
+
+// Remembered per browser, as the views are, so that what was taken out
+// can still be put back after a reload.
+const REMOVED_KEY = "opalarchive.removed";
+/** Views it is remembered for at most; the ones taken from longest ago go first. */
+const REMOVED_MOST = 200;
+/** What has been taken out of each view that has had anything taken out. */
+const removedFrom = new Map<string, readonly Removed[]>(readRemoved());
+
+function readRemoved(): [string, Removed[]][] {
+  try {
+    return JSON.parse(localStorage.getItem(REMOVED_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function writeRemoved() {
+  try {
+    localStorage.setItem(REMOVED_KEY, JSON.stringify([...removedFrom].slice(-REMOVED_MOST)));
+  } catch {
+    // Storage unavailable or full; it just won't survive a reload.
+  }
+}
+
+/** Sets what has been taken out of the view on show. */
+function putRemoved(next: readonly Removed[]) {
+  if (next.length === 0 && removed().length === 0) return;
+  setRemoved(next);
+  if (viewKey === "") return;
+  // Put last: it is the one taken from most recently.
+  removedFrom.delete(viewKey);
+  if (next.length > 0) removedFrom.set(viewKey, next);
+  writeRemoved();
+}
+
 /** How a view was left: where it was, and what was selected in it. */
 type Left = {
   page: number;
@@ -437,6 +484,8 @@ function calculate() {
     } else {
       ids = found;
     }
+    // Whatever was taken out is back, if the search still finds it.
+    putRemoved([]);
     remember();
     keepListed();
   });
@@ -478,6 +527,7 @@ export function runSearch(
   /** Whether the tab on show goes back to a query it has shown before. */
   const back = tab !== null && viewTab === tab;
   viewKey = key;
+  setRemoved(removedFrom.get(key) ?? []);
   viewTab = tab;
   known.clear();
   const seen = views.get(key);
@@ -555,12 +605,14 @@ export function runSearch(
  * later tab the same number, and it must not be shown the closed one's.
  */
 export function forgetViews(tab: number) {
-  for (const key of [...views.keys(), ...lefts.keys()]) {
+  for (const key of [...views.keys(), ...lefts.keys(), ...removedFrom.keys()]) {
     if (key.startsWith(`${tab}:`)) {
       views.delete(key);
       lefts.delete(key);
+      removedFrom.delete(key);
     }
   }
+  writeRemoved();
   // The tab closed may be the one on show: nothing is noted of it later.
   if (viewKey.startsWith(`${tab}:`)) viewKey = "";
   writeLefts();
@@ -621,6 +673,16 @@ export function changed() {
  */
 export function deleted(gone: number[]) {
   drop(gone);
+  // Nor can they be put back in a view they were taken out of.
+  const lost = new Set(gone);
+  for (const [key, list] of removedFrom) {
+    const kept = list.filter((was) => !lost.has(was.id));
+    if (kept.length === list.length) continue;
+    if (kept.length > 0) removedFrom.set(key, kept);
+    else removedFrom.delete(key);
+  }
+  setRemoved(removedFrom.get(viewKey) ?? []);
+  writeRemoved();
   // No view of any tab lists them any more: their marks go with them.
   const going = new Set(gone);
   for (const [tab, given] of tabMarks) {
@@ -720,10 +782,53 @@ export async function moveItems(moved: number[], before: number) {
  * to the entities themselves: calculating the search again brings them
  * back.
  */
-export async function removeFromView(removed: number[]) {
+export async function removeFromView(taken: number[]) {
   await resultIds();
-  drop(removed);
+  const going = new Set(taken);
+  const at = Date.now();
+  const gone = ids.flatMap((id, index) => (going.has(id) ? [{ id, index, at }] : []));
+  drop(taken);
+  putRemoved([...removed(), ...gone]);
   reload();
+}
+
+/**
+ * Puts back in the view what was taken out of it, where it was: as near
+ * to there as can be, when the view has changed since.
+ */
+export async function restoreToView(back: number[]) {
+  await resultIds();
+  const wanted = new Set(back);
+  const listed = new Set(ids);
+  // Those that were first in the view go in first, so that what went
+  // together comes back as it was.
+  const returning = removed()
+    .filter((was) => wanted.has(was.id) && !listed.has(was.id))
+    .sort((a, b) => a.index - b.index);
+  const next = [...ids];
+  for (const was of returning) next.splice(Math.min(was.index, next.length), 0, was.id);
+  ids = next;
+  anchor = null;
+  putRemoved(removed().filter((was) => !wanted.has(was.id)));
+  remember();
+  keepListed();
+  reload();
+}
+
+/**
+ * What has been taken out of the view on show, to be shown: what went
+ * last first, and what went together in the order it was listed. What
+ * has been deleted for good since is left out.
+ */
+export async function removedItems(): Promise<Item[]> {
+  const list = [...removed()].sort((a, b) => b.at - a.at || a.index - b.index);
+  const unknown = list.map((was) => was.id).filter((id) => !known.has(id));
+  for (let from = 0; from < unknown.length; from += 500) {
+    const some = unknown.slice(from, from + 500);
+    const result = await api.search(`id=${some.join(",")}`, 0, some.length, 0, null, true);
+    for (const item of result.items) known.set(item.id, item);
+  }
+  return list.flatMap((was) => known.get(was.id) ?? []);
 }
 
 /** Goes back to the order the query gives. */

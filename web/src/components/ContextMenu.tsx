@@ -16,6 +16,7 @@ import {
   nameMark,
   pageSize,
   removeFromView,
+  removed,
   resetOrder,
   resultIds,
   search,
@@ -33,6 +34,7 @@ import type { GroupKind } from "./GroupDialog";
 import { keyFor, keyLabel } from "../hotkeys";
 import Icon from "./Icon";
 import { openQuerySelect } from "./QuerySelect";
+import { openRemoved } from "./RemovedDialog";
 import type { IconName } from "./Icon";
 
 /** A tag that was right-clicked, or with `under` the namespace of that name. */
@@ -237,6 +239,17 @@ function ViewMenu(props: { at: Opened; onPreview: Preview }) {
         </button>
       </li>
       <li class="menu-divider" role="separator" />
+      <li role="none">
+        <button
+          role="menuitem"
+          disabled={removed().length === 0}
+          title="What was taken out of this view since it was last searched for, to put back"
+          onClick={then(openRemoved)}
+        >
+          <Icon name="undo" />
+          Removed from view… {removed().length > 0 ? `(${removed().length})` : ""}
+        </button>
+      </li>
       <Submenu icon="sort" label="Order">
         <li role="none">
           <button
