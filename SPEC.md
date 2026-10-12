@@ -111,6 +111,8 @@ A menu button at the start of the bar above the grid holds what is done to the v
 
 "Go to selected" there, or the G key, goes to the first selected file in the view: it turns to the page the file is on, scrolls it to the middle and points it out for a moment.
 
+The arrow keys move the selection from tile to tile: left and right to the result before or after, up and down to the one above or below, starting from the result selected last, or from the first on the page when nothing is selected. Past the edge of a page they go on to the next page, or back to the one before, and the grid scrolls as far as shows the tile. With Shift they select everything from where the run began to where they arrive, as a Shift click does.
+
 "Select by query" there, or Shift+Q, asks for a query and selects what the view lists that the query finds; the view itself stays as it is. The query is asked of the whole library, so it need not repeat what the view was searched for, and it finds what is in the trash if the view lists it. It can add to what is selected in place of replacing it. With nothing found, the selection is left as it was.
 
 ## Marks

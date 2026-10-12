@@ -29,6 +29,8 @@ import {
   searchCount,
   selected,
   setScrollTo,
+  revealed,
+  setRevealed,
   pageSize,
 } from "../search";
 import { stats } from "../stats";
@@ -105,6 +107,11 @@ const EMPTY: Record<string, string> = {
   variants: "None of these variants is left.",
   collection: "Nothing is part of this collection.",
 };
+
+/** How many tiles the grid on show has to the row. */
+let columnsShown = 1;
+/** How many tiles the grid has to the row: what an arrow key up or down moves by. */
+export const gridColumns = () => columnsShown;
 
 export default function Grid(props: { onOpen: (index: number) => void }) {
   let scroller!: HTMLDivElement;
@@ -186,6 +193,25 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
     pointing = setTimeout(() => setPointed(null), 1600);
   });
   onCleanup(() => clearTimeout(pointing));
+
+  // A result the arrow keys moved the selection to is scrolled to only as
+  // far as shows it whole. Like the one above, this has the last word on
+  // a page newly turned to.
+  createEffect(() => {
+    const index = revealed();
+    if (index === null || !search.ready || height() === 0) return;
+    const place = index - first();
+    if (place < 0 || place >= count()) return;
+    setRevealed(null);
+    const top = PADDING + Math.floor(place / columns()) * rowHeight();
+    if (top - GAP < scroller.scrollTop) scroller.scrollTop = top - PADDING;
+    else if (top + tile() + GAP > scroller.scrollTop + height()) {
+      scroller.scrollTop = top + tile() + PADDING - height();
+    }
+    setScrollTop(scroller.scrollTop);
+    noteScroll(scroller.scrollTop);
+  });
+  createEffect(() => (columnsShown = columns()));
 
   /** The IDs being dragged, and where the pointer is. */
   const [drag, setDrag] = createSignal<{ ids: number[]; x: number; y: number } | null>(null);

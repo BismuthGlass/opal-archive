@@ -192,7 +192,13 @@ export function noteScroll(top: number) {
 /** The result the grid is to bring into view and point out, until it has. */
 const [sought, setSought] = createSignal<number | null>(null);
 
-export { search, selected, marks, markNames, searchCount, dataVersion, scrollTo, setScrollTo, sought, setSought };
+/**
+ * The result the grid is to scroll just far enough to show, until it has:
+ * the one the arrow keys have moved the selection to.
+ */
+const [revealed, setRevealed] = createSignal<number | null>(null);
+
+export { search, selected, marks, markNames, searchCount, dataVersion, scrollTo, setScrollTo, sought, setSought, revealed, setRevealed };
 
 // Responses from an older generation are dropped.
 let generation = 0;
@@ -764,6 +770,65 @@ export async function clickSelect(
   } else {
     setSelected(new Set([id]));
   }
+}
+
+/**
+ * Moves the selection one tile over, as an arrow key does, in a grid of
+ * `columns` to the row: from the result selected last to the one beside
+ * it, above it or below it, which is then the one selected; or with
+ * `extend`, selected along with everything between it and where the run
+ * began. Past the edge of a page it goes on to the next one, or back to
+ * the one before. With nothing selected, it starts at the first result of
+ * the page on show.
+ */
+export async function moveSelection(
+  direction: "left" | "right" | "up" | "down",
+  columns: number,
+  extend = false,
+) {
+  const all = await resultIds();
+  if (all.length === 0) return;
+  const size = pageSize();
+  const last = previewed();
+  const from = last === null ? -1 : all.indexOf(last);
+  let target: number;
+  if (from < 0) {
+    target = Math.min(search.page * size, all.length - 1);
+  } else if (direction === "left" || direction === "right") {
+    target = Math.max(0, Math.min(all.length - 1, from + (direction === "left" ? -1 : 1)));
+  } else {
+    // Rows start again on each page, whose last one need not be full.
+    const page = Math.floor(from / size);
+    const start = page * size;
+    const place = from - start;
+    const column = place % columns;
+    /** How many results a page has. */
+    const held = (page: number) => Math.min(size, all.length - page * size);
+    if (direction === "down") {
+      const lastPlace = held(page) - 1;
+      if (place + columns <= lastPlace) target = from + columns;
+      else if (Math.floor(lastPlace / columns) > Math.floor(place / columns)) target = start + lastPlace;
+      else if (start + size < all.length) target = start + size + Math.min(column, held(page + 1) - 1);
+      else target = from;
+    } else if (place - columns >= 0) {
+      target = from - columns;
+    } else if (page > 0) {
+      // The same column of the row that ends the page before, or of the
+      // one over it if that row stops short.
+      const lastPlace = held(page - 1) - 1;
+      const under = Math.floor(lastPlace / columns) * columns + column;
+      const there = under <= lastPlace ? under : under - columns;
+      target = start - size + (there >= 0 ? there : lastPlace);
+    } else {
+      target = from;
+    }
+  }
+  if (target === from) return;
+  // A run with no start yet, as after selecting all, starts where it was.
+  if (extend && anchor === null && from >= 0) anchor = from;
+  await clickSelect(target, all[target], { shift: extend, toggle: false });
+  goToPage(Math.floor(target / size));
+  setRevealed(target);
 }
 
 /** Selects every result, on every page. */

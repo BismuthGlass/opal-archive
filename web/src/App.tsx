@@ -4,7 +4,7 @@ import type { GroupKind } from "./components/GroupDialog";
 import SetPanel from "./components/SetPanel";
 import CollectionPanel from "./components/CollectionPanel";
 import ContextMenu, { contextMenuOpen, removeForGood } from "./components/ContextMenu";
-import Grid from "./components/Grid";
+import Grid, { gridColumns } from "./components/Grid";
 import InboxPanel from "./components/InboxPanel";
 import { modalOpen } from "./components/Modal";
 import Icon from "./components/Icon";
@@ -39,6 +39,7 @@ import {
   moveItems,
   removeFromView,
   selectAll,
+  moveSelection,
   showFirstSelected,
   showResult,
   selected,
@@ -464,6 +465,19 @@ export default function App() {
       invertSelection();
     } else if (event.key === "Escape") {
       clearSelection();
+    } else if (
+      /^Arrow/.test(event.key) &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      // What has arrows of its own keeps them: a player, a menu, a list.
+      !target.closest("video, audio, [role=menu], [role=listbox]")
+    ) {
+      // The arrows move the selection from tile to tile; with Shift, they
+      // take what is between along.
+      event.preventDefault();
+      const direction = event.key.slice(5).toLowerCase() as "left" | "right" | "up" | "down";
+      moveSelection(direction, gridColumns(), event.shiftKey);
     }
   };
   onMount(() => window.addEventListener("keydown", onKeyDown, true));
