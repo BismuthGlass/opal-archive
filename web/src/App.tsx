@@ -39,6 +39,7 @@ import {
   moveItems,
   removeFromView,
   removed,
+  resultIds,
   selectAll,
   moveSelection,
   showFirstSelected,
@@ -365,6 +366,18 @@ export default function App() {
     changed();
   };
 
+  /**
+   * Opens the viewer on what is selected: with one file, on it, with the
+   * rest of the view to step through; with several, on those alone, in
+   * the order they are listed.
+   */
+  const previewSelection = async () => {
+    const chosen = selected();
+    const only = (await resultIds()).flatMap((id, index) => (chosen.has(id) ? [index] : []));
+    if (only.length === 1) view(only[0], null);
+    else if (only.length > 1) view(only[0], only);
+  };
+
   // On the window and capturing, so that it hears keys before the viewer
   // does and can keep the ones it uses from it.
   const onKeyDown = (event: KeyboardEvent) => {
@@ -474,6 +487,19 @@ export default function App() {
       invertSelection();
     } else if (event.key === "Escape") {
       clearSelection();
+    } else if (
+      event.key === "Enter" &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      selected().size > 0 &&
+      // A button that has the keyboard is what Enter presses.
+      !target.closest("button, a, summary, [role=menu], [role=listbox]")
+    ) {
+      // Enter opens the viewer on what is selected: on the one file, to
+      // step through the view from there, or on the several alone.
+      event.preventDefault();
+      previewSelection();
     } else if (
       /^Arrow/.test(event.key) &&
       !event.ctrlKey &&
