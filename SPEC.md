@@ -123,7 +123,7 @@ Marks belong to the tab, not to one view of it. A file marked in a search is mar
 
 The count of each mark above the grid, and selecting by mark, take in only what the view on show lists. A click on a mark's count selects what has that mark; with Ctrl, it adds them to what is selected, or takes them out if they are all selected already. Clearing a mark takes it off everything in the tab that has it.
 
-A right click on a mark's count offers the rest: to open the mark, which goes into it as into a set (see below): the view becomes what has the mark in the tab, with the way back above it; and to name the mark, or clear its name. A name only says what the mark is being used for: it is shown before the mark's count and nowhere else, belongs to the tab, and is remembered by the browser.
+A right click on a mark's count offers the rest: to focus on the mark, which goes into it as into a set (see below): the view becomes what has the mark in the tab, with the way back above it; and to name the mark, or clear its name. A name only says what the mark is being used for: it is shown before the mark's count and nowhere else, belongs to the tab, and is remembered by the browser.
 
 ## Preview
 
@@ -152,8 +152,8 @@ The saved queries are a setting. The settings list them, to write, rename, delet
 
 Pressing the set mark on a file's tile goes into its set, in the same tab: the view becomes the set's files, and a bar above it shows the way back. So does clicking the set in the side panel or in the viewer. A file's variants are gone into the same way, from the variants mark, and the view becomes the files of its group; and so is a collection, from its name in the side panel, and the view becomes what is part of it.
 
-- A mark is gone into the same way, from the menu of its count: the view becomes the files that have that mark in the view on show, in its order. What has the mark elsewhere in the tab, and is not listed in that view, is no part of it. Pressing Search there drops what has had the mark taken off since; what was given it since is only there after going out and in again. Opened in a tab of its own, it is a tab that holds the files listed.
-- What is selected is gone into the same way, from "Open selected" in the menu above the grid or "Open" in the menu of a right click: the view becomes the selected files, in the order they were listed, with the way back above it. They stay those files whatever is selected afterwards. Opened in a tab of its own, it is a tab that holds the files listed.
+- A mark is gone into the same way, with "Focus" in the menu of its count: the view becomes the files that have that mark in the view on show, in its order. What has the mark elsewhere in the tab, and is not listed in that view, is no part of it. Pressing Search there drops what has had the mark taken off since; what was given it since is only there after going out and in again. Opened in a tab of its own, it is a tab that holds the files listed.
+- What is selected is gone into the same way, from "Focus on selected" in the menu above the grid or "Focus" in the menu of a right click: the view becomes the selected files, in the order they were listed, with the way back above it. They stay those files whatever is selected afterwards. Opened in a tab of its own, it is a tab that holds the files listed.
 - The bar has a back arrow, what was gone through to get here, and a button that opens the set in a tab of its own; for variants or a collection, that tab is a search for them. From a file's variants the tab can go on into the set of one of them, and from a set into a file's variants: any earlier point of the way in can be gone back to directly. Backspace goes back one.
 - Coming back out, the view outside is as it was left: the same results, order and page, scrolled as far, with the same selection.
 - Inside, the search box filters the set, as it does in a set's own tab. The tab's query is untouched and is there again on coming out.
