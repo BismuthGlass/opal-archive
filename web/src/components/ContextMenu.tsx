@@ -9,6 +9,7 @@ import {
   clearMark,
   clearSelection,
   listedMarked,
+  listedSelected,
   markCounts,
   markNames,
   moveItems,
@@ -153,6 +154,8 @@ function ViewMenu(props: { at: Opened; onPreview: Preview }) {
     const only = (await resultIds()).flatMap((id, index) => (chosen.has(id) ? [index] : []));
     if (only.length > 0) props.onPreview(only[0], only);
   };
+  /** Goes into the selected, in the order they are listed. */
+  const openSelected = async () => enter({ selection: await listedSelected(), at: Date.now() });
   /** Does one thing and puts the menu away. */
   const then = (action: () => unknown) => () => {
     close();
@@ -180,6 +183,17 @@ function ViewMenu(props: { at: Opened; onPreview: Preview }) {
         >
           <Icon name="visibility-outline" />
           Preview selected
+        </button>
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          disabled={none()}
+          title="Go into what is selected, as into a set: the view becomes those files, with a way back"
+          onClick={then(openSelected)}
+        >
+          <Icon name="folder-outline" />
+          Open selected
         </button>
       </li>
       <li class="menu-divider" role="separator" />
@@ -677,6 +691,19 @@ function Menu(props: {
         >
           <Icon name="download" />
           Export with metadata
+        </button>
+      </li>
+      <li role="none">
+        <button
+          role="menuitem"
+          title="Go into these, as into a set: the view becomes them alone, with a way back"
+          onClick={async () => {
+            close();
+            enter({ selection: await listedSelected(), at: Date.now() });
+          }}
+        >
+          <Icon name="folder-outline" />
+          Open
         </button>
       </li>
       <li role="none">

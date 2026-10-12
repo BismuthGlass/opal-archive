@@ -38,6 +38,7 @@ import {
   inside,
   shownCollection,
   shownMark,
+  showsSelection,
   shownSet,
   shownVariants,
 } from "../tabs";
@@ -309,6 +310,8 @@ export default function Grid(props: { onOpen: (index: number) => void }) {
                     ? EMPTY.collection
                     : shownMark() !== undefined
                       ? "Nothing in this tab has this mark."
+                    : showsSelection()
+                      ? "None of what was selected is left."
                       : EMPTY.set
                 : search.scope !== null && search.query === ""
                   ? EMPTY[activeTab()?.kind ?? "upload"]

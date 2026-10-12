@@ -59,16 +59,24 @@ export function setShowsTrashed(tab: number, show: boolean) {
 
 /**
  * A set a tab has gone into, or a group of variants, or a collection, or
- * what has one of the tab's marks, and the filter typed while in it.
+ * what has one of the tab's marks, or what was selected, and the filter
+ * typed while in it.
  */
 export type Step = (
   | api.SetName
   | { variants: string }
   | { collection: string }
   | { mark: number; ids: number[] }
+  | Selection
 ) & {
   query: string;
 };
+
+/**
+ * What was selected in a view, as something to go into: the files, in the
+ * view's order, and when it was gone into, which tells it from any other.
+ */
+export type Selection = { selection: number[]; at: number };
 
 /** What a step is called: a mark by its number, and by its name if it has one. */
 export const stepName = (step: Step) =>
@@ -78,7 +86,9 @@ export const stepName = (step: Step) =>
       ? step.collection
       : "mark" in step
         ? `Mark ${step.mark}${markNames()[step.mark] ? ` (${markNames()[step.mark]})` : ""}`
-        : step.title || step.set_id;
+        : "selection" in step
+          ? "Selection"
+          : step.title || step.set_id;
 
 /** What tells a step from any other. */
 export const stepKey = (step: Step) =>
@@ -88,7 +98,9 @@ export const stepKey = (step: Step) =>
       ? `c${step.collection}`
       : "mark" in step
         ? `m${step.mark}`
-        : `s${step.set_id}`;
+        : "selection" in step
+          ? `x${step.at}`
+          : `s${step.set_id}`;
 
 /** What a step keeps a search to. */
 export const stepWithin = (step: Step): Within =>
@@ -98,7 +110,9 @@ export const stepWithin = (step: Step): Within =>
       ? { collection: step.collection }
       : "mark" in step
         ? { mark: step.mark, ids: step.ids }
-        : { set: step.set_id };
+        : "selection" in step
+          ? { selection: step.selection }
+          : { set: step.set_id };
 
 // A tab can go into the set of one of its results, or its variants, or a
 // collection it is part of, and on from there, and back out: the way in
@@ -122,12 +136,17 @@ async function current(
     | { set_id: string }
     | { variants: string }
     | { collection: string }
-    | { mark: number; ids: number[] },
+    | { mark: number; ids: number[] }
+    | Selection,
   query: string,
 ): Promise<Step | null> {
-  // A group is its ID and nothing more, a collection its name, and a mark
-  // its number and the files it was gone into with: there is nothing of
-  // them to read.
+  // A group is its ID and nothing more, a collection its name, a mark its
+  // number and the files it was gone into with, and a selection its
+  // files: there is nothing of them to read.
+  if ("selection" in step) {
+    const ids = Array.isArray(step.selection) ? step.selection.map(Number) : [];
+    return { selection: ids, at: Number(step.at), query };
+  }
   if ("mark" in step) {
     const ids = Array.isArray(step.ids) ? step.ids.map(Number) : [];
     return { mark: Number(step.mark), ids, query };
@@ -175,13 +194,21 @@ export const inside = (): Step | undefined => trail().at(-1);
 export const shownSet = (): api.SetName | undefined => {
   const step = inside();
   if (!step) return activeTab()?.set ?? undefined;
-  return "variants" in step || "collection" in step || "mark" in step ? undefined : step;
+  return "variants" in step || "collection" in step || "mark" in step || "selection" in step
+    ? undefined
+    : step;
 };
 
 /** The mark the active tab shows what has, if it has gone into one. */
 export const shownMark = (): number | undefined => {
   const step = inside();
   return step && "mark" in step ? step.mark : undefined;
+};
+
+/** Whether the active tab shows what was selected, having gone into it. */
+export const showsSelection = (): boolean => {
+  const step = inside();
+  return step !== undefined && "selection" in step;
 };
 
 /** The collection the active tab shows, if it has gone into one. */
@@ -198,14 +225,16 @@ export const shownVariants = (): string | undefined => {
 
 /**
  * Goes into a set, a group of variants or a collection, in the active
- * tab; or into a mark, with the files of the view on show that have it.
+ * tab; or into a mark, with the files of the view on show that have it;
+ * or into what is selected there.
  */
 export async function enter(
   into:
     | { set_id: string }
     | { variants: string }
     | { collection: string }
-    | { mark: number; ids: number[] },
+    | { mark: number; ids: number[] }
+    | Selection,
 ) {
   const tab = activeId();
   // What is on show is already gone into.
@@ -216,7 +245,10 @@ export async function enter(
         ? shownCollection() === into.collection
         : "mark" in into
           ? shownMark() === into.mark
-          : shownSet()?.set_id === into.set_id;
+          : "selection" in into
+            ? // Never: what is selected of a selection is a smaller one.
+              false
+            : shownSet()?.set_id === into.set_id;
   if (tab === null || here) return;
   await guard(async () => {
     const step = await current(into, "");

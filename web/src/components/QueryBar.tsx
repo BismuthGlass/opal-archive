@@ -10,6 +10,7 @@ import {
   setShowsTrashed,
   shownCollection,
   shownMark,
+  showsSelection,
   shownVariants,
   showsTrashed,
 } from "../tabs";
@@ -146,6 +147,8 @@ export default function QueryBar() {
         ? "Filter this collection"
       : shownMark() !== undefined
         ? "Filter what has this mark"
+      : showsSelection()
+        ? "Filter this selection"
       : inside() || activeTab()?.kind === "set"
         ? "Filter this set"
       : activeTab()?.kind === "upload"

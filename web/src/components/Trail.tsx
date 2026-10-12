@@ -26,15 +26,15 @@ function outermost(): string {
 
 /**
  * Gives what the tab is inside a tab of its own: a set's, or a search for
- * the variants or for the collection, or a tab that holds what the mark's
- * view lists.
+ * the variants or for the collection, or a tab that holds what the view
+ * of a mark or of a selection lists.
  */
 const openInTab = (step: Step) =>
   "variants" in step
     ? open("gallery", `alt_group_id=${quoteValue(step.variants)}`)
     : "collection" in step
       ? open("gallery", `collection=${quoteValue(step.collection)}`)
-      : "mark" in step
+      : "mark" in step || "selection" in step
         ? resultIds().then(openSelection)
         : openSet(step.set_id);
 

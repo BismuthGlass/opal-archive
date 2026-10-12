@@ -18,7 +18,7 @@ export const pageSize = () =>
  * the server knows; or a mark, which only the page does, with the files
  * that had it in the view it was gone into from, in that view's order.
  */
-export type Within = api.Within | { mark: number; ids: number[] };
+export type Within = api.Within | { mark: number; ids: number[] } | { selection: number[] };
 
 type SearchError = { message: string; position?: number; line?: number };
 
@@ -419,7 +419,9 @@ function calculate() {
   const found =
     within && "mark" in within
       ? foundMarked(within)
-      : api.searchIds(search.query, seed, search.scope, within, search.trashed, search.collapsed);
+      : within && "selection" in within
+        ? foundAmong(within.selection)
+        : api.searchIds(search.query, seed, search.scope, within, search.trashed, search.collapsed);
   calculated = found.then((found) => {
     if (current !== calculation) return;
     if (search.custom) {
@@ -837,11 +839,25 @@ export async function listedMarked(mark: number): Promise<number[]> {
  */
 async function foundMarked(within: { mark: number; ids: number[] }): Promise<number[]> {
   const given = marks();
-  const held = within.ids.filter((id) => given.get(id)?.includes(within.mark));
+  return foundAmong(within.ids.filter((id) => given.get(id)?.includes(within.mark)));
+}
+
+/**
+ * What a view kept to these files lists: all of them, as they are given;
+ * or with a query, those of them it finds, in its order. A view gone into
+ * what was selected is one.
+ */
+async function foundAmong(held: number[]): Promise<number[]> {
   if (search.query.trim() === "") return held;
   const kept = new Set(held);
   const all = await api.searchIds(search.query, seed, null, null, search.trashed, false);
   return all.filter((id) => kept.has(id));
+}
+
+/** What is selected, in the order the view lists it: what going into it shows. */
+export async function listedSelected(): Promise<number[]> {
+  const chosen = selected();
+  return (await resultIds()).filter((id) => chosen.has(id));
 }
 
 /**
