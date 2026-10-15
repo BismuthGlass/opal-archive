@@ -391,34 +391,41 @@ export const getEntity = (id: number) => request<Entity>("GET", `/entities/${id}
 export const getMetadata = (ids: number[]) =>
   request<Metadata>("POST", "/entities/metadata", { ids });
 /**
- * The tags one entity gained and lost, by field. Aliases and child tags
- * make that more than what an edit asks for, and a tag it had already is
- * not gained.
+ * What one entity is given: fields set, and tags given and taken off. An
+ * edit says this way what it did to each entity and what would undo it;
+ * aliases and child tags make that more than it asks for, and what an
+ * entity had already is no change to it.
  */
-export type Retag = {
+export type Change = {
   id: number;
+  set?: Record<string, string | number | boolean | null>;
   add?: Record<string, string[]>;
   remove?: Record<string, string[]>;
 };
 export const edit = (ids: number[], changes: Changes) =>
-  request<{ updated: number; tags: Retag[] }>("POST", "/entities/edit", { ids, ...changes });
+  request<{ updated: number; undo: Change[]; redo: Change[] }>("POST", "/entities/edit", {
+    ids,
+    ...changes,
+  });
 /**
- * Gives each entity just the tags given for it, and takes off those to be
- * taken off, all or nothing: what undoing or redoing an edit does.
+ * Gives each entity just what is given for it, all or nothing: what
+ * undoing or redoing an edit does. Tags bring no children.
  */
-export const retag = (changes: Retag[]) =>
-  request<{ changed: number }>("POST", "/entities/retag", { changes });
+export const apply = (changes: Change[]) =>
+  request<{ changed: number }>("POST", "/entities/apply", { changes });
+/** What setting a flag changed: those that had it already are left out. */
+export type Flagged = { changed: number; ids: number[] };
 /** Moves entities to the trash: out of searches, but not yet gone. */
 export const trashEntities = (ids: number[]) =>
-  request<{ changed: number }>("POST", "/entities/trash", { ids });
+  request<Flagged>("POST", "/entities/trash", { ids });
 export const restoreEntities = (ids: number[]) =>
-  request<{ changed: number }>("POST", "/entities/restore", { ids });
+  request<Flagged>("POST", "/entities/restore", { ids });
 /** Takes entities out of the inbox they arrived in: they have been looked over. */
 export const archiveEntities = (ids: number[]) =>
-  request<{ changed: number }>("POST", "/entities/archive", { ids });
+  request<Flagged>("POST", "/entities/archive", { ids });
 /** Puts entities back in the inbox. */
 export const unarchiveEntities = (ids: number[]) =>
-  request<{ changed: number }>("POST", "/entities/unarchive", { ids });
+  request<Flagged>("POST", "/entities/unarchive", { ids });
 /** Deletes trashed entities for good; any not in the trash are left alone. */
 export const deleteEntities = (ids: number[]) =>
   request<{ deleted: number }>("POST", "/entities/delete", { ids });

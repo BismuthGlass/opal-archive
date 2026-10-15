@@ -2,6 +2,7 @@ import { createResource, createSignal, onCleanup, onMount, Show } from "solid-js
 import type { JSX } from "solid-js";
 import * as api from "../api";
 import type { Item } from "../api";
+import * as edits from "../edits";
 import { downloadNames } from "../settings";
 import { errorMessage, plural } from "../format";
 import {
@@ -922,7 +923,7 @@ function Menu(props: {
           <button
             role="menuitem"
             title="Take out of the inbox: these have been looked over"
-            onClick={() => run(api.archiveEntities)}
+            onClick={() => run(edits.archive)}
           >
             <Icon name="archive-outline" />
             Archive
@@ -934,7 +935,7 @@ function Menu(props: {
           <button
             role="menuitem"
             title="Put back in the inbox, to be looked over"
-            onClick={() => run(api.unarchiveEntities)}
+            onClick={() => run(edits.unarchive)}
           >
             <Icon name="unarchive-outline" />
             Move to inbox
@@ -951,7 +952,7 @@ function Menu(props: {
                 class="danger"
                 role="menuitem"
                 title="Move to the trash"
-                onClick={() => run(api.trashEntities)}
+                onClick={() => run(edits.trash)}
               >
                 <Icon name="delete-outline" />
                 Trash
@@ -964,7 +965,7 @@ function Menu(props: {
           <button
             role="menuitem"
             title="Take out of the trash"
-            onClick={() => run(api.restoreEntities)}
+            onClick={() => run(edits.restore)}
           >
             <Icon name="restore-from-trash-outline" />
             Restore

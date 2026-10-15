@@ -1,7 +1,9 @@
 /**
  * What has been done in each tab, to be undone and done again: marks given
- * and taken off, tags changed, files taken out of a view and put back.
- * Each tab has a history of its own, kept while the page is open.
+ * and taken off, tags, scores and ratings changed, files trashed and
+ * archived, and files taken out of a view and put back. Each tab has a
+ * history of its own, kept while the page is open, until its view is
+ * searched for again.
  */
 
 /** Something done, as it can be undone and redone. */
@@ -81,7 +83,10 @@ export const undo = (tab: number) => step(tab, "done", "undo");
 /** Does again the last thing undone in a tab, and resolves to what it was. */
 export const redo = (tab: number) => step(tab, "undone", "redo");
 
-/** Drops the history of a closed tab: its number is given out again. */
+/**
+ * Drops the history of a tab: one closed, whose number is given out
+ * again, or one whose view has been searched for again.
+ */
 export function forgetHistory(tab: number) {
   histories.delete(tab);
 }

@@ -22,6 +22,7 @@ import Tooltip from "./components/Tooltip";
 import { DropTarget, UploadBox } from "./components/Upload";
 import Viewer from "./components/Viewer";
 import * as api from "./api";
+import * as edits from "./edits";
 import { errorMessage, plural } from "./format";
 import { actionFor } from "./hotkeys";
 import {
@@ -253,7 +254,7 @@ export default function App() {
 
   const score = async (target: { ids: number[]; name: string }, score: number | null) => {
     try {
-      await api.edit(target.ids, { set: { score } });
+      await edits.edit(target.ids, { set: { score } });
       showToast(
         score === null ? `Cleared the score of ${target.name}` : `Scored ${target.name} ${score}`,
       );
@@ -266,7 +267,7 @@ export default function App() {
   /** Sets the content rating, or with `null` clears it. */
   const rate = async (target: { ids: number[]; name: string }, rating: string | null) => {
     try {
-      await api.edit(target.ids, { set: { content_rating: rating } });
+      await edits.edit(target.ids, { set: { content_rating: rating } });
       showToast(
         rating === null ? `Cleared the rating of ${target.name}` : `Rated ${target.name} ${rating}`,
       );
@@ -336,7 +337,7 @@ export default function App() {
       if (state && state.count > 0 && state.trashed === state.count) {
         return await remove(target);
       }
-      const { changed } = await (restore ? api.restoreEntities : api.trashEntities)(target.ids);
+      const { changed } = await (restore ? edits.restore : edits.trash)(target.ids);
       showToast(
         changed === 0
           ? `${restore ? "Nothing was" : "Already"} in the trash`
@@ -353,7 +354,7 @@ export default function App() {
   /** Takes out of the inbox, or with `back` puts in it again. */
   const archive = async (target: { ids: number[]; name: string }, back: boolean) => {
     try {
-      const { changed } = await (back ? api.unarchiveEntities : api.archiveEntities)(target.ids);
+      const { changed } = await (back ? edits.unarchive : edits.archive)(target.ids);
       showToast(
         changed === 0
           ? `${back ? "Already" : "Nothing was"} in the inbox`

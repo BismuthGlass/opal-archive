@@ -207,7 +207,7 @@ export const ACTIONS = [
     id: "undo",
     label: "Undo",
     description:
-      "Undoes the last change made in this tab to marks, to tags, or to what a view lists. Each tab has its own history.",
+      "Undoes the last change made in this tab to marks, tags, scores or ratings, trashing, archiving, or what a view lists. Each tab has its own history, cleared when its view is searched for again.",
     key: "ctrl+z",
   },
   {

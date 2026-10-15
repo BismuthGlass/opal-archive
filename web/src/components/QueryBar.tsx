@@ -2,6 +2,7 @@ import { createEffect, createSignal, For, Index, onCleanup, onMount, Show } from
 import { errorMessage } from "../format";
 import { queryLabel, savedQueries, saveQuery } from "../savedQueries";
 import { refresh, search } from "../search";
+import { forgetHistory } from "../undo";
 import {
   activeTab,
   filterInside,
@@ -73,8 +74,11 @@ export default function QueryBar() {
     if (switched) setShowsTrashed(tab.id, trashed());
     if (query === stored()) {
       // The same query: the search a newly opened tab was waiting to be
-      // asked for, or the one on show, calculated again.
-      if (!switched) refresh();
+      // asked for, or the one on show, calculated again. What was done in
+      // the tab is no longer to be undone from there.
+      if (switched) return;
+      if (tab) forgetHistory(tab.id);
+      refresh();
     } else if (inside()) {
       if (query !== inside()!.query) filterInside(query);
     } else if (tab && query !== tab.query) {
