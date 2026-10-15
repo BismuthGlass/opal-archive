@@ -119,12 +119,20 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
 });
 
 // The right-click menu, and the extension's own button, send without a
-// button in the page: the link, the picture or video, or the page itself.
-chrome.runtime.onInstalled.addListener(() => {
+// button in the page: the picture or video, the page itself, or a link.
+chrome.runtime.onInstalled.addListener(async () => {
+  await chrome.contextMenus.removeAll();
   chrome.contextMenus.create({
     id: "send",
     title: "Send to OpalArchive",
-    contexts: ["page", "link", "image", "video"],
+    contexts: ["page", "image", "video", "audio"],
+  });
+  // A picture is often a link to a larger one, or to the post it is of:
+  // this sends where the link goes instead of the picture.
+  chrome.contextMenus.create({
+    id: "sendLink",
+    title: "Send link to OpalArchive",
+    contexts: ["link"],
   });
   // In the menu of the extension's own button, which a right-click on it opens.
   chrome.contextMenus.create({
@@ -158,11 +166,41 @@ async function report(tab, result) {
   });
 }
 
+/** Whether a site has a downloader of its own, as OpalArchive lists them. */
+async function hasOwnDownloader(url) {
+  let host;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  const all = await ask("GET", "/inbox/sites");
+  return (Array.isArray(all) ? all : []).some((downloader) =>
+    downloader.sites.some((site) => ofSite(host, site)),
+  );
+}
+
+/**
+ * What "Send to OpalArchive" sends for a picture or video: the file
+ * itself if its site has a downloader, or none does and the page's site
+ * has none either; the page if that has one, as it knows what the picture
+ * is of. A file that has no address of its own on the web, as a video
+ * played from a `blob:` has not, is sent as the page.
+ */
+async function mediaTarget(src, page) {
+  if (!/^https?:/.test(src ?? "")) return page;
+  if (!page || (await hasOwnDownloader(src))) return src;
+  return (await hasOwnDownloader(page)) ? page : src;
+}
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "open") return openApp();
-  // A link is what was pointed at; failing that the page it is on, which
-  // says more than the address of a picture in it.
-  const url = info.linkUrl || info.pageUrl || info.srcUrl;
+  const url =
+    info.menuItemId === "sendLink"
+      ? info.linkUrl
+      : info.srcUrl
+        ? await mediaTarget(info.srcUrl, info.pageUrl)
+        : info.pageUrl;
   if (url) report(tab, await send(url));
 });
 

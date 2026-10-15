@@ -78,6 +78,10 @@ pub struct Manifest {
     /// `.*` for that name under any ending.
     #[serde(default)]
     sites: Vec<String>,
+    /// Whether it takes, in the inbox, any address that no other
+    /// downloader's `sites` take: the one for a file at any address.
+    #[serde(default)]
+    fallback: bool,
     /// Present if it can use a login taken from a browser.
     cookies: Option<CookieSpec>,
     /// Switches the user can set.
@@ -544,6 +548,12 @@ fn for_url(state: &AppState, url: &str) -> Result<Option<Manifest>, ApiError> {
         .into_iter()
         .filter(|manifest| manifest.sites.iter().any(|site| of_site(&host, site)));
     Ok(of_host.next())
+}
+
+/// The downloader for an address sent to the inbox: the one for its site,
+/// or failing that the one that takes any address, if there is one.
+fn for_inbox(state: &AppState, url: &str) -> Result<Option<Manifest>, ApiError> {
+    Ok(for_url(state, url)?.or_else(|| manifests(state).into_iter().find(|m| m.fallback)))
 }
 
 /// What a downloader is set to: its options, the manifest's defaults

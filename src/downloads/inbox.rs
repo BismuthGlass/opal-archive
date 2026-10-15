@@ -3,7 +3,8 @@
 //!
 //! Each waits in a queue kept in the database, so that a restart loses
 //! none, and they are run one at a time. The downloader is found from the
-//! address, by the sites its manifest names, and is set as it is for
+//! address, by the sites its manifest names, or is the one that takes any
+//! address when none names it; it is set as it is for
 //! every tab; besides that, each downloader has tags of its own that it
 //! gives here. What is fetched is listed under one tab, which holds it
 //! until the user clears it.
@@ -160,7 +161,7 @@ async fn enqueue(
     }
     let manifest = match input.downloader.as_deref() {
         Some(name) => manifest(&state, name)?,
-        None => for_url(&state, &url)?.ok_or_else(|| {
+        None => for_inbox(&state, &url)?.ok_or_else(|| {
             let host = host_of(&url).unwrap_or_default();
             ApiError::BadRequest(format!("no downloader takes addresses of {host}"))
         })?,

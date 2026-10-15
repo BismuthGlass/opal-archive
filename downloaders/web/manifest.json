@@ -1,0 +1,7 @@
+{
+  "title": "Any site",
+  "source": "web",
+  "command": ["uv", "run", "--quiet", "--script", "web.py"],
+  "url_hint": "The address of a picture or video itself, on any site",
+  "fallback": true
+}

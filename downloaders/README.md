@@ -36,6 +36,7 @@ when asked, so a new one shows up without a restart.
 | `command`  | The program and its first arguments, run from the downloader's folder   |
 | `url_hint` | What can be pasted into the download box                                |
 | `sites`    | Optional. The sites it downloads from, by which an address finds it: a domain, which stands for its subdomains too, or a name and `.*` for that name under any ending |
+| `fallback` | Optional. If true, it takes, in Opal Drop, any address no downloader's `sites` take. `web` is one: it fetches a picture or video at any address, as the file it is |
 | `cookies`  | Optional. Present if it can use a login read from one of these browsers |
 | `options`  | Optional. Switches the user sets, once for every download; each is true or false |
 
@@ -210,7 +211,8 @@ they are typed in the interface, given besides the ones the downloader is
 set to give.
 
 The server finds the downloader from the address, by the `sites` of each
-manifest (or takes the one named in `"downloader"`), and puts the request
+manifest, or failing that takes the one with `fallback` (or the one named
+in `"downloader"`), and puts the request
 in a queue. The queue is kept in the database and worked through one
 request at a time. The answer is the request as queued, with its `id`;
 `GET /api/inbox/queue/<id>` says what has become of it: its `status` is

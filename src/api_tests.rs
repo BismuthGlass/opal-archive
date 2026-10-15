@@ -1822,6 +1822,29 @@ async fn a_request_says_whether_its_tags_bring_their_children() {
 }
 
 #[tokio::test]
+async fn the_inbox_sends_what_no_site_takes_to_the_downloader_for_any_address() {
+    let api = Api::new();
+    api.fake_downloader();
+    api.downloader("any", FAKE_DOWNLOADER);
+    let manifest = json!({
+        "title": "Any", "source": "any", "command": ["sh", "fake.sh"], "fallback": true,
+    });
+    let folder = api.state.downloaders.join("any");
+    std::fs::write(folder.join("manifest.json"), manifest.to_string()).unwrap();
+    let send = async |url: &str| api.call("POST", "/inbox", Some(json!({ "url": url }))).await;
+
+    // An address of a site with a downloader of its own goes to that one;
+    // any other, to the one that takes any address.
+    let (status, own) = send("https://example.test/board").await;
+    assert_eq!((status, &own["downloader"]), (StatusCode::CREATED, &json!("fake")));
+    let (status, other) = send("https://elsewhere.test/picture.png").await;
+    assert_eq!((status, &other["downloader"]), (StatusCode::CREATED, &json!("any")));
+    // It is not one of the sites there is a downloader for.
+    let sites = api.get("/inbox/sites").await;
+    assert_eq!(sites.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn the_inbox_downloads_what_it_is_sent() {
     let api = Api::new();
     api.fake_downloader();

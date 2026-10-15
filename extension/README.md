@@ -26,9 +26,15 @@ an address, which goes into Opal Drop's queue (see `downloaders/README.md`).
   file, which sends that post, and one by the number of each thread's
   first post, which sends the whole thread. In a board's catalog each
   thread has the thread's button on its corner.
-- Everywhere, "Send to OpalArchive" in the right-click menu, for a link or
-  the page itself, and the extension's own button for the page on show.
-  These work for any site OpalArchive has a downloader for.
+- Everywhere, "Send to OpalArchive" in the right-click menu, for a
+  picture, a video or the page itself, and "Send link to OpalArchive" for
+  a link: on a thumbnail that links to its full picture, the first sends
+  the thumbnail and the second the full picture. A picture or video is
+  sent as itself if its site has a downloader, or if neither its site nor
+  the page's has one, when OpalArchive's downloader for any site fetches
+  the file as it is; otherwise the page is sent, as its downloader knows
+  what the picture is of. The extension's own button sends the page on
+  show.
 
 Its options also list the downloaders that use a login, with whether
 OpalArchive has one saved. "Send my login" gives OpalArchive this
@@ -65,7 +71,9 @@ reached.
 
 ## Adding a site
 
-A site needs a downloader in OpalArchive that names it in its `sites`; that
+A picture or video at an address of its own can be sent from any site.
+For more than that, such as a post's title and creator or the page itself,
+a site needs a downloader in OpalArchive that names it in its `sites`; that
 alone makes the right-click menu work there. For buttons in its pages, add a
 script under `sites/` that finds the posts, and list it in `manifest.json`
 beside Reddit's, after `button.js`:
