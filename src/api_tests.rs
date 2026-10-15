@@ -334,6 +334,56 @@ async fn tags_are_added_counted_and_removed() {
 }
 
 #[tokio::test]
+async fn an_edit_says_what_each_file_gained_and_lost_and_can_be_undone() {
+    let api = Api::new();
+    let (a, b) = (api.file("a.png"), api.file("b.png"));
+    api.post(
+        "/tags/child",
+        json!({ "field": "tags", "value": "cat", "child_field": "tags", "child": "animal" }),
+    )
+    .await;
+    api.edit(&[a], json!({ "add": { "tags": ["animal", "old"] } }))
+        .await;
+
+    // `a` had `animal` already: only `b` gained it, along with `cat`.
+    let done = api
+        .edit(
+            &[a, b],
+            json!({ "add": { "tags": ["cat"] }, "remove": { "tags": ["old"] } }),
+        )
+        .await;
+    let changes = json!([
+        { "id": a, "add": { "tags": ["cat"] }, "remove": { "tags": ["old"] } },
+        { "id": b, "add": { "tags": ["animal", "cat"] } },
+    ]);
+    assert_eq!(done["tags"], changes);
+
+    // Undone, each file is as it was, `a` keeping the `animal` it had.
+    let undo = json!([
+        { "id": a, "add": { "tags": ["old"] }, "remove": { "tags": ["cat"] } },
+        { "id": b, "remove": { "tags": ["animal", "cat"] } },
+    ]);
+    api.post("/entities/retag", json!({ "changes": undo }))
+        .await;
+    assert_eq!(
+        carried(&api.metadata(&[a]).await, "tags"),
+        [tag("animal", 1), tag("old", 1)]
+    );
+    assert_eq!(api.metadata(&[b]).await["tags"], json!({}));
+
+    // Redone, it is done again, and nothing more: no child is brought.
+    api.post("/entities/retag", json!({ "changes": changes }))
+        .await;
+    assert_eq!(api.found("cat").await, [a, b]);
+    assert_eq!(api.found("old").await, Vec::<i64>::new());
+    assert_eq!(api.found("animal").await, [a, b]);
+
+    // An edit of no tags says nothing of them.
+    let scored = api.edit(&[a], json!({ "set": { "score": 3 } })).await;
+    assert_eq!(scored["tags"], json!([]));
+}
+
+#[tokio::test]
 async fn links_identifiers_and_references_are_plain_lists() {
     let api = Api::new();
     let (a, b) = (api.file("a.png"), api.file("b.png"));

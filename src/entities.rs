@@ -1,6 +1,6 @@
 //! Reading and editing the metadata of entities, one or many at a time.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use axum::{
     Json, Router,
@@ -11,7 +11,7 @@ use rusqlite::{
     Connection, OptionalExtension, params,
     types::Value as SqlValue,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::{
@@ -94,11 +94,28 @@ struct EditInput {
     remove_set: Vec<String>,
 }
 
+/// The tags one entity gained and lost, by field: what an edit did to it,
+/// and what undoing that edit does the other way round.
+#[derive(Deserialize, Serialize, Default)]
+struct Retag {
+    id: i64,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    add: BTreeMap<String, Vec<String>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    remove: BTreeMap<String, Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct RetagInput {
+    changes: Vec<Retag>,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/entities/{id}", get(entity))
         .route("/entities/metadata", post(metadata))
         .route("/entities/edit", post(edit))
+        .route("/entities/retag", post(retag))
         .route("/entities/trash", post(trash))
         .route("/entities/restore", post(restore))
         .route("/entities/archive", post(archive))
@@ -556,6 +573,14 @@ async fn edit(
 
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
+    // What each entity carried before, to tell what it gained and lost:
+    // aliases and child tags make that more than what was asked for.
+    let retags = !added.is_empty() || !removed.is_empty();
+    let before = if retags {
+        tags_carried(&tx, &ids)?
+    } else {
+        BTreeSet::new()
+    };
     for (field, (table, key), value) in updates {
         tx.execute(
             &format!("UPDATE {table} SET {field} = ?2 WHERE {key} {IN_IDS}"),
@@ -616,8 +641,92 @@ async fn edit(
         [&ids],
         |row| row.get(0),
     )?;
+    let retagged = if retags {
+        tag_changes(&before, &tags_carried(&tx, &ids)?)
+    } else {
+        Vec::new()
+    };
     tx.commit()?;
-    Ok(Json(json!({ "updated": count })))
+    Ok(Json(json!({ "updated": count, "tags": retagged })))
+}
+
+/// Every tag the entities carry, as entity, field and value.
+fn tags_carried(conn: &Connection, ids: &str) -> rusqlite::Result<BTreeSet<(i64, String, String)>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT et.entity_id, t.field, t.value FROM entity_tag et JOIN tag t ON t.id = et.tag_id
+         WHERE et.entity_id {IN_IDS}"
+    ))?;
+    stmt.query_map([ids], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect()
+}
+
+/// What each entity gained and lost between two readings of its tags, for
+/// those whose tags changed.
+fn tag_changes(
+    before: &BTreeSet<(i64, String, String)>,
+    after: &BTreeSet<(i64, String, String)>,
+) -> Vec<Retag> {
+    let mut changes: BTreeMap<i64, Retag> = BTreeMap::new();
+    for (gained, (id, field, value)) in after
+        .difference(before)
+        .map(|tag| (true, tag))
+        .chain(before.difference(after).map(|tag| (false, tag)))
+    {
+        let change = changes.entry(*id).or_default();
+        change.id = *id;
+        let side = if gained {
+            &mut change.add
+        } else {
+            &mut change.remove
+        };
+        side.entry(field.clone()).or_default().push(value.clone());
+    }
+    changes.into_values().collect()
+}
+
+/// Gives each entity the tags given for it and takes off those to be taken
+/// off, all or nothing: what one edit did, or undoing it. The tags are
+/// just those, without the child tags they would bring; an entity that is
+/// gone is passed over.
+async fn retag(
+    State(state): State<AppState>,
+    Json(input): Json<RetagInput>,
+) -> Result<Json<Value>, ApiError> {
+    // Gathered by tag, so that a tag given to many is given in one go.
+    let mut adding: BTreeMap<(&str, String), Vec<i64>> = BTreeMap::new();
+    let mut removing: BTreeMap<(&str, &str), Vec<i64>> = BTreeMap::new();
+    for change in &input.changes {
+        for (field, values) in &change.add {
+            tags::check_field(field)?;
+            for value in values {
+                let value = tags::normalize(field, value)?;
+                adding.entry((field, value)).or_default().push(change.id);
+            }
+        }
+        for (field, values) in &change.remove {
+            tags::check_field(field)?;
+            for value in values {
+                let tag = (field.as_str(), value.trim());
+                removing.entry(tag).or_default().push(change.id);
+            }
+        }
+    }
+
+    let mut conn = state.db.lock().unwrap();
+    let tx = conn.transaction()?;
+    for ((field, value), ids) in &removing {
+        detach_tag(&tx, &ids_json(ids), field, value)?;
+    }
+    for ((field, value), ids) in adding {
+        // A tag that has become an alias since stands for its tag.
+        let value = tags::resolve(&tx, field, value)?;
+        attach_tag(&tx, &ids_json(&ids), field, &value)?;
+    }
+    if !removing.is_empty() {
+        prune_tags(&tx)?;
+    }
+    tx.commit()?;
+    Ok(Json(json!({ "changed": input.changes.len() })))
 }
 
 /// Moves entities to the trash, or back out of it.
