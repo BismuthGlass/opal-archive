@@ -94,11 +94,14 @@ struct EditInput {
     remove_set: Vec<String>,
 }
 
-/// The tags one entity gained and lost, by field: what an edit did to it,
-/// and what undoing that edit does the other way round.
+/// What one entity is given: fields set, and tags given and taken off.
+/// An edit says what it did to each entity this way, and what undoing it
+/// would do.
 #[derive(Deserialize, Serialize, Default)]
-struct Retag {
+struct Change {
     id: i64,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    set: Map<String, Value>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     add: BTreeMap<String, Vec<String>>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -106,8 +109,8 @@ struct Retag {
 }
 
 #[derive(Deserialize)]
-struct RetagInput {
-    changes: Vec<Retag>,
+struct ApplyInput {
+    changes: Vec<Change>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -115,7 +118,7 @@ pub fn router() -> Router<AppState> {
         .route("/entities/{id}", get(entity))
         .route("/entities/metadata", post(metadata))
         .route("/entities/edit", post(edit))
-        .route("/entities/retag", post(retag))
+        .route("/entities/apply", post(apply))
         .route("/entities/trash", post(trash))
         .route("/entities/restore", post(restore))
         .route("/entities/archive", post(archive))
@@ -576,11 +579,16 @@ async fn edit(
     // What each entity carried before, to tell what it gained and lost:
     // aliases and child tags make that more than what was asked for.
     let retags = !added.is_empty() || !removed.is_empty();
-    let before = if retags {
+    let tags_before = if retags {
         tags_carried(&tx, &ids)?
     } else {
         BTreeSet::new()
     };
+    let fields: Vec<_> = updates
+        .iter()
+        .map(|(field, home, _)| (*field, *home))
+        .collect();
+    let scalars_before = scalars_of(&tx, &ids, &fields)?;
     for (field, (table, key), value) in updates {
         tx.execute(
             &format!("UPDATE {table} SET {field} = ?2 WHERE {key} {IN_IDS}"),
@@ -641,13 +649,40 @@ async fn edit(
         [&ids],
         |row| row.get(0),
     )?;
-    let retagged = if retags {
-        tag_changes(&before, &tags_carried(&tx, &ids)?)
+    let tags_after = if retags {
+        tags_carried(&tx, &ids)?
     } else {
-        Vec::new()
+        BTreeSet::new()
     };
+    let scalars_after = scalars_of(&tx, &ids, &fields)?;
+    let (undo, redo) = changes_between(
+        (&tags_before, &tags_after),
+        (&scalars_before, &scalars_after),
+    );
     tx.commit()?;
-    Ok(Json(json!({ "updated": count, "tags": retagged })))
+    Ok(Json(
+        json!({ "updated": count, "undo": undo, "redo": redo }),
+    ))
+}
+
+/// The values of fields that can be set, as entity and field to value.
+fn scalars_of(
+    conn: &Connection,
+    ids: &str,
+    fields: &[(&str, (&str, &str))],
+) -> rusqlite::Result<BTreeMap<(i64, String), Value>> {
+    let mut values = BTreeMap::new();
+    for (field, (table, key)) in fields {
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {key}, {field} FROM {table} WHERE {key} {IN_IDS}"
+        ))?;
+        let rows = stmt.query_map([ids], |row| Ok((row.get(0)?, to_json(row.get(1)?))))?;
+        for row in rows {
+            let (id, value) = row?;
+            values.insert((id, field.to_string()), value);
+        }
+    }
+    Ok(values)
 }
 
 /// Every tag the entities carry, as entity, field and value.
@@ -660,42 +695,73 @@ fn tags_carried(conn: &Connection, ids: &str) -> rusqlite::Result<BTreeSet<(i64,
         .collect()
 }
 
-/// What each entity gained and lost between two readings of its tags, for
-/// those whose tags changed.
-fn tag_changes(
-    before: &BTreeSet<(i64, String, String)>,
-    after: &BTreeSet<(i64, String, String)>,
-) -> Vec<Retag> {
-    let mut changes: BTreeMap<i64, Retag> = BTreeMap::new();
-    for (gained, (id, field, value)) in after
-        .difference(before)
-        .map(|tag| (true, tag))
-        .chain(before.difference(after).map(|tag| (false, tag)))
-    {
-        let change = changes.entry(*id).or_default();
-        change.id = *id;
-        let side = if gained {
-            &mut change.add
-        } else {
-            &mut change.remove
-        };
-        side.entry(field.clone()).or_default().push(value.clone());
+type Tags = BTreeSet<(i64, String, String)>;
+type Scalars = BTreeMap<(i64, String), Value>;
+
+/// What changed for each entity between two readings of its tags and
+/// fields, for those where anything did: as what would undo it, and what
+/// would do it again.
+fn changes_between(
+    tags: (&Tags, &Tags),
+    scalars: (&Scalars, &Scalars),
+) -> (Vec<Change>, Vec<Change>) {
+    let mut undo: BTreeMap<i64, Change> = BTreeMap::new();
+    let mut redo: BTreeMap<i64, Change> = BTreeMap::new();
+    fn of(changes: &mut BTreeMap<i64, Change>, id: i64) -> &mut Change {
+        changes.entry(id).or_insert_with(|| Change {
+            id,
+            ..Default::default()
+        })
     }
-    changes.into_values().collect()
+    let (before, after) = tags;
+    for (id, field, value) in after.difference(before) {
+        let tag = || (field.clone(), value.clone());
+        push(&mut of(&mut undo, *id).remove, tag());
+        push(&mut of(&mut redo, *id).add, tag());
+    }
+    for (id, field, value) in before.difference(after) {
+        let tag = || (field.clone(), value.clone());
+        push(&mut of(&mut undo, *id).add, tag());
+        push(&mut of(&mut redo, *id).remove, tag());
+    }
+    let (before, after) = scalars;
+    for ((id, field), now) in after {
+        let was = before.get(&(*id, field.clone())).unwrap_or(&Value::Null);
+        if was != now {
+            of(&mut undo, *id).set.insert(field.clone(), was.clone());
+            of(&mut redo, *id).set.insert(field.clone(), now.clone());
+        }
+    }
+    (undo.into_values().collect(), redo.into_values().collect())
 }
 
-/// Gives each entity the tags given for it and takes off those to be taken
-/// off, all or nothing: what one edit did, or undoing it. The tags are
-/// just those, without the child tags they would bring; an entity that is
-/// gone is passed over.
-async fn retag(
+/// Puts a tag among the tags of its field.
+fn push(tags: &mut BTreeMap<String, Vec<String>>, (field, value): (String, String)) {
+    tags.entry(field).or_default().push(value);
+}
+
+/// Gives each entity what is given for it, all or nothing: what one edit
+/// did, or what undoes it. The tags are just those given, without the
+/// child tags they would bring; an entity that is gone is passed over.
+async fn apply(
     State(state): State<AppState>,
-    Json(input): Json<RetagInput>,
+    Json(input): Json<ApplyInput>,
 ) -> Result<Json<Value>, ApiError> {
-    // Gathered by tag, so that a tag given to many is given in one go.
+    // Gathered by value, so that what many are given is given in one go.
+    let mut setting: BTreeMap<(&str, String), (SqlValue, Vec<i64>)> = BTreeMap::new();
     let mut adding: BTreeMap<(&str, String), Vec<i64>> = BTreeMap::new();
     let mut removing: BTreeMap<(&str, &str), Vec<i64>> = BTreeMap::new();
     for change in &input.changes {
+        for (field, value) in &change.set {
+            if home(field).is_none() {
+                return Err(ApiError::BadRequest(format!("`{field}` cannot be set")));
+            }
+            let stored = scalar_value(field, value)?;
+            let (_, ids) = setting
+                .entry((field, value.to_string()))
+                .or_insert_with(|| (stored, Vec::new()));
+            ids.push(change.id);
+        }
         for (field, values) in &change.add {
             tags::check_field(field)?;
             for value in values {
@@ -714,6 +780,13 @@ async fn retag(
 
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
+    for ((field, _), (value, ids)) in setting {
+        let (table, key) = home(field).expect("checked above");
+        tx.execute(
+            &format!("UPDATE {table} SET {field} = ?2 WHERE {key} {IN_IDS}"),
+            params![ids_json(&ids), value],
+        )?;
+    }
     for ((field, value), ids) in &removing {
         detach_tag(&tx, &ids_json(ids), field, value)?;
     }
@@ -729,14 +802,27 @@ async fn retag(
     Ok(Json(json!({ "changed": input.changes.len() })))
 }
 
+/// Sets a flag of entities: in the trash, or in the inbox. Says which
+/// of them it changed, those that had it already being left as they were,
+/// so that it can be undone for those alone.
+fn set_flag(state: &AppState, ids: &[i64], flag: &str, on: bool) -> Result<Json<Value>, ApiError> {
+    let conn = state.db.lock().unwrap();
+    let changed = conn
+        .prepare(&format!(
+            "SELECT id FROM entity WHERE {flag} <> ?2 AND id {IN_IDS} ORDER BY id"
+        ))?
+        .query_map(params![ids_json(ids), on], |row| row.get::<_, i64>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    conn.execute(
+        &format!("UPDATE entity SET {flag} = ?2 WHERE id {IN_IDS}"),
+        params![ids_json(&changed), on],
+    )?;
+    Ok(Json(json!({ "changed": changed.len(), "ids": changed })))
+}
+
 /// Moves entities to the trash, or back out of it.
 fn set_trashed(state: &AppState, ids: &[i64], trashed: bool) -> Result<Json<Value>, ApiError> {
-    let conn = state.db.lock().unwrap();
-    let changed = conn.execute(
-        &format!("UPDATE entity SET trashed = ?2 WHERE trashed <> ?2 AND id {IN_IDS}"),
-        params![ids_json(ids), trashed],
-    )?;
-    Ok(Json(json!({ "changed": changed })))
+    set_flag(state, ids, "trashed", trashed)
 }
 
 /// The first step of deleting: trashed entities drop out of searches but
@@ -757,12 +843,7 @@ async fn restore(
 
 /// Takes entities out of the inbox, or puts them back in it.
 fn set_inbox(state: &AppState, ids: &[i64], inbox: bool) -> Result<Json<Value>, ApiError> {
-    let conn = state.db.lock().unwrap();
-    let changed = conn.execute(
-        &format!("UPDATE entity SET inbox = ?2 WHERE inbox <> ?2 AND id {IN_IDS}"),
-        params![ids_json(ids), inbox],
-    )?;
-    Ok(Json(json!({ "changed": changed })))
+    set_flag(state, ids, "inbox", inbox)
 }
 
 /// Archives entities: they have been looked over, and leave the inbox they

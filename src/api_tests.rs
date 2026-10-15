@@ -356,14 +356,15 @@ async fn an_edit_says_what_each_file_gained_and_lost_and_can_be_undone() {
         { "id": a, "add": { "tags": ["cat"] }, "remove": { "tags": ["old"] } },
         { "id": b, "add": { "tags": ["animal", "cat"] } },
     ]);
-    assert_eq!(done["tags"], changes);
-
-    // Undone, each file is as it was, `a` keeping the `animal` it had.
     let undo = json!([
         { "id": a, "add": { "tags": ["old"] }, "remove": { "tags": ["cat"] } },
         { "id": b, "remove": { "tags": ["animal", "cat"] } },
     ]);
-    api.post("/entities/retag", json!({ "changes": undo }))
+    assert_eq!(done["redo"], changes);
+    assert_eq!(done["undo"], undo);
+
+    // Undone, each file is as it was, `a` keeping the `animal` it had.
+    api.post("/entities/apply", json!({ "changes": undo }))
         .await;
     assert_eq!(
         carried(&api.metadata(&[a]).await, "tags"),
@@ -372,15 +373,60 @@ async fn an_edit_says_what_each_file_gained_and_lost_and_can_be_undone() {
     assert_eq!(api.metadata(&[b]).await["tags"], json!({}));
 
     // Redone, it is done again, and nothing more: no child is brought.
-    api.post("/entities/retag", json!({ "changes": changes }))
+    api.post("/entities/apply", json!({ "changes": changes }))
         .await;
     assert_eq!(api.found("cat").await, [a, b]);
     assert_eq!(api.found("old").await, Vec::<i64>::new());
     assert_eq!(api.found("animal").await, [a, b]);
 
-    // An edit of no tags says nothing of them.
-    let scored = api.edit(&[a], json!({ "set": { "score": 3 } })).await;
-    assert_eq!(scored["tags"], json!([]));
+    // A score set is undone file by file, each getting back its own.
+    api.edit(&[a], json!({ "set": { "score": 3 } })).await;
+    let scored = api
+        .edit(
+            &[a, b],
+            json!({ "set": { "score": 5, "content_rating": "safe" } }),
+        )
+        .await;
+    assert_eq!(
+        scored["undo"],
+        json!([
+            { "id": a, "set": { "content_rating": null, "score": 3 } },
+            { "id": b, "set": { "content_rating": null, "score": null } },
+        ])
+    );
+    api.post("/entities/apply", json!({ "changes": scored["undo"] }))
+        .await;
+    assert_eq!(api.metadata(&[a]).await["scalars"]["score"]["value"], 3);
+    assert_eq!(
+        api.metadata(&[b]).await["scalars"]["score"]["value"],
+        Value::Null
+    );
+    assert_eq!(
+        api.metadata(&[a, b]).await["scalars"]["content_rating"]["value"],
+        Value::Null
+    );
+
+    // Setting what a file has already is no change to it.
+    let again = api.edit(&[a], json!({ "set": { "score": 3 } })).await;
+    assert_eq!(again["undo"], json!([]));
+}
+
+#[tokio::test]
+async fn trashing_and_archiving_say_what_they_changed() {
+    let api = Api::new();
+    let (a, b) = (api.file("a.png"), api.file("b.png"));
+    api.post("/entities/trash", json!({ "ids": [a] })).await;
+    let trashed = api.post("/entities/trash", json!({ "ids": [a, b] })).await;
+    assert_eq!(trashed, json!({ "changed": 1, "ids": [b] }));
+    let restored = api
+        .post("/entities/restore", json!({ "ids": [a, b] }))
+        .await;
+    assert_eq!(restored, json!({ "changed": 2, "ids": [a, b] }));
+    api.post("/entities/unarchive", json!({ "ids": [a] })).await;
+    let archived = api
+        .post("/entities/archive", json!({ "ids": [a, b] }))
+        .await;
+    assert_eq!(archived, json!({ "changed": 1, "ids": [a] }));
 }
 
 #[tokio::test]
