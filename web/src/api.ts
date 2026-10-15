@@ -390,8 +390,24 @@ export const searchIds = (
 export const getEntity = (id: number) => request<Entity>("GET", `/entities/${id}`);
 export const getMetadata = (ids: number[]) =>
   request<Metadata>("POST", "/entities/metadata", { ids });
+/**
+ * The tags one entity gained and lost, by field. Aliases and child tags
+ * make that more than what an edit asks for, and a tag it had already is
+ * not gained.
+ */
+export type Retag = {
+  id: number;
+  add?: Record<string, string[]>;
+  remove?: Record<string, string[]>;
+};
 export const edit = (ids: number[], changes: Changes) =>
-  request<{ updated: number }>("POST", "/entities/edit", { ids, ...changes });
+  request<{ updated: number; tags: Retag[] }>("POST", "/entities/edit", { ids, ...changes });
+/**
+ * Gives each entity just the tags given for it, and takes off those to be
+ * taken off, all or nothing: what undoing or redoing an edit does.
+ */
+export const retag = (changes: Retag[]) =>
+  request<{ changed: number }>("POST", "/entities/retag", { changes });
 /** Moves entities to the trash: out of searches, but not yet gone. */
 export const trashEntities = (ids: number[]) =>
   request<{ changed: number }>("POST", "/entities/trash", { ids });

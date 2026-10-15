@@ -6,11 +6,13 @@ import type { Tab, TabKind } from "./api";
 import { forgetDownload } from "./downloads";
 import { forgetViews, markNames } from "./search";
 import type { Within } from "./search";
+import { forgetHistory } from "./undo";
 
 /** Drops what the page keeps for a closed tab: its number is given out again. */
 function forget(id: number) {
   forgetViews(id);
   forgetDownload(id);
+  forgetHistory(id);
   setTrails(produce((all) => void delete all[id]));
   saveTrails();
   setShowsTrashed(id, false);

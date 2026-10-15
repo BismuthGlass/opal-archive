@@ -203,6 +203,19 @@ export const ACTIONS = [
     description: "Takes out of the trash.",
     key: "ctrl+shift+x",
   },
+  {
+    id: "undo",
+    label: "Undo",
+    description:
+      "Undoes the last change made in this tab to marks, to tags, or to what a view lists. Each tab has its own history.",
+    key: "ctrl+z",
+  },
+  {
+    id: "redo",
+    label: "Redo",
+    description: "Does again what was last undone in this tab.",
+    key: "ctrl+shift+z",
+  },
 ] as const;
 
 export type Action = (typeof ACTIONS)[number]["id"];

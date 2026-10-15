@@ -10,6 +10,7 @@ import {
   plural,
   setName,
 } from "../format";
+import { edit } from "../edits";
 import { changed, dataVersion, selected } from "../search";
 import { aggregatedTypes, orderedTypes, prefixOf, tagType } from "../tagTypes";
 import { enter, shownVariants } from "../tabs";
@@ -120,7 +121,7 @@ export default function Sidebar() {
 
   const apply = async (changes: Changes) => {
     try {
-      await api.edit(ids(), changes);
+      await edit(ids(), changes);
       setError(null);
     } catch (err) {
       setError(errorMessage(err));

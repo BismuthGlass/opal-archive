@@ -2,8 +2,10 @@ import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import * as api from "./api";
 import type { Item } from "./api";
+import { plural } from "./format";
 import { settings } from "./settings";
 import { refreshStats } from "./stats";
+import { record } from "./undo";
 
 /** How many results a page holds unless the settings say otherwise, and the bounds they keep to. */
 export const DEFAULT_PAGE = 200;
@@ -165,6 +167,49 @@ function putMarks(next: TabMarks) {
   else tabMarks.delete(tab);
   writeMarks();
 }
+
+/** The marks of a tab, which need not be the one on show. */
+const marksOf = (tab: number): TabMarks =>
+  tab === tabOf(viewKey) ? marks() : (tabMarks.get(tab) ?? new Map<number, Marks>());
+
+/** Gives files of a tab the marks given for them, in place of those they have. */
+function remark(tab: number, given: [number, Marks][]) {
+  const next = new Map(marksOf(tab));
+  for (const [id, now] of given) {
+    if (now.length > 0) next.set(id, now);
+    else next.delete(id);
+  }
+  if (tab === tabOf(viewKey)) return putMarks(next);
+  if (next.size > 0) tabMarks.set(tab, next);
+  else tabMarks.delete(tab);
+  writeMarks();
+}
+
+/**
+ * Sets the marks of the tab on show, as something that can be undone:
+ * each file whose marks change gets back those it had. `name` says what
+ * was done, given how many files it changed.
+ */
+function changeMarks(next: TabMarks, name: (count: number) => string) {
+  const was = marks();
+  const before: [number, Marks][] = [];
+  const after: [number, Marks][] = [];
+  for (const id of new Set([...was.keys(), ...next.keys()])) {
+    const had = was.get(id) ?? [];
+    const now = next.get(id) ?? [];
+    if (had.join() === now.join()) continue;
+    before.push([id, had]);
+    after.push([id, now]);
+  }
+  if (after.length === 0) return;
+  putMarks(next);
+  const tab = tabOf(viewKey);
+  record(tab, {
+    name: name(after.length),
+    undo: () => remark(tab!, before),
+    redo: () => remark(tab!, after),
+  });
+}
 /**
  * A query as it is saved with a tab's view: marked, by characters that
  * cannot be typed, when the view was calculated with the trash on show or
@@ -226,6 +271,12 @@ let viewTab: number | null = null;
  * selection.
  */
 const views = new Map<string, { ids: number[]; custom: boolean }>();
+/**
+ * The query each tab's saved view is of, as it is saved, as far as it is
+ * known: a tab saves one view, and one not on show is saved over it only
+ * if it is that one.
+ */
+const savedQueries = new Map<number, string>();
 
 /**
  * A result taken out of a view: where in the view it was, and when it was
@@ -367,6 +418,7 @@ function remember() {
   const tab = viewTab;
   if (tab === null) return;
   const view = { query: savedAs(search.query), ids, custom: search.custom };
+  savedQueries.set(tab, view.query);
   // A drag or a run of removals saves once, when it settles.
   clearTimeout(saving);
   saving = window.setTimeout(() => {
@@ -574,6 +626,7 @@ export function runSearch(
       .catch(() => null)
       .then((saved) => {
         if (current !== calculation) return;
+        if (saved) savedQueries.set(tab, saved.query);
         if (saved && saved.query === savedAs(query, trashed, collapsed)) {
           ids = saved.ids;
           setSearch("custom", saved.custom);
@@ -605,6 +658,7 @@ export function runSearch(
  * later tab the same number, and it must not be shown the closed one's.
  */
 export function forgetViews(tab: number) {
+  savedQueries.delete(tab);
   for (const key of [...views.keys(), ...lefts.keys(), ...removedFrom.keys()]) {
     if (key.startsWith(`${tab}:`)) {
       views.delete(key);
@@ -723,6 +777,7 @@ export function addedTo(tab: number) {
   } else {
     // The view saved with that tab lacks what was just added: it is
     // replaced by one of no query, so opening the tab runs its search.
+    savedQueries.set(tab, "\u0000");
     api.saveTabView(tab, { query: "\u0000", ids: [], custom: false }).catch(() => {});
   }
   refreshStats();
@@ -778,41 +833,118 @@ export async function moveItems(moved: number[], before: number) {
 }
 
 /**
- * Takes results out of the view, and out of the selection. Nothing happens
- * to the entities themselves: calculating the search again brings them
- * back.
+ * A view, as what it is to be found and saved by when it may no longer be
+ * the one on show: undoing can put back what was taken out of a view of
+ * the tab other than the one it is in now.
  */
-export async function removeFromView(taken: number[]) {
-  await resultIds();
+type ViewRef = { key: string; tab: number | null; query: string };
+
+const viewOnShow = (): ViewRef => ({ key: viewKey, tab: viewTab, query: savedAs(search.query) });
+
+/**
+ * The view on show, or one seen before as it was kept: what it lists, and
+ * what has been taken out of it. Nothing, for one no longer kept, which
+ * is calculated afresh when it is shown again.
+ */
+async function viewOf(view: ViewRef) {
+  if (view.key === viewKey) await resultIds();
+  // It may have stopped being on show meanwhile.
+  if (view.key === viewKey) return { ids, custom: search.custom, removed: removed(), shown: true };
+  const seen = views.get(view.key);
+  return seen && { ...seen, removed: removedFrom.get(view.key) ?? [], shown: false };
+}
+
+/** Keeps a view that is not on show as it now is, here and with its tab. */
+function keepAside(view: ViewRef, listed: number[], custom: boolean, taken: readonly Removed[]) {
+  views.set(view.key, { ids: listed, custom });
+  removedFrom.delete(view.key);
+  if (taken.length > 0) removedFrom.set(view.key, taken);
+  writeRemoved();
+  // Otherwise it is saved when it is on show again.
+  if (view.tab !== null && savedQueries.get(view.tab) === view.query) {
+    api.saveTabView(view.tab, { query: view.query, ids: listed, custom }).catch(() => {});
+  }
+}
+
+/** Takes results out of a view. Resolves to the IDs of those it listed. */
+async function hideIn(view: ViewRef, taken: number[]): Promise<number[]> {
+  const was = await viewOf(view);
+  if (!was) return [];
   const going = new Set(taken);
   const at = Date.now();
-  const gone = ids.flatMap((id, index) => (going.has(id) ? [{ id, index, at }] : []));
-  drop(taken);
-  putRemoved([...removed(), ...gone]);
-  reload();
+  const gone = was.ids.flatMap((id, index) => (going.has(id) ? [{ id, index, at }] : []));
+  if (gone.length === 0) return [];
+  if (was.shown) {
+    drop(taken);
+    putRemoved([...removed(), ...gone]);
+    reload();
+  } else {
+    keepAside(view, was.ids.filter((id) => !going.has(id)), was.custom, [...was.removed, ...gone]);
+  }
+  return gone.map((was) => was.id);
+}
+
+/**
+ * Puts back in a view what was taken out of it, where it was: as near to
+ * there as can be, when the view has changed since. Resolves to the IDs of
+ * those put back.
+ */
+async function unhideIn(view: ViewRef, back: number[]): Promise<number[]> {
+  const was = await viewOf(view);
+  if (!was) return [];
+  const wanted = new Set(back);
+  const listed = new Set(was.ids);
+  // Those that were first in the view go in first, so that what went
+  // together comes back as it was.
+  const returning = was.removed
+    .filter((had) => wanted.has(had.id) && !listed.has(had.id))
+    .sort((a, b) => a.index - b.index);
+  const rest = was.removed.filter((had) => !wanted.has(had.id));
+  if (returning.length === 0 && rest.length === was.removed.length) return [];
+  const next = [...was.ids];
+  for (const had of returning) next.splice(Math.min(had.index, next.length), 0, had.id);
+  if (was.shown) {
+    ids = next;
+    anchor = null;
+    putRemoved(rest);
+    remember();
+    keepListed();
+    reload();
+  } else {
+    keepAside(view, next, was.custom, rest);
+  }
+  return returning.map((had) => had.id);
+}
+
+/**
+ * Takes results out of the view, and out of the selection. Nothing happens
+ * to the entities themselves: calculating the search again brings them
+ * back. It can be undone.
+ */
+export async function removeFromView(taken: number[]) {
+  const view = viewOnShow();
+  const gone = await hideIn(view, taken);
+  if (gone.length === 0) return;
+  record(tabOf(view.key), {
+    name: `removing ${plural(gone.length, "item")} from the view`,
+    undo: () => unhideIn(view, gone),
+    redo: () => hideIn(view, gone),
+  });
 }
 
 /**
  * Puts back in the view what was taken out of it, where it was: as near
- * to there as can be, when the view has changed since.
+ * to there as can be, when the view has changed since. It can be undone.
  */
 export async function restoreToView(back: number[]) {
-  await resultIds();
-  const wanted = new Set(back);
-  const listed = new Set(ids);
-  // Those that were first in the view go in first, so that what went
-  // together comes back as it was.
-  const returning = removed()
-    .filter((was) => wanted.has(was.id) && !listed.has(was.id))
-    .sort((a, b) => a.index - b.index);
-  const next = [...ids];
-  for (const was of returning) next.splice(Math.min(was.index, next.length), 0, was.id);
-  ids = next;
-  anchor = null;
-  putRemoved(removed().filter((was) => !wanted.has(was.id)));
-  remember();
-  keepListed();
-  reload();
+  const view = viewOnShow();
+  const returned = await unhideIn(view, back);
+  if (returned.length === 0) return;
+  record(tabOf(view.key), {
+    name: `putting ${plural(returned.length, "item")} back in the view`,
+    undo: () => hideIn(view, returned),
+    redo: () => unhideIn(view, returned),
+  });
 }
 
 /**
@@ -1042,14 +1174,16 @@ export function setMark(marked: number[], mark: number, given: boolean) {
     if (now.length > 0) next.set(id, now);
     else next.delete(id);
   }
-  putMarks(next);
+  changeMarks(next, (count) =>
+    given ? `giving ${plural(count, "item")} mark ${mark}` : `taking mark ${mark} off ${plural(count, "item")}`,
+  );
 }
 
 /** Takes every mark off these. */
 export function unmark(marked: number[]) {
   const next = new Map(marks());
   for (const id of marked) next.delete(id);
-  putMarks(next);
+  changeMarks(next, (count) => `taking every mark off ${plural(count, "item")}`);
 }
 
 /** Takes one mark off everything in the tab that has it. */
@@ -1059,7 +1193,7 @@ export function clearMark(mark: number) {
     const rest = given.filter((had) => had !== mark);
     if (rest.length > 0) next.set(id, rest);
   }
-  putMarks(next);
+  changeMarks(next, (count) => `taking mark ${mark} off ${plural(count, "item")}`);
 }
 
 /**

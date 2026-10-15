@@ -2,6 +2,7 @@ import { createMemo, createResource, createSignal, For, Show } from "solid-js";
 import * as api from "../api";
 import type { Changes, Metadata } from "../api";
 import { errorMessage, fieldLabel, plural, tagQuery } from "../format";
+import { edit } from "../edits";
 import { changed, dataVersion } from "../search";
 import {
   aggregatedTypes,
@@ -644,7 +645,7 @@ export function TaggerModal(props: {
     setSaving(true);
     try {
       await lookups;
-      await api.edit(props.ids, { ...waiting(), children: false });
+      await edit(props.ids, { ...waiting(), children: false });
       changed();
       props.onClose();
     } catch (err) {

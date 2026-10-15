@@ -129,6 +129,18 @@ The count of each mark above the grid, and selecting by mark, take in only what 
 
 A right click on a mark's count offers the rest: to focus on the mark, which goes into it as into a set (see below): the view becomes what has the mark in the tab, with the way back above it; and to name the mark, or clear its name. A name only says what the mark is being used for: it is shown before the mark's count and nowhere else, belongs to the tab, and is remembered by the browser.
 
+## Undo
+
+Ctrl+Z undoes the last thing done in the tab on show, and Ctrl+Shift+Z does again what was last undone; Cmd works as Ctrl. Each tab has a history of its own, and doing something new there drops what could have been redone. It is kept while the page is open, and goes with its tab when the tab is closed.
+
+What can be undone:
+
+- Giving and taking off marks, clearing a mark included: each file gets back the marks it had.
+- Changing tags, in the tagger or the side panel. What each file gained and lost is kept file by file, aliases and child tags included, so undoing takes off only the tags a file did not have before and gives back only the ones it lost: a tag a file already had stays on it. Redoing gives and takes off just those again, without bringing child tags anew. The tags are the library's, so undoing in one tab changes them everywhere; the history it is undone from is the tab's where it was done.
+- Taking files out of a view, and putting them back from "Removed from view". Undoing puts them back in the view they were taken from, where they were, even if the tab has gone into a set or out of one since. A view that has been searched for again has brought them back already.
+
+In the viewer the keys work too, and the viewer stays on the file it shows.
+
 ## Preview
 
 The side panel can be made wider or narrower by dragging its right edge, within limits that leave the files at least half the window; a double click on the edge puts it back. Its width is remembered by the browser.

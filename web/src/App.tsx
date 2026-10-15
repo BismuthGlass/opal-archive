@@ -55,6 +55,7 @@ import RemovedDialog, { openRemoved } from "./components/RemovedDialog";
 import QuerySelect, { openQuerySelect } from "./components/QuerySelect";
 import { refreshStats, stats } from "./stats";
 import { hideToast, showToast, toast } from "./toast";
+import { redo, undo } from "./undo";
 import {
   activeTab,
   error,
@@ -367,6 +368,33 @@ export default function App() {
   };
 
   /**
+   * Undoes the last thing done in the tab on show, or with `again` redoes
+   * the last thing undone. The viewer stays on the file it shows, which
+   * may have moved in the view: it goes on from there if it has left it.
+   */
+  const stepHistory = async (again: boolean) => {
+    const tab = activeTab()?.id;
+    if (tab === undefined) return;
+    const index = viewing();
+    const before = index === null ? [] : await resultIds();
+    const only = viewingOnly()?.map((at) => before[at]);
+    try {
+      const name = await (again ? redo : undo)(tab);
+      showToast(
+        name === null ? `Nothing to ${again ? "redo" : "undo"} in this tab` : `${again ? "Redid" : "Undid"} ${name}`,
+      );
+    } catch (err) {
+      showToast(errorMessage(err));
+    }
+    // Closed, or moved on, meanwhile.
+    if (index === null || viewing() !== index) return;
+    const after = await resultIds();
+    const at = after.indexOf(before[index]);
+    if (at < 0) return stepOn(index);
+    view(at, only?.map((id) => after.indexOf(id)).filter((at) => at >= 0) ?? null);
+  };
+
+  /**
    * Opens the viewer on what is selected: with one file, on it, with the
    * rest of the view to step through; with several, on those alone, in
    * the order they are listed.
@@ -426,6 +454,10 @@ export default function App() {
       if (action === "selectByQuery") {
         // Of the gallery only, and of the view: nothing need be selected yet.
         if (viewing() === null) openQuerySelect();
+        return;
+      }
+      if (action === "undo" || action === "redo") {
+        stepHistory(action === "redo");
         return;
       }
       if (action === "showRemoved") {
