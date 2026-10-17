@@ -314,6 +314,8 @@ export const getInbox = () => request<InboxState>("GET", "/inbox");
 export const sendToInbox = (url: string) => request<InboxRequest>("POST", "/inbox", { url });
 /** Empties what the inbox lists, and its finished requests; the library keeps it all. */
 export const clearInbox = () => request<void>("POST", "/inbox/clear", {});
+/** Takes these off what the inbox lists, and nothing else; the library keeps them. */
+export const clearFromInbox = (ids: number[]) => request<void>("POST", "/inbox/clear", { ids });
 /** Takes a request off the queue, or stops it if it is the one running. */
 export const removeRequest = (id: number) => request<void>("DELETE", `/inbox/queue/${id}`);
 export const retryRequest = (id: number) =>

@@ -4,6 +4,7 @@ import type { InboxRequest } from "../api";
 import { errorMessage, fieldLabel, plural } from "../format";
 import { tagTextStyle } from "../tagTypes";
 import { inbox, loadInbox } from "../inbox";
+import { cleared, listedSelected, selected } from "../search";
 import { BaseTags, Progress } from "./DownloadPanel";
 import DownloaderSettings from "./DownloaderSettings";
 import Icon from "./Icon";
@@ -91,6 +92,15 @@ export default function InboxPanel() {
     if (confirm(`Clear Opal Drop?${kept}`)) attempt(api.clearInbox);
   };
 
+  /** Takes what is selected off the list, and out of the view; the library keeps it. */
+  const clearSelected = () =>
+    attempt(async () => {
+      const ids = await listedSelected();
+      if (ids.length === 0) return;
+      await api.clearFromInbox(ids);
+      cleared(ids);
+    });
+
   return (
     <Show when={inbox()}>
       {(data) => (
@@ -116,6 +126,13 @@ export default function InboxPanel() {
               onClick={clear}
             >
               Clear
+            </button>
+            <button
+              disabled={selected().size === 0}
+              title="Take what is selected off the list of what was downloaded. It stays in the library."
+              onClick={clearSelected}
+            >
+              Clear selected
             </button>
             <button
               class="icon-button"

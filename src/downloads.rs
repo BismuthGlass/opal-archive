@@ -1051,7 +1051,7 @@ impl Download {
             }
             let (hash, size) = files::hash_file(path).await?;
             let name = path.file_name().and_then(|name| name.to_str());
-            let (file, created) = files::ingest(&self.state, path, &hash, size, name, tab).await?;
+            let (file, created) = files::ingest(&self.state, path, &hash, size, name, tab, false).await?;
             let _ = tokio::fs::remove_file(path).await;
             if created {
                 added += 1;

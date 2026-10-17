@@ -214,14 +214,14 @@ A downloader fetches files from a website straight into the library. Each downlo
 - What one site shows from another is fetched by that other site's downloader, where there is one: a Reddit post that links to a Redgifs video is given to the Redgifs downloader, and the file then has what both give. It has the `source` tags of both sites and of both posters, the address of the Reddit post and of the Redgifs video as source URLs, and the post's title.
 - A Redgifs video is tagged with its poster, as the source `redgifs:<username>`, as a Reddit post's files are with theirs. A post of several pictures becomes a set, with the set ID `redgifs:gallery:<id>`.
 - A downloader also passes on what the site says of each thing, where it says anything: its title and description, and any tags the downloader makes of it. Title and description only fill in where there is none; what the user wrote is never replaced. Pinterest gives the pin's title and description.
-- A file the library already has is not stored twice. It comes out of the trash if it was there, is listed in the tab, and is given the source URL and the tags like the rest.
+- A file the library already has is not stored twice. It is listed in the tab, and is given the source URL and the tags like the rest. If it is in the trash it stays there: trashed once, it is not brought back by being downloaded again, as it is by being uploaded again.
 - A tab remembers what it has downloaded, by address, and skips it when it is met again, without fetching it. Downloading the same board a second time in the same tab therefore fetches only what is new, and something deleted from the library does not come back. The list can be read, and entries forgotten, one or all. It belongs to the tab: another tab starts with none.
 - Some sites show more to someone logged in. A downloader can read the site's login from a browser when asked to, and the server keeps it for later downloads, whichever tab asks for them, until told to forget it. It is kept in a file under the data directory that only the user can read; it is not encrypted.
 - A download runs on the server, one per tab, and goes on while another tab is looked at or the page is reloaded. It can be cancelled. Closing its tab stops it.
 
 ## Deleting
 
-Deleting is two steps. The first moves a file to the trash: it keeps its file and all its metadata, but no longer shows up in searches. From the trash it can be restored, or deleted for good, which removes the file from storage. Uploading a trashed file again restores it. The key that trashes does both steps: on files that are all in the trash already it deletes them for good, once that is agreed to. In the viewer, what took the deleted file's place is shown next.
+Deleting is two steps. The first moves a file to the trash: it keeps its file and all its metadata, but no longer shows up in searches. From the trash it can be restored, or deleted for good, which removes the file from storage. Uploading a trashed file again restores it; downloading it again does not. The key that trashes does both steps: on files that are all in the trash already it deletes them for good, once that is agreed to. In the viewer, what took the deleted file's place is shown next.
 
 Being trashed is a state, not a tag. States are searched with an `@`: `@trashed` lists the trash.
 
@@ -235,6 +235,8 @@ A file new to the library is in the inbox: it has just arrived, however it did (
 - The files the library held before there was an inbox started out of it.
 - A key archives the selection, or the file open in the viewer, and another puts it back; the menu of a right click offers the same, by what the selection is in. A file in the inbox shows a dot on its tile, and says so in the viewer. The status bar counts the inbox, leaving out what is in the trash, and opens it in a tab.
 - The inbox is not Opal Drop, the tab that lists what was sent to be downloaded from outside the interface.
+
+Opal Drop lists what it has downloaded until it is cleared. Clear empties the list, and the requests that are done with; "Clear selected" takes just the files selected off the list, and out of its view at once. Either way the files stay in the library.
 
 ## Authentication
 

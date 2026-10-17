@@ -750,6 +750,16 @@ export function deleted(gone: number[]) {
   changed();
 }
 
+/**
+ * Call after files stop being what the tab on show holds, as when cleared
+ * from Opal Drop: they leave its view at once, though the library keeps
+ * them.
+ */
+export function cleared(gone: number[]) {
+  drop(gone);
+  reload();
+}
+
 /** Takes results out of the view, and out of what of it is on show. */
 function drop(gone: number[]) {
   const going = new Set(gone);

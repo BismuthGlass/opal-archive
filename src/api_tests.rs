@@ -1929,6 +1929,20 @@ async fn the_inbox_downloads_what_it_is_sent() {
     assert_eq!(api.get("/tabs").await[0]["id"], tab);
     assert_eq!(api.in_tab(tab).await.len(), 3);
 
+    // What is selected can be cleared from it alone.
+    let listed = api.in_tab(tab).await;
+    api.post("/inbox/clear", json!({ "ids": [listed[0]] })).await;
+    assert_eq!(api.in_tab(tab).await, listed[1..]);
+    assert_eq!(api.get("/inbox").await["listed"], 2);
+    assert_eq!(api.get("/inbox").await["queue"].as_array().unwrap().len(), 3);
+
+    // A file in the trash that is downloaded again stays there.
+    api.post("/entities/trash", json!({ "ids": [listed[1]] })).await;
+    let (_, fourth) = send("https://example.test/board").await;
+    assert_eq!(ended(&api, &fourth["id"]).await["existing"], 3);
+    assert_eq!(api.found("@trashed").await, [listed[1]]);
+    api.post("/entities/restore", json!({ "ids": [listed[1]] })).await;
+
     // Only clearing empties it, and that takes nothing out of the library.
     api.post("/inbox/clear", json!({})).await;
     let inbox = api.get("/inbox").await;

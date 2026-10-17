@@ -248,11 +248,31 @@ async fn state_of(State(state): State<AppState>) -> Result<Json<Value>, ApiError
     })))
 }
 
+#[derive(Deserialize)]
+struct Clearing {
+    /// The entities to take off what the inbox lists, and nothing else; all
+    /// of it, and the finished requests, if left out.
+    ids: Option<Vec<i64>>,
+}
+
 /// Empties the inbox: what it lists, and the requests that are finished.
 /// Nothing leaves the library, and what is still waiting stays.
-async fn clear(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+async fn clear(
+    State(state): State<AppState>,
+    Json(clearing): Json<Clearing>,
+) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.lock().unwrap();
     let tx = conn.transaction()?;
+    if let Some(ids) = clearing.ids {
+        if let Some(tab) = made(&tx)? {
+            let mut stmt = tx.prepare("DELETE FROM tab_upload WHERE tab_id = ?1 AND entity_id = ?2")?;
+            for id in ids {
+                stmt.execute(params![tab, id])?;
+            }
+        }
+        tx.commit()?;
+        return Ok(StatusCode::NO_CONTENT);
+    }
     if let Some(tab) = made(&tx)? {
         tx.execute("DELETE FROM tab_upload WHERE tab_id = ?1", [tab])?;
         tx.execute("DELETE FROM tab_view WHERE tab_id = ?1", [tab])?;

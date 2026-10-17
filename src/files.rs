@@ -421,7 +421,7 @@ async fn upload(
     let temp = TempFile::new(&state.tmp);
     let (hash, size) = receive(body, &temp.0).await?;
     let name = params.name.as_deref();
-    let (file, created) = ingest(&state, &temp.0, &hash, size, name, params.tab).await?;
+    let (file, created) = ingest(&state, &temp.0, &hash, size, name, params.tab, true).await?;
     let status = if created {
         StatusCode::CREATED
     } else {
@@ -539,7 +539,7 @@ async fn fetch(
     }
     let name = name_at(landed, content_type);
     let (hash, size) = hash_file(&temp.0).await?;
-    let (file, created) = ingest(&state, &temp.0, &hash, size, name.as_deref(), input.tab).await?;
+    let (file, created) = ingest(&state, &temp.0, &hash, size, name.as_deref(), input.tab, true).await?;
     {
         let conn = state.db.lock().unwrap();
         entities::add_to_list(&conn, &entities::ids_json(&[file.id]), SOURCE_URLS, &url)?;
@@ -557,6 +557,9 @@ async fn fetch(
 /// the same content is already in the library the file there is kept and
 /// `temp` is left for the caller to delete. Either way the file is listed
 /// under `tab`. Returns the file, and whether it is new.
+///
+/// One in the trash comes out of it if `untrash`: given again on purpose,
+/// it is wanted after all. One a downloader fetches again stays there.
 pub async fn ingest(
     state: &AppState,
     temp: &Path,
@@ -564,6 +567,7 @@ pub async fn ingest(
     size: u64,
     name: Option<&str>,
     tab: Option<i64>,
+    untrash: bool,
 ) -> Result<(FileEntity, bool), ApiError> {
     if size == 0 {
         return Err(ApiError::bad_request("empty file"));
@@ -571,9 +575,10 @@ pub async fn ingest(
     {
         let conn = state.db.lock().unwrap();
         if let Some(existing) = file_by_hash(&conn, hash)? {
-            // A file that arrives again comes back out of the trash. Nothing
-            // else about the existing file changes.
-            conn.execute("UPDATE entity SET trashed = 0 WHERE id = ?1", [existing.id])?;
+            // Nothing else about the existing file changes.
+            if untrash {
+                conn.execute("UPDATE entity SET trashed = 0 WHERE id = ?1", [existing.id])?;
+            }
             record(&conn, tab, &existing)?;
             return Ok((existing, false));
         }

@@ -534,7 +534,7 @@ async fn upload(
             fail(&mut unpacked, "not an image, a video, audio or a book".to_string());
             continue;
         }
-        let ingested = files::ingest(&state, &out.0, &hash, size, Some(name), params.tab).await;
+        let ingested = files::ingest(&state, &out.0, &hash, size, Some(name), params.tab, true).await;
         let (file, new) = match ingested {
             Ok(ingested) => ingested,
             Err(err) => {
