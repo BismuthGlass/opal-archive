@@ -25,7 +25,9 @@ an address, which goes into Opal Drop's queue (see `downloaders/README.md`).
 - On 4chan, the button at the end of the line that names each post's
   file, which sends that post, and one by the number of each thread's
   first post, which sends the whole thread. In a board's catalog each
-  thread has the thread's button on its corner.
+  thread has the thread's button on its corner. Posts 4chan X shows
+  inside others or on hover have working buttons too, sending the post
+  shown.
 - Everywhere, "Send to OpalArchive" in the right-click menu, for a
   picture, a video or the page itself, and "Send link to OpalArchive" for
   a link: on a thumbnail that links to its full picture, the first sends
