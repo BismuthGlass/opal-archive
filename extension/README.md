@@ -28,6 +28,12 @@ an address, which goes into Opal Drop's queue (see `downloaders/README.md`).
   thread has the thread's button on its corner. Posts 4chan X shows
   inside others or on hover have working buttons too, sending the post
   shown.
+- On the archives of 4chan (arch.b4k.dev, desuarchive.org,
+  archive.4plebs.org, thebarchive.com, archiveofsins.com,
+  archive.palanq.win, archive.alice.al and archived.moe), the same two
+  buttons: at the end of the line that names each post's file, and after
+  the number of each thread's first post. OpalArchive's 4chan downloader
+  takes the archive's addresses.
 - Everywhere, "Send to OpalArchive" in the right-click menu, for a
   picture, a video or the page itself, and "Send link to OpalArchive" for
   a link: on a thumbnail that links to its full picture, the first sends

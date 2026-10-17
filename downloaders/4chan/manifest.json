@@ -2,8 +2,23 @@
   "title": "4chan",
   "source": "4chan",
   "command": ["uv", "run", "--quiet", "--script", "4chan.py"],
-  "url_hint": "A thread, post or file URL",
-  "sites": ["4chan.org", "4channel.org", "4cdn.org"],
+  "url_hint": "A thread, post or file URL, on 4chan or one of its archives",
+  "sites": [
+    "4chan.org",
+    "4channel.org",
+    "4cdn.org",
+    "b4k.dev",
+    "b4k.co",
+    "desuarchive.org",
+    "desu-usergeneratedcontent.xyz",
+    "4plebs.org",
+    "4pcdn.org",
+    "thebarchive.com",
+    "archiveofsins.com",
+    "palanq.win",
+    "alice.al",
+    "archived.moe"
+  ],
   "options": [
     {
       "key": "comments",
