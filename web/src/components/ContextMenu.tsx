@@ -27,7 +27,8 @@ import {
   showFirstSelected,
   shuffleOrder,
 } from "../search";
-import { enter, open as openTab, openSelection, shownMark, shownSet } from "../tabs";
+import { activeTab, enter, inside, open as openTab, openSelection, shownMark, shownSet } from "../tabs";
+import { clearFromDrop } from "../inbox";
 import { manageTag } from "../tagManaging";
 import { fieldLabel, tagQuery } from "../format";
 import { showToast } from "../toast";
@@ -918,6 +919,19 @@ function Menu(props: {
           Remove from view
         </button>
       </li>
+      {/* Opal Drop lists what it downloaded until that is cleared from it. */}
+      <Show when={activeTab()?.kind === "inbox" && !inside()}>
+        <li role="none">
+          <button
+            role="menuitem"
+            title="Take off the list of what Opal Drop downloaded. It stays in the library."
+            onClick={() => arrange(() => clearFromDrop(ids))}
+          >
+            <Icon name="do-not-disturb-on-outline" />
+            Clear from Opal Drop
+          </button>
+        </li>
+      </Show>
       <Show when={inInbox() > 0}>
         <li role="none">
           <button

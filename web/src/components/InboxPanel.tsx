@@ -3,8 +3,8 @@ import * as api from "../api";
 import type { InboxRequest } from "../api";
 import { errorMessage, fieldLabel, plural } from "../format";
 import { tagTextStyle } from "../tagTypes";
-import { inbox, loadInbox } from "../inbox";
-import { cleared, listedSelected, selected } from "../search";
+import { clearFromDrop, inbox, loadInbox } from "../inbox";
+import { listedSelected, selected } from "../search";
 import { BaseTags, Progress } from "./DownloadPanel";
 import DownloaderSettings from "./DownloaderSettings";
 import Icon from "./Icon";
@@ -93,13 +93,7 @@ export default function InboxPanel() {
   };
 
   /** Takes what is selected off the list, and out of the view; the library keeps it. */
-  const clearSelected = () =>
-    attempt(async () => {
-      const ids = await listedSelected();
-      if (ids.length === 0) return;
-      await api.clearFromInbox(ids);
-      cleared(ids);
-    });
+  const clearSelected = () => attempt(async () => clearFromDrop(await listedSelected()));
 
   return (
     <Show when={inbox()}>

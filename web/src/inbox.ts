@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import * as api from "./api";
 import type { InboxState } from "./api";
-import { addedTo } from "./search";
+import { addedTo, cleared } from "./search";
 import { refresh as refreshTabs, tabs } from "./tabs";
 
 // The inbox is fed from outside the page, by the browser extension for
@@ -30,6 +30,17 @@ export async function loadInbox(): Promise<InboxState> {
   }
   listed = state.listed;
   return state;
+}
+
+/**
+ * Takes files off what Opal Drop lists, and out of its view at once. The
+ * library keeps them.
+ */
+export async function clearFromDrop(ids: number[]) {
+  if (ids.length === 0) return;
+  await api.clearFromInbox(ids);
+  cleared(ids);
+  await loadInbox();
 }
 
 /** Keeps the inbox up to date for as long as the page is open. */

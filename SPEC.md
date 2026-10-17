@@ -236,7 +236,7 @@ A file new to the library is in the inbox: it has just arrived, however it did (
 - A key archives the selection, or the file open in the viewer, and another puts it back; the menu of a right click offers the same, by what the selection is in. A file in the inbox shows a dot on its tile, and says so in the viewer. The status bar counts the inbox, leaving out what is in the trash, and opens it in a tab.
 - The inbox is not Opal Drop, the tab that lists what was sent to be downloaded from outside the interface.
 
-Opal Drop lists what it has downloaded until it is cleared. Clear empties the list, and the requests that are done with; "Clear selected" takes just the files selected off the list, and out of its view at once. Either way the files stay in the library.
+Opal Drop lists what it has downloaded until it is cleared. Clear empties the list, and the requests that are done with; "Clear selected", or "Clear from Opal Drop" in the menu of a right click on a file there, takes just the files selected off the list, and out of its view at once. Either way the files stay in the library.
 
 ## Authentication
 
