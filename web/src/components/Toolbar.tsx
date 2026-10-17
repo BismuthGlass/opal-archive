@@ -1,6 +1,5 @@
 import { For, Show } from "solid-js";
 import { plural } from "../format";
-import * as api from "../api";
 import {
   MARKS,
   goToPage,
@@ -8,8 +7,7 @@ import {
   markNames,
   pageCount,
   pageSize,
-  resetOrder,
-  resultIds,
+  saveSetOrder,
   search,
   selectMarked,
 } from "../search";
@@ -25,12 +23,6 @@ export default function Toolbar() {
   const from = () => search.page * pageSize() + 1;
   const to = () => Math.min(search.total, (search.page + 1) * pageSize());
   const filtered = () => search.query.trim() !== "";
-
-  const saveOrder = async (id: string) => {
-    await api.setOrder(id, await resultIds());
-    // The set's own order is now the one on show.
-    resetOrder();
-  };
 
   return (
     <div class="toolbar">
@@ -82,7 +74,7 @@ export default function Toolbar() {
                     ? "Save this order as the set's order"
                     : "Drag items to reorder them, then save the order here"
               }
-              onClick={() => saveOrder(set().set_id)}
+              onClick={() => saveSetOrder(set().set_id)}
             >
               Update order
             </button>

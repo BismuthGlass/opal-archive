@@ -140,6 +140,8 @@ What can be undone:
 - Scoring and rating, by key or in the side panel: each file gets back the score or rating it had, or none.
 - Trashing and taking out of the trash, and archiving and moving back to the inbox. Only the files the change was made to are changed back: one that was in the trash already stays there. Deleting for good cannot be undone.
 - Taking files out of a view, and putting them back from "Removed from view". Undoing puts them back in the view they were taken from, where they were, even if the tab has gone into a set or out of one since. A view that has been searched for again has brought them back already.
+- Changing the order of a view: dragging files, moving them to its start or end, shuffling it, and going back to the search's order. Undoing puts back the order it had, in the view it was done in, as near as it can be if what the view lists has changed since: what has come into it meanwhile stays where it is. Going back to the search's order calculates the view again, which brings back what was taken out of it; undoing that does not take them out again.
+- Updating a set's order. Undoing gives the set back the order it had, and the view the order it had been dragged into, not yet saved.
 
 In the viewer the keys work too, and the viewer stays on the file it shows.
 

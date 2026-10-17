@@ -1,7 +1,8 @@
 /**
  * What has been done in each tab, to be undone and done again: marks given
  * and taken off, tags, scores and ratings changed, files trashed and
- * archived, and files taken out of a view and put back. Each tab has a
+ * archived, files taken out of a view and put back, and the order of a
+ * view and of a set changed. Each tab has a
  * history of its own, kept while the page is open, until its view is
  * searched for again.
  */

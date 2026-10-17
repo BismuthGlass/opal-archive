@@ -808,9 +808,14 @@ export function showResult(index: number) {
 /**
  * Moves results to sit before the result at `before` (an index into all
  * results, or their number to move to the end). From then on the view
- * keeps this order instead of the query's, until `resetOrder`.
+ * keeps this order instead of the query's, until `resetOrder`. It can be
+ * undone.
  */
-export async function moveItems(moved: number[], before: number) {
+export const moveItems = (moved: number[], before: number) =>
+  reordering(`moving ${plural(new Set(moved).size, "item")}`, () => move(moved, before));
+
+/** Moves results, as `moveItems` does. Says whether the order changed. */
+async function move(moved: number[], before: number): Promise<boolean> {
   const current = await resultIds();
   const moving = new Set(moved);
   // The moved items land before the first unmoved one at or after the drop.
@@ -823,13 +828,14 @@ export async function moveItems(moved: number[], before: number) {
     ...current.filter((id) => moving.has(id)),
     ...rest.slice(at),
   ];
-  if (next.every((id, index) => id === current[index])) return;
+  if (next.every((id, index) => id === current[index])) return false;
 
   ids = next;
   anchor = null;
   setSearch("custom", true);
   remember();
   reload();
+  return true;
 }
 
 /**
@@ -963,26 +969,105 @@ export async function removedItems(): Promise<Item[]> {
   return list.flatMap((was) => known.get(was.id) ?? []);
 }
 
-/** Goes back to the order the query gives. */
-/** Puts every result of the view in an order drawn by lot, as one dragged into. */
-export async function shuffleOrder() {
-  const next = [...(await resultIds())];
-  if (next.length < 2) return;
-  for (let last = next.length - 1; last > 0; last -= 1) {
-    const other = Math.floor(Math.random() * (last + 1));
-    [next[last], next[other]] = [next[other], next[last]];
+/** An order a view has been in: what it listed, and whether it was dragged into it. */
+type Order = { ids: readonly number[]; custom: boolean };
+
+/**
+ * Puts a view back in an order it was in, as near to it as can be when
+ * what it lists has changed since: those it lists that the order has take
+ * the places they hold among them in it, and the rest stay where they are.
+ */
+async function arrangeIn(view: ViewRef, order: Order) {
+  const was = await viewOf(view);
+  if (!was) return;
+  const rank = new Map(order.ids.map((id, index) => [id, index]));
+  const ranked = was.ids.filter((id) => rank.has(id)).sort((a, b) => rank.get(a)! - rank.get(b)!);
+  let next = 0;
+  const listed = was.ids.map((id) => (rank.has(id) ? ranked[next++] : id));
+  if (was.shown) {
+    ids = listed;
+    anchor = null;
+    setSearch("custom", order.custom);
+    remember();
+    reload();
+  } else {
+    keepAside(view, listed, order.custom, was.removed);
   }
-  ids = next;
-  anchor = null;
-  setSearch("custom", true);
-  remember();
-  reload();
 }
 
-export function resetOrder() {
-  if (!search.custom) return;
+/**
+ * Does `reorder` to the view on show, which says whether it changed the
+ * order, so that it can be undone. `name` says what was done.
+ */
+async function reordering(name: string, reorder: () => Promise<boolean>) {
+  const view = viewOnShow();
+  const before: Order = { ids: await resultIds(), custom: search.custom };
+  if (!(await reorder())) return;
+  // It may have been left meanwhile.
+  if (view.key !== viewKey) return;
+  const after: Order = { ids: await resultIds(), custom: search.custom };
+  record(tabOf(view.key), {
+    name,
+    undo: () => arrangeIn(view, before),
+    redo: () => arrangeIn(view, after),
+  });
+}
+
+/** Puts every result of the view in an order drawn by lot, as one dragged into. It can be undone. */
+export const shuffleOrder = () =>
+  reordering("shuffling the view", async () => {
+    const next = [...(await resultIds())];
+    if (next.length < 2) return false;
+    for (let last = next.length - 1; last > 0; last -= 1) {
+      const other = Math.floor(Math.random() * (last + 1));
+      [next[last], next[other]] = [next[other], next[last]];
+    }
+    ids = next;
+    anchor = null;
+    setSearch("custom", true);
+    remember();
+    reload();
+    return true;
+  });
+
+/** Goes back to the order the query gives, calculating the search again. Says whether it did. */
+async function unorder(): Promise<boolean> {
+  if (!search.custom) return false;
   setSearch("custom", false);
   refresh();
+  await calculated;
+  return true;
+}
+
+/** Goes back to the order the query gives. It can be undone. */
+export const resetOrder = () => reordering("going back to the search's order", unorder);
+
+/**
+ * Makes the order on show the set's own: the view then shows the set in
+ * its order, as it is. It can be undone, which gives the set back the
+ * order it had and the view the one it was dragged into.
+ */
+export async function saveSetOrder(set_id: string) {
+  const view = viewOnShow();
+  const order = await resultIds();
+  // The set's order as it was: what the search finds in it, trashed or not.
+  const within = search.within as api.Within | null;
+  const had = await api.searchIds("", seed, search.scope, within, true, search.collapsed);
+  await api.setOrder(set_id, order);
+  // The view's order is now the set's own.
+  await unorder();
+  const saved: Order = { ids: order, custom: false };
+  record(tabOf(view.key), {
+    name: "saving the set's order",
+    undo: async () => {
+      await api.setOrder(set_id, had);
+      await arrangeIn(view, { ids: order, custom: true });
+    },
+    redo: async () => {
+      await api.setOrder(set_id, order);
+      await arrangeIn(view, saved);
+    },
+  });
 }
 
 export async function clickSelect(
